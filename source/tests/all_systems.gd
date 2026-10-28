@@ -342,9 +342,10 @@ func _run() -> void:
         p.position = world.tw(door.p.x, door.p.y)
         world._process(0.016)
         check(world.room == rid, "เดินชนประตูแล้วเข้าไปในร้าน " + rid)
+        check(world.rooms.IW * world.rooms.TS < 32.0, "ห้องขนาดเท่าเกม 2D (ไม่ใหญ่เกิน) " + rid)
         check(not world.blocked(p.position.x, p.position.z), "จุดเกิดในร้านเดินได้ " + rid)
         var k: Node3D = world.rooms.keepers[rid]
-        p.position = Vector3(k.position.x, 0, k.position.z + 4.4)
+        p.position = Vector3(k.position.x, 0, k.position.z + 2.2)
         check(world.rooms.near_counter(), "ยืนหน้าเคาน์เตอร์ได้ " + rid)
         world.ui_shop.visible = false
         world.ui_dialog.visible = false
@@ -357,9 +358,9 @@ func _run() -> void:
             check(world.ui_dialog.visible, "กดตีหน้าเคาน์เตอร์แล้วคุยกับเจ้าของ " + rid)
         world.ui_shop.visible = false
         world.ui_dialog.visible = false
-        check(world.blocked(k.position.x, k.position.z + 2.0), "เคาน์เตอร์เดินผ่านไม่ได้ " + rid)
+        check(world.blocked(k.position.x, k.position.z + 1.1), "เคาน์เตอร์เดินผ่านไม่ได้ " + rid)
         var o: Vector3 = world.rooms.origin(rid)
-        p.position = o + Vector3(13 * 2.0, 0, 14 * 2.0 - 0.1)
+        p.position = o + Vector3(13 * world.rooms.TS, 0, 14 * world.rooms.TS - 0.05)
         world.rooms._process(0.016)
         check(world.room == "" and p.position.x < 100.0, "เดินลงทางออกแล้วออกมาข้างนอก " + rid)
         check(not world.blocked(p.position.x, p.position.z), "ออกมายืนตรงที่เดินได้ " + rid)

@@ -5,7 +5,11 @@ extends Node3D
 
 const IW := 26
 const IH := 15
-const TS := 2.0
+## ขนาดเท่าเกม 2D: ตัวละครกว้างราว 1 ช่อง → ห้องย่อแนวนอนด้วย S (ความสูงคงเดิม)
+## ตัวเลขใน _build/_decor เขียนเป็นหน่วยก่อนย่อ (ช่องละ TS0) แล้ว root ย่อ x/z ด้วย S
+const S := 0.55
+const TS0 := 2.0
+const TS := TS0 * S
 const BASE_X := 700.0
 const ORDER := ["gear", "potion", "inn", "skill", "store", "guild", "fashion", "bank", "ware", "seal113", "hall"]
 
@@ -77,8 +81,8 @@ func enter(id: String) -> void:
     # กล้องหันเข้าหาเคาน์เตอร์ · ออกจากร้านแล้วคืนมุมเดิม
     _cam_saved = Vector3(town.cam_yaw, town.cam_dist, town.cam_pitch)
     town.cam_yaw = 0.0
-    town.cam_dist = 17.0
-    town.cam_pitch = -0.6
+    town.cam_dist = 12.0
+    town.cam_pitch = -0.62
     town._update_sky()
     town.talk_target = null
     town.ui_dialog.visible = false
@@ -121,7 +125,7 @@ func near_counter() -> bool:
         return false
     var k: Node3D = keepers[cur]
     var p = town.player
-    return abs(p.position.x - k.position.x) < 6.0 and p.position.z - k.position.z < 6.5
+    return abs(p.position.x - k.position.x) < 3.6 and p.position.z - k.position.z < 3.6
 
 func interact_if_near() -> void:
     if near_counter():
@@ -157,7 +161,7 @@ func keeper_at(screen: Vector2) -> bool:
 ## แตะเจ้าของร้าน: เดินไปหน้าเคาน์เตอร์แล้วเปิดเอง
 func walk_to_counter() -> void:
     var k: Node3D = keepers[cur]
-    town.player.set_path(PackedVector3Array([Vector3(k.position.x, 0, k.position.z + 4.6)]))
+    town.player.set_path(PackedVector3Array([Vector3(k.position.x, 0, k.position.z + 2.3)]))
     talk_pending = true
 
 func _process(_delta: float) -> void:
@@ -176,13 +180,18 @@ func _process(_delta: float) -> void:
 # ---------- สร้างห้อง ----------
 func _build(id: String) -> void:
     var th: Dictionary = THEME[id]
+    var top := Node3D.new()
+    add_child(top)
+    built[id] = top
+    _top = top
     var root := Node3D.new()
-    add_child(root)
-    built[id] = root
+    top.add_child(root)
     _deco_solid[id] = {}
     var o := origin(id)
-    var W := IW * TS
-    var H := IH * TS
+    root.transform = Transform3D(Basis.from_scale(Vector3(S, 1.0, S)), Vector3(o.x * (1.0 - S), 0.0, o.z * (1.0 - S)))
+    _o = o
+    var W := IW * TS0
+    var H := IH * TS0
     var wall: Material = town.M(th.wall, 0.9)
     var trim: Material = town.M(Color(th.wall).darkened(0.35), 0.9)
     var floor_m: Material = town.M(th.floor, 0.85)
@@ -191,32 +200,32 @@ func _build(id: String) -> void:
     town.box(root, Vector3(W, 0.1, H), o + Vector3(W / 2, -0.05, H / 2), floor_m)
     for i in IH:
         if i % 2 == 0:
-            town.box(root, Vector3(W - 0.2, 0.02, 0.06), o + Vector3(W / 2, 0.01, i * TS), town.M(Color(th.floor).darkened(0.25), 0.9))
+            town.box(root, Vector3(W - 0.2, 0.02, 0.06), o + Vector3(W / 2, 0.01, i * TS0), town.M(Color(th.floor).darkened(0.25), 0.9))
     # ผนังหลังสูง · ข้างสูง · หน้าเตี้ย (กล้องมองเห็นข้างใน)
     town.box(root, Vector3(W, 6.0, 1.0), o + Vector3(W / 2, 3.0, 3.0), wall)
     town.box(root, Vector3(W, 0.4, 1.1), o + Vector3(W / 2, 6.0, 3.0), trim)
     town.box(root, Vector3(1.0, 5.0, H), o + Vector3(0.5, 2.5, H / 2), wall)
     town.box(root, Vector3(1.0, 5.0, H), o + Vector3(W - 0.5, 2.5, H / 2), wall)
     var gx := (IW >> 1) - 1
-    town.box(root, Vector3(gx * TS - 0.0, 1.0, 0.6), o + Vector3(gx * TS / 2.0, 0.5, H - 0.3), wall)
-    town.box(root, Vector3(gx * TS, 1.0, 0.6), o + Vector3(W - gx * TS / 2.0, 0.5, H - 0.3), wall)
+    town.box(root, Vector3(gx * TS0, 1.0, 0.6), o + Vector3(gx * TS0 / 2.0, 0.5, H - 0.3), wall)
+    town.box(root, Vector3(gx * TS0, 1.0, 0.6), o + Vector3(W - gx * TS0 / 2.0, 0.5, H - 0.3), wall)
     town.box(root, Vector3(4.0, 0.03, 1.6), o + Vector3(W / 2, 0.03, H - 1.4), town.M(Color(0.55, 0.15, 0.15), 0.9))
-    town.label3d("ทางออก", o + Vector3(W / 2, 1.6, H - 0.4), 30)
+    _lab("ทางออก", o + Vector3(W / 2, 1.6, H - 0.4), 30)
     # หน้าต่างผนังหลัง
     for x in [4.0, W - 4.0]:
         town.box(root, Vector3(3.0, 2.2, 0.2), o + Vector3(x, 3.6, 3.55), town.M(Color(0.55, 0.75, 0.95), 0.2, 0.6))
         town.box(root, Vector3(3.3, 0.25, 0.3), o + Vector3(x, 2.4, 3.6), trim)
     # เคาน์เตอร์ทั้งแถว 3
-    var cz := 3.5 * TS
-    town.box(root, Vector3(W - 2.0, 1.15, 1.6), o + Vector3(W / 2, 0.575, cz), town.M(Color(0.42, 0.28, 0.16), 0.8))
-    town.box(root, Vector3(W - 1.8, 0.14, 1.9), o + Vector3(W / 2, 1.2, cz), town.M(Color(0.6, 0.42, 0.24), 0.6))
+    var cz := 3.5 * TS0
+    town.box(root, Vector3(W - 2.0, 0.9, 1.6), o + Vector3(W / 2, 0.45, cz), town.M(Color(0.42, 0.28, 0.16), 0.8))
+    town.box(root, Vector3(W - 1.8, 0.12, 1.9), o + Vector3(W / 2, 0.95, cz), town.M(Color(0.6, 0.42, 0.24), 0.6))
     # ไฟในห้อง
     var l := OmniLight3D.new()
     l.light_color = Color(1.0, 0.85, 0.65)
-    l.omni_range = 34.0
+    l.omni_range = 24.0
     l.light_energy = 1.4
-    l.position = o + Vector3(W / 2, 7.0, H / 2)
-    root.add_child(l)
+    l.position = o + Vector3(W / 2 * S, 7.0, H / 2 * S)
+    top.add_child(l)
     for x in [6.0, W - 6.0]:
         town.box(root, Vector3(0.4, 0.5, 0.4), o + Vector3(x, 4.4, 3.8), town.M(Color(1.0, 0.75, 0.4), 0.3, 2.5))
     _decor(id, root, o, str(th.kind))
@@ -225,7 +234,7 @@ func _build(id: String) -> void:
     var ow: Dictionary = sh.get("owner", {}) if sh.get("owner") is Dictionary else {}
     var k := Node3D.new()
     k.position = rw(id, IW >> 1, 2.5)
-    root.add_child(k)
+    top.add_child(k)
     var body := Node3D.new()
     body.set_script(load("res://scripts/model.gd"))
     k.add_child(body)
@@ -246,7 +255,15 @@ func _build(id: String) -> void:
     nl.position = Vector3(0, 2.9, 0)
     k.add_child(nl)
     keepers[id] = k
-    town.label3d(town.clean(str(sh.get("name", id))), o + Vector3(W / 2, 6.9, 3.2), 44)
+    _lab(town.clean(str(sh.get("name", id))), o + Vector3(W / 2, 6.9, 3.2), 44)
+
+var _top: Node3D
+var _o := Vector3.ZERO
+
+## ป้ายลอย: ตำแหน่งเป็นหน่วยก่อนย่อ → แปลงเป็นตำแหน่งจริงแล้วใส่ในห้อง (ซ่อนพร้อมห้อง)
+func _lab(text: String, local: Vector3, size: int) -> void:
+    var l: Label3D = town.label3d(text, _o + Vector3((local.x - _o.x) * S, local.y, (local.z - _o.z) * S), size)
+    l.reparent(_top)
 
 func _solid(id: String, tx: int, ty: int) -> void:
     _deco_solid[id][Vector2i(tx, ty)] = true
@@ -264,7 +281,7 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
                 town.box(root, Vector3(0.9, 0.12, 0.12), o + Vector3(x, 2.3, bz), town.M(Color(0.85, 0.7, 0.3), 0.4))
             for x in [8.0, 44.0]:
                 town.box(root, Vector3(1.6, 0.9, 1.0), o + Vector3(x, 0.45, 18.0), town.M(Color(0.25, 0.26, 0.3), 0.5))
-                _solid(id, int(x / TS), 9)
+                _solid(id, int(x / TS0), 9)
             town.cyl(root, 0.6, 0.6, 1.8, o + Vector3(46.0, 0.9, 12.0), dark, 10)
         "potions":
             for row in 3:
@@ -282,7 +299,7 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
                 for a in 4:
                     var off := Vector3(cos(a * PI / 2.0), 0, sin(a * PI / 2.0)) * 2.0
                     town.cyl(root, 0.45, 0.45, 0.6, o + Vector3(t[0], 0.3, t[1]) + off, wood, 8)
-                _solid(id, int(t[0] / TS), int(t[1] / TS))
+                _solid(id, int(t[0] / TS0), int(t[1] / TS0))
             for x in [4.0, 6.0, 46.0, 48.0]:
                 town.cyl(root, 0.7, 0.8, 1.6, o + Vector3(x, 0.8, 9.0), town.M(Color(0.5, 0.32, 0.16), 0.8), 10)
             town.box(root, Vector3(4.0, 3.0, 0.8), o + Vector3(26.0, 1.5, bz), town.M(Color(0.35, 0.33, 0.32), 0.95))
@@ -303,7 +320,7 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
                 orb.material_override = town.M(Color(0.6, 0.75, 1.0), 0.1, 2.0)
                 orb.position = o + Vector3(x, 1.5, 16.0)
                 root.add_child(orb)
-                _solid(id, int(x / TS), 8)
+                _solid(id, int(x / TS0), 8)
         "goods":
             for i in 6:
                 var x := 4.0 + i * 2.2
@@ -330,7 +347,7 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
             for x in [8.0, 16.0, 36.0, 44.0]:
                 town.cyl(root, 0.15, 0.4, 1.4, o + Vector3(x, 0.7, 16.0), dark, 8)
                 town.cyl(root, 0.55, 0.4, 1.6, o + Vector3(x, 2.2, 16.0), town.M(Color.from_hsv(randf(), 0.45, 0.85), 0.7), 12)
-                _solid(id, int(x / TS), 8)
+                _solid(id, int(x / TS0), 8)
             for x in [6.0, 46.0]:
                 town.box(root, Vector3(3.0, 4.0, 0.15), o + Vector3(x, 2.6, bz), town.M(Color(0.85, 0.9, 0.95), 0.05, 0.3))
         "bank":
@@ -339,14 +356,14 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
                 town.cyl(root, 0.8, 0.9, 0.5 + i * 0.1, o + Vector3(6.0 + i * 1.6, 0.25, 9.0), town.M(Color(1.0, 0.82, 0.3), 0.3, 0.4), 10)
             for x in [4.0, 48.0]:
                 town.cyl(root, 0.6, 0.6, 5.5, o + Vector3(x, 2.75, 20.0), town.M(Color(0.85, 0.83, 0.78), 0.6), 12)
-                _solid(id, int(x / TS), 10)
+                _solid(id, int(x / TS0), 10)
         "house":
             for x in [8.0, 16.0, 36.0, 44.0]:
                 town.box(root, Vector3(3.0, 0.8, 5.0), o + Vector3(x, 0.4, 11.0), wood)
                 town.box(root, Vector3(2.8, 0.3, 3.6), o + Vector3(x, 0.95, 11.6), town.M(Color(0.75, 0.82, 0.95), 0.9))
                 town.box(root, Vector3(2.4, 0.3, 0.9), o + Vector3(x, 1.05, 9.4), town.M(Color(1, 1, 1), 0.9))
                 for y in [5, 6]:
-                    _solid(id, int(x / TS), y)
+                    _solid(id, int(x / TS0), y)
             town.box(root, Vector3(10.0, 0.03, 6.0), o + Vector3(26.0, 0.03, 18.0), town.M(Color(0.6, 0.2, 0.25), 0.9))
         "seal":
             town.cyl(root, 3.0, 3.4, 0.6, o + Vector3(26.0, 0.3, 18.0), town.M(Color(0.25, 0.22, 0.3), 0.8), 20)
@@ -362,4 +379,4 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
             town.box(root, Vector3(3.0, 3.5, 1.2), o + Vector3(26.0, 1.75, bz + 0.3), town.M(Color(0.85, 0.68, 0.25), 0.4, 0.3))
             for x in [8.0, 18.0, 34.0, 44.0]:
                 town.cyl(root, 0.8, 0.8, 6.0, o + Vector3(x, 3.0, 16.0), town.M(Color(0.9, 0.88, 0.82), 0.6), 14)
-                _solid(id, int(x / TS), 8)
+                _solid(id, int(x / TS0), 8)
