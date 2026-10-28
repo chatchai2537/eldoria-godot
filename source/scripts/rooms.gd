@@ -91,10 +91,11 @@ func enter(id: String) -> void:
     var sh: Dictionary = town.shops_by_id.get(id, {})
     var ow: Dictionary = sh.get("owner", {}) if sh.get("owner") is Dictionary else {}
     var greet: Array = ow.get("greet", [])
-    var g := ""
+    # แบบเกม 2D: เจ้าของร้านโบกมือ + คำทักลอยเหนือหัว 3.4 วิ · ข้อความระบบบอกวิธีคุย
+    keepers[id].get_meta("body").action("Interact", 0.8)
     if greet.size() > 0:
-        g = town.clean(str(ow.get("name", ""))) + ": " + town.clean(str(greet[randi() % greet.size()])) + "\n"
-    town.field.say_msg(g + "เดินไปหน้าเคาน์เตอร์แล้วแตะเจ้าของร้าน หรือกดปุ่มตี · เดินลงทางออกด้านล่างเพื่อออก", 5.0)
+        bubble(str(greet[randi() % greet.size()]), 3.4)
+    town.field.say_msg(town.clean(str(sh.get("name", id))) + " — เดินไปหน้าเคาน์เตอร์แล้วกดปุ่มตี คุยกับ" + town.clean(str(ow.get("name", ""))) + " · เดินชนทางออกด้านล่างเพื่อออก", 4.0)
 
 func leave() -> void:
     if cur == "":
@@ -142,23 +143,46 @@ func interact_if_near() -> void:
     else:
         town.field.say_msg("เดินไปหน้าเคาน์เตอร์ก่อน")
 
-## คุย/เปิดหน้าร้านตามชนิดอาคาร
+## คุย/เปิดหน้าร้าน แบบ shopAct ของเกม 2D: เจ้าของโบกมือ + พูดประโยคถัดไป (วน) + เปิดหน้าร้าน
+var line_i := {}
+
 func interact() -> void:
     var id := cur
     var sh: Dictionary = town.shops_by_id.get(id, {})
     var k: Node3D = keepers[id]
     k.get_meta("body").action("Interact", 0.8)
-    if (sh.get("buy", []) as Array).size() > 0 or (sh.get("sell", []) as Array).size() > 0:
-        town.open_shop(id)
-    elif id == "bank":
+    var ow: Dictionary = sh.get("owner", {}) if sh.get("owner") is Dictionary else {}
+    var lines: Array = ow.get("lines", [])
+    if lines.is_empty():
+        lines = ow.get("greet", [])
+    if lines.size() > 0:
+        var i: int = line_i.get(id, 0)
+        line_i[id] = i + 1
+        bubble(str(lines[i % lines.size()]), 3.2)
+    if id == "bank":
         town.open_bank()
+    elif (sh.get("buy", []) as Array).size() > 0 or (sh.get("sell", []) as Array).size() > 0:
+        town.open_shop(id)
     else:
-        var ow: Dictionary = sh.get("owner", {}) if sh.get("owner") is Dictionary else {}
-        var lines: Array = ow.get("lines", [])
-        if lines.is_empty():
-            lines = ow.get("greet", [])
-        var extra := {"fashion": " (ร้านแฟชั่นใช้เหรียญแฟชั่น — เร็ว ๆ นี้)", "seal113": " (แท่นผนึกอสูร — เร็ว ๆ นี้)", "hall": " (ภารกิจของพระราชา — เร็ว ๆ นี้)", "ware": ""}
-        town.say(str(ow.get("name", "")), (str(lines[randi() % lines.size()]) if lines.size() > 0 else "...") + str(extra.get(id, "")))
+        var extra := {"fashion": "ร้านแฟชั่นใช้เหรียญแฟชั่น — เร็ว ๆ นี้", "seal113": "แท่นผนึกอสูร — เร็ว ๆ นี้", "hall": "ภารกิจของพระราชา — เร็ว ๆ นี้"}
+        if extra.has(id):
+            town.field.say_msg(str(extra[id]))
+
+## คำพูดลอยเหนือหัวเจ้าของร้าน (แทนกล่องข้อความ)
+func bubble(text: String, sec: float = 2.2) -> void:
+    if cur == "":
+        return
+    var k: Node3D = keepers[cur]
+    var b: Label3D = k.get_meta("bub")
+    b.text = town.clean(text)
+    b.visible = true
+    k.set_meta("bub_t", sec)
+
+func bubble_text() -> String:
+    if cur == "":
+        return ""
+    var b: Label3D = keepers[cur].get_meta("bub")
+    return b.text if b.visible else ""
 
 func keeper_at(screen: Vector2) -> bool:
     if cur == "":
@@ -181,10 +205,15 @@ func _process(_delta: float) -> void:
     if p.position.z > o.z + (IH - 1) * TS - 0.2:
         leave()
         return
+    var k: Node3D = keepers[cur]
+    if k.get_meta("bub_t", 0.0) > 0.0:
+        k.set_meta("bub_t", k.get_meta("bub_t") - _delta)
+        if k.get_meta("bub_t") <= 0.0:
+            k.get_meta("bub").visible = false
     if talk_pending and near_counter() and not p.has_path():
         talk_pending = false
         interact()
-    town.prompt.text = "แตะเจ้าของร้าน / ปุ่มตี = คุย · ทางออกด้านล่าง" if near_counter() else ""
+    town.prompt.text = "กดตี / แตะเจ้าของร้าน = คุย" if near_counter() and not town.ui_shop.visible else ""
 
 # ---------- สร้างห้อง ----------
 func _build(id: String) -> void:
@@ -297,6 +326,24 @@ func _build(id: String) -> void:
     nl.modulate = Color(1, 0.95, 0.7)
     nl.position = Vector3(0, 2.9, 0)
     k.add_child(nl)
+    var bub := Label3D.new()
+    bub.font = town.font_b
+    bub.font_size = 38
+    bub.pixel_size = 0.009
+    bub.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    bub.outline_size = 10
+    bub.outline_modulate = Color(0.1, 0.07, 0.04, 0.95)
+    bub.modulate = Color(1, 1, 1)
+    bub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    bub.width = 520.0
+    bub.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+    bub.no_depth_test = true
+    bub.render_priority = 5
+    bub.position = Vector3(0, 3.55, 0)
+    bub.visible = false
+    k.add_child(bub)
+    k.set_meta("bub", bub)
+    k.set_meta("bub_t", 0.0)
     keepers[id] = k
     _lab(town.clean(str(sh.get("name", id))), o + Vector3(W / 2, 5.4, 3.8), 40)
 

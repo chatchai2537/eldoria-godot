@@ -11,7 +11,7 @@
 | คลิก/แตะ | town.gd `click_at` `_npc_at` `_ground_at` · field.gd `slime_at` | แตะสไลม์ = เดินไปตี | — |
 | เมือง (ผัง) | town.gd `_layout` `_build_*` · data/town.json | ร้าน 15 · NPC 19 · ประตู · ผังจาก `js/031-core.js` buildTown | "ร้านค้า" "NPC" |
 | ภาพ/วัสดุ | visual_style.gd · town.gd `M` `box` `gable` · shaders/ | normal map เฉพาะคอม | visual_smoke |
-| ร้านค้า | town.gd `open_shop` `shop_buy` `shop_sell` `_row` `_btn` · items.gd `BUY` | ซื้อได้เฉพาะของที่มีใน `Items.BUY` (equip/bag/now) · อื่น ๆ ปุ่ม "เร็ว ๆ นี้" · ขายตาม sell ของร้าน | "ร้าน:" "ร้านยา" "ร้านชำ" |
+| ร้านค้า | town.gd `open_shop` `shop_buy` `shop_sell` `shop_pick` `shop_qty_add` `shop_sell_ok` `close_shop` `_slot` `_sell_price` · rooms.gd `interact` `bubble` · items.gd `BUY` | แบบ renderShop เกม 2D (js/031-core.js ~673): ล่างจอ · ซ้ายของในร้าน ขวากระเป๋า+แถบขาย · คำพูดเจ้าของลอยเหนือหัว (`bubble`) ไม่ใช้กล่องข้อความ · ของที่ระบบยังไม่มี = "เร็ว ๆ นี้" | "ร้าน:" "ร้านยา" "ร้านชำ" |
 | กระเป๋า/ไอเท็ม | player.gd `inv` `inv_count` `inv_add` `inv_take` `use_item` · town.gd `toggle_bag` `refresh_bag` · items.gd `ITEM` | เจล/หิน/ไม้เก็บในตัวแปรของมัน · ยา H/N · ม้วนวาปใช้นอกเมือง · ฟีนิกซ์ใช้เองตอนล้ม (`_die`) · ยังไม่มีจำกัดช่อง/น้ำหนัก | "กระเป๋า" "ม้วนวาป" "ฟีนิกซ์" |
 | สเตตัส/หน้าตัวละคร | player.gd `recalc_stats` `stat_add` `crit_rate` `STAT_NAMES` · town.gd `toggle_char` `refresh_char` | เลือด 100+(lv-1)×15+vit×12 · มานา 50+(lv-1)×5+int×6 · แต้ม +3/เลเวล (`js/031-core.js` 320) | "อัป VIT" "เลเวลอัป" |
 | เซฟเกม | player.gd `save_game` `load_game` `_notification` `SAVE_KEYS` · town.gd `_build_player` (โหลดตอนเริ่ม) | เซฟทุก 10 วิ + ตอนออก/สลับแอป · เขียน .tmp แล้ว rename · ปิดเซฟเองตอนรันเทส/--shot · เพิ่มค่าที่ต้องเซฟ → ใส่ใน SAVE_KEYS | "เซฟ" "โหลด" |

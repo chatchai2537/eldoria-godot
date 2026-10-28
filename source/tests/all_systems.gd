@@ -263,6 +263,22 @@ func _run() -> void:
     world.open_shop("store")
     check(world.ui_shop.visible and world.cur_shop == "store", "เปิดร้านชำมีปุ่มซื้อขาย")
     world.ui_shop.visible = false
+    # หน้าร้านแบบเกม 2D: แตะของในกระเป๋า → แถบขาย → ปรับจำนวน → ขาย
+    p.gel = 12
+    var c1: int = p.coins
+    world.open_shop("store")
+    world.shop_pick("gel")
+    world.shop_pick("gel")
+    check(world.shop_sel == "gel" and world.shop_qty == 2, "หน้าร้าน: แตะเจลในกระเป๋า 2 ครั้ง = เลือกขาย 2")
+    world.shop_qty_add(10)
+    check(world.shop_qty == 12, "หน้าร้าน: +10 ไม่เกินที่มี")
+    world.shop_qty_add(-1)
+    world.shop_sell_ok()
+    check(p.gel == 1 and p.coins == c1 + 22 and world.shop_qty == 1, "หน้าร้าน: กดขาย ×11 ได้เหรียญถูก")
+    world.shop_qty_add(9999)
+    check(world.shop_qty == 1, "หน้าร้าน: ปุ่มทั้งหมด")
+    world.close_shop()
+    p.gel = 0
     p.inv_add("scroll", 1)
     p.position = world.tw(10, 20)
     check(p.use_item("scroll").find("นอกเมือง") >= 0 and p.inv_count("scroll") == 1, "ม้วนวาปใช้ในเมืองไม่ได้")
@@ -359,7 +375,9 @@ func _run() -> void:
         if has_trade:
             check(world.ui_shop.visible, "กดตีหน้าเคาน์เตอร์แล้วเปิดหน้าร้าน " + rid)
         else:
-            check(world.ui_dialog.visible, "กดตีหน้าเคาน์เตอร์แล้วคุยกับเจ้าของ " + rid)
+            check(world.rooms.bubble_text() != "", "กดตีหน้าเคาน์เตอร์แล้วคุยกับเจ้าของ " + rid)
+        check(world.rooms.bubble_text() != "", "เจ้าของร้านพูดลอยเหนือหัว (แบบเกม 2D) " + rid)
+        check(not world.ui_dialog.visible, "คุยในร้านไม่ใช้กล่องข้อความใหญ่ " + rid)
         world.ui_shop.visible = false
         world.ui_dialog.visible = false
         check(world.blocked(k.position.x, k.position.z + 1.1), "เคาน์เตอร์เดินผ่านไม่ได้ " + rid)
