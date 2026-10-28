@@ -57,6 +57,7 @@ var in_door := ""
 var _last_place := ""
 var _test_auto := false
 var is_mobile := false
+var test_lv := 0  # ทดสอบหาต้นเหตุจอดำ: ?t=1 ไม่มีหญ้า/ป่า · ?t=2 +ไม่มีคน · ?t=3 +ไม่มีฟ้าจำลอง
 var mobile: CanvasLayer
 const STYLE := {
     "gear": {"roof": Color(0.3, 0.32, 0.36), "wall": Color(0.42, 0.33, 0.26), "kind": "forge"},
@@ -81,6 +82,9 @@ func tw(x: float, y: float) -> Vector3:
 
 func _ready() -> void:
     seed(5)
+    if OS.has_feature("web"):
+        var q = JavaScriptBridge.eval("(new URLSearchParams(location.search)).get('t')||'0'", true)
+        test_lv = int(str(q))
     is_mobile = DisplayServer.is_touchscreen_available() or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--mobile")
     if is_mobile:
         quality = 0
@@ -114,9 +118,11 @@ func _ready() -> void:
     _build_plaza()
     _build_training()
     _build_props()
-    _build_outside()
-    _build_grass()
-    _build_npcs()
+    if test_lv < 1:
+        _build_outside()
+        _build_grass()
+    if test_lv < 2:
+        _build_npcs()
     _build_player()
     _setup_hud()
     field = Node3D.new()
@@ -271,13 +277,15 @@ func _grid_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 # ---------- ฟ้า แสง ----------
 func _setup_env() -> void:
     env = Environment.new()
-    env.background_mode = Environment.BG_SKY
+    env.background_mode = Environment.BG_SKY if test_lv < 3 else Environment.BG_COLOR
+    env.background_color = Color(0.55, 0.7, 0.85)
     var sky := Sky.new()
     sky_mat = ProceduralSkyMaterial.new()
     sky.sky_material = sky_mat
     env.sky = sky
-    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY if test_lv < 3 else Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_color = Color(0.7, 0.75, 0.8)
+    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY if test_lv < 3 else Environment.REFLECTION_SOURCE_DISABLED
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
     env.tonemap_white = 6.0
     env.tonemap_exposure = 0.88
