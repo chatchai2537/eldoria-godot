@@ -9,6 +9,9 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]
 
+window/dpi/allow_hidpi=false
+window/handheld/orientation=0
+
 window/size/viewport_width=1600
 window/size/viewport_height=900
 window/stretch/mode="canvas_items"

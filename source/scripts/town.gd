@@ -84,7 +84,7 @@ func _ready() -> void:
     is_mobile = DisplayServer.is_touchscreen_available() or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--mobile")
     if is_mobile:
         quality = 0
-        get_viewport().scaling_3d_scale = 0.6
+        get_viewport().scaling_3d_scale = 0.85
         RenderingServer.directional_shadow_atlas_set_size(1024, true)
         get_viewport().size_changed.connect(_mobile_scale)
         _mobile_scale()
@@ -145,7 +145,7 @@ func _ready() -> void:
         field.msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         prompt.offset_top = -230
-        cam_dist = 19.0
+        cam_dist = 24.0
         mobile = CanvasLayer.new()
         mobile.set_script(load("res://scripts/mobile.gd"))
         add_child(mobile)
