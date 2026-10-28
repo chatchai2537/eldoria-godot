@@ -599,6 +599,7 @@ func _add_pickup() -> void:
 
 func _update_world(delta: float) -> void:
     _update_trees(delta)
+    _update_projectiles(delta)
     var p = town.player
     for i in range(pickups.size() - 1, -1, -1):
         var q: Dictionary = pickups[i]
@@ -648,12 +649,86 @@ func melee(p, spin: bool, id: int) -> void:
         var d := Vector2(s.position.x - c.x, s.position.z - c.z).length()
         if d < r + s.radius * 0.6:
             s.last_atk = id
-            var cr: bool = randf() < p.crit_rate()
-            var dm: int = max(1, int(round(p.atk() * randf_range(0.9, 1.1) * (1.8 if cr else 1.0))))
-            s.take_hit(dm, p.position)
-            float_text(("คริ! " if cr else "") + str(dm), s.position + Vector3(0, s.radius * 2.0 + 0.4, 0), Color(1.0, 0.85, 0.3) if cr else Color(1, 1, 1), 1.4 if cr else 1.0)
-            if s.dead:
-                _killed(s)
+            hit_slime(s, p, 1.0)
+
+## ดาเมจหนึ่งครั้ง (ใช้ร่วม: ฟัน · สกิล · ยิงไกล)
+func hit_slime(s, p, mult: float) -> void:
+    var cr: bool = randf() < p.crit_rate()
+    var dm: int = max(1, int(round(p.atk() * mult * randf_range(0.9, 1.1) * (1.8 if cr else 1.0))))
+    s.take_hit(dm, p.position)
+    float_text(("คริ! " if cr else "") + str(dm), s.position + Vector3(0, s.radius * 2.0 + 0.4, 0), Color(1.0, 0.85, 0.3) if cr else Color(1, 1, 1), 1.4 if cr else 1.0)
+    if s.dead:
+        _killed(s)
+
+## สกิลฟันรอบตัว
+func aoe(p, radius: float, mult: float) -> int:
+    var n := 0
+    for s in slimes:
+        if not is_instance_valid(s) or s.dead:
+            continue
+        if Vector2(s.position.x - p.position.x, s.position.z - p.position.z).length() < radius + s.radius * 0.6:
+            hit_slime(s, p, mult)
+            n += 1
+    var ring := MeshInstance3D.new()
+    var tm := TorusMesh.new()
+    tm.inner_radius = radius * 0.85
+    tm.outer_radius = radius
+    ring.mesh = tm
+    ring.material_override = town.M(Color(0.7, 0.9, 1.0), 0.3, 2.0)
+    ring.position = p.position + Vector3(0, 0.3, 0)
+    ring.scale = Vector3(1, 0.15, 1)
+    add_child(ring)
+    projectiles.append({"n": ring, "fx": true, "t": 0.0})
+    return n
+
+## ยิงไปข้างหน้า (ลูกไฟ · ลูกเวทคทา · ลูกธนู) ชนสไลม์ตัวแรก
+var projectiles: Array = []
+func shoot(p, spec: Dictionary, mult: float) -> void:
+    var dir := Vector3(sin(p.heading), 0, cos(p.heading))
+    var m := MeshInstance3D.new()
+    var kind := str(spec.get("kind", "bolt"))
+    if kind == "arrow":
+        var cm := CylinderMesh.new()
+        cm.top_radius = 0.03
+        cm.bottom_radius = 0.03
+        cm.height = 0.9
+        m.mesh = cm
+        m.material_override = town.M(Color(0.85, 0.75, 0.55), 0.6)
+        m.rotation = Vector3(PI / 2.0, p.heading, 0)
+    else:
+        var sm := SphereMesh.new()
+        sm.radius = 0.28 if kind == "fire" else 0.2
+        sm.height = sm.radius * 2.0
+        m.mesh = sm
+        m.material_override = town.M(Color(1.0, 0.45, 0.1) if kind == "fire" else Color(0.55, 0.75, 1.0), 0.3, 3.0)
+    m.position = p.position + Vector3(0, 1.1, 0) + dir * 0.8
+    add_child(m)
+    projectiles.append({"n": m, "dir": dir, "speed": float(spec.speed), "left": float(spec.range), "mult": mult, "p": p})
+
+func _update_projectiles(delta: float) -> void:
+    for i in range(projectiles.size() - 1, -1, -1):
+        var q: Dictionary = projectiles[i]
+        var n: MeshInstance3D = q.n
+        if q.get("fx", false):
+            q.t += delta
+            n.scale = Vector3(1.0 + q.t * 2.0, 0.15, 1.0 + q.t * 2.0)
+            if q.t > 0.3:
+                n.queue_free()
+                projectiles.remove_at(i)
+            continue
+        var step: float = q.speed * delta
+        n.position += q.dir * step
+        q.left -= step
+        var hit = null
+        for s in slimes:
+            if is_instance_valid(s) and not s.dead and Vector2(s.position.x - n.position.x, s.position.z - n.position.z).length() < s.radius + 0.35:
+                hit = s
+                break
+        if hit != null:
+            hit_slime(hit, q.p, q.mult)
+        if hit != null or q.left <= 0.0:
+            n.queue_free()
+            projectiles.remove_at(i)
 
 func _killed(s) -> void:
     say_msg("สไลม์แตก!")

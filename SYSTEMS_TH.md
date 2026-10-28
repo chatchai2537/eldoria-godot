@@ -33,3 +33,8 @@
 | ตัวละคร 3D | model.gd `build` `animate` `action` · npc.gd `setup` | KayKit (CC0) | visual_smoke |
 | กล้อง | town.gd `_update_cam` | จอตั้ง: KEEP_WIDTH fov 62 | — |
 | ทดสอบภาพ | town.gd `_test_ui` · อาร์กิวเมนต์ `--shot=ชื่อ,เวลา,หมุน,ระยะ,ช่องX,ช่องY[,โหมด]` | ช่อง X ติดลบ = ทุ่ง | — |
+| ห้องในร้าน | rooms.gd `enter` `leave` `blocked` `interact_if_near` `interact` `_build` `_decor` `THEME` · town.gd `room` (เดินชนประตู → `rooms.enter`) `_update_sky` (ในร้านแสงกลางวันคงที่) | ห้อง 26×15 ช่อง วางที่ x=700+ลำดับ×90 · แถว 0-1 ผนัง · 2 เจ้าของ · 3 เคาน์เตอร์ · 14 ทางออกช่อง 12-13 · กล้องหันเข้าเคาน์เตอร์ ออกแล้วคืนมุมเดิม | "ห้องในร้าน" |
+| สกิลพื้นฐาน | items.gd `SKILL` `SKILL_ORDER` · player.gd `learn_skill` `use_skill` `skill_cd` · field.gd `aoe` `shoot` · mobile.gd `skill_btns` `refresh_skills` | เรียนที่ร้านสกิล (bsk0-2) · คีย์ 1/2/3 | "สกิล" |
+| อาวุธยิงไกล | items.gd `RANGED` · player.gd `is_ranged` `atk` `attack` · field.gd `projectiles` `shoot` `_update_projectiles` `hit_slime` | คทาใช้ INT ระยะ 17.5 · ธนูใช้ AGI ระยะ 22.5 | "คทา" |
+| อาหาร/บัฟ | items.gd `ITEM[].use` (hpp/mpp/buff/sec) · player.gd `use_item` `buffs` `stat_total` | อิ่ม/แรง ยังไม่มี (รอเจ้าของ) · ของฟาร์มซ่อน `Items.HIDE` | "อาหาร" |
+| ธนาคาร | town.gd `open_bank` `bank_move` · player.gd `bank` (เซฟด้วย) | ฝาก/ถอนของในกระเป๋า | "ธนาคาร" |

@@ -21,6 +21,9 @@ var joy_hint: Label
 var atk: Panel
 var dash: Panel
 var rot_hint: Label
+var skill_btns := {}   # สกิลที่เรียนแล้ว: ปุ่มวงรอบปุ่มตี (ผังเดียวกับเกม 2D fix30/fix41)
+const SKILL_LABEL := {"whirl": "วงพายุ", "fireball": "ลูกไฟ", "heal": "เยียวยา"}
+const SKILL_COLOR := {"whirl": Color(0.15, 0.3, 0.45, 0.92), "fireball": Color(0.5, 0.18, 0.08, 0.92), "heal": Color(0.1, 0.4, 0.2, 0.92)}
 
 func setup(t) -> void:
     town = t
@@ -44,6 +47,12 @@ func setup(t) -> void:
     dash = _button("กลิ้ง", 52, Color(0.08, 0.18, 0.20, 0.93), 18)
     root.add_child(atk)
     root.add_child(dash)
+    for id in SKILL_LABEL.keys():
+        var b := _button(SKILL_LABEL[id], 54, SKILL_COLOR[id], 13)
+        b.visible = false
+        root.add_child(b)
+        skill_btns[id] = b
+    refresh_skills()
     _layout()
     get_viewport().size_changed.connect(_layout)
 
@@ -96,6 +105,16 @@ func _layout() -> void:
     atk.position = Vector2(vs.x - 76 - 14, vs.y - 76 - 14)
     dash.position = Vector2(vs.x - 76 - 14 - 52 - 14, vs.y - 52 - 10)
     joy_hint.position = Vector2(26, vs.y - 146)
+    # วงรอบปุ่มตี: ซ้ายบน · บน · ซ้าย (คล้าย sk1-sk3 ของเกม 2D)
+    var c := atk.position + atk.size * 0.5
+    var offs := {"whirl": Vector2(-78, -48), "fireball": Vector2(-22, -92), "heal": Vector2(-130, -6)}
+    for id in skill_btns.keys():
+        var b: Panel = skill_btns[id]
+        b.position = c + offs[id] - b.size * 0.5
+
+func refresh_skills() -> void:
+    for id in skill_btns.keys():
+        skill_btns[id].visible = town.player != null and town.player.skills.has(id)
 
 func _in(p: Panel, pos: Vector2, pad: float = 10.0) -> bool:
     var c := p.position + p.size * 0.5
@@ -126,6 +145,15 @@ func _input(e: InputEvent) -> void:
                     town.player.set_attack_held(true)
                 get_viewport().set_input_as_handled()
                 return
+            for sid in skill_btns.keys():
+                var sb: Panel = skill_btns[sid]
+                if sb.visible and _in(sb, pos, 4.0):
+                    _press(sb)
+                    var m: String = town.player.use_skill(sid)
+                    if m != "" and m != town.Items.SKILL[sid].name:
+                        town.field.say_msg(m)
+                    get_viewport().set_input_as_handled()
+                    return
             if _in(dash, pos):
                 _press(dash)
                 town.player.dash(_world_dir())

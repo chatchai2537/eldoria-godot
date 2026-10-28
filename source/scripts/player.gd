@@ -31,6 +31,10 @@ const Items = preload("res://scripts/items.gd")
 var inv := {}          # ไอเท็มอื่นในกระเป๋า id -> จำนวน (เจล/หิน/ไม้ อยู่ในตัวแปรของมันเอง)
 var weapon := ""       # อาวุธที่ใส่ ("" = มือเปล่าแบบเริ่มเกม 2D)
 var weapon_tier := 0
+var skills := {}       # สกิลที่เรียนแล้ว id -> true
+var skill_cd := {}     # คูลดาวน์ที่เหลือ
+var buffs: Array = []  # [{stat, amt, t}] จากอาหาร
+var bank := {}         # ของที่ฝากธนาคาร id -> จำนวน
 var iframe := 0.0
 var stun := 0.0
 var kx := 0.0
@@ -76,16 +80,30 @@ func setup(t, pos: Vector3) -> void:
     add_child(ring)
 
 # ---- ค่าพลัง (สูตรเดียวกับ js/030-core.js) ----
+func stat_total(k: String) -> int:
+    var v: int = int(stats.get(k, 0))
+    for b in buffs:
+        if b.stat == k:
+            v += int(b.amt)
+    return v
+
+func is_ranged() -> bool:
+    return Items.RANGED.has(weapon)
+
+## โจมตี: ดาบใช้ STR · คทาใช้ INT · ธนูใช้ AGI (ระดับอาวุธ +SWATK)
 func atk() -> int:
     var w: int = Items.SWATK[weapon_tier] if weapon != "" else 0
-    return 1 + w + stats.str + ((lv - 1) >> 1)
+    var main := "str"
+    if is_ranged():
+        main = str(Items.RANGED[weapon].stat)
+    return 1 + w + stat_total(main) + ((lv - 1) >> 1)
 
 # ---- สเตตัส (js/031-core.js recalcStats / statAdd) ----
 const STAT_NAMES := {"str": "STR พลัง (โจมตี)", "vit": "VIT อึด (เลือด +12 · ป้องกัน)", "int": "INT ปัญญา (มานา +6)", "agi": "AGI ว่องไว (คริ +0.4%)", "end": "END ทนทาน"}
 
 func recalc_stats() -> void:
-    max_hp = 100 + (lv - 1) * 15 + int(stats.vit) * 12
-    max_mp = 50 + (lv - 1) * 5 + int(stats.int) * 6
+    max_hp = 100 + (lv - 1) * 15 + stat_total("vit") * 12
+    max_mp = 50 + (lv - 1) * 5 + stat_total("int") * 6
     hp = min(hp, float(max_hp))
     mp = min(mp, float(max_mp))
 
@@ -103,7 +121,7 @@ func stat_add(k: String, n: int = 1) -> int:
     return n
 
 func crit_rate() -> float:
-    return 0.08 + int(stats.agi) * 0.004
+    return 0.08 + stat_total("agi") * 0.004
 
 # ---- เซฟเกม (ในเครื่อง · เซฟเองทุก 10 วิ และตอนออก/สลับแอป) ----
 var save_path := "user://eldoria_save.json"
@@ -114,7 +132,7 @@ const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood
 func save_game() -> bool:
     if not save_enabled:
         return false
-    var d := {"v": 1, "stats": stats.duplicate(), "inv": inv.duplicate()}
+    var d := {"v": 1, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate()}
     for k in SAVE_KEYS:
         d[k] = get(k)
     var tmp := save_path + ".tmp"
@@ -149,6 +167,15 @@ func load_game() -> bool:
     if d.get("inv") is Dictionary:
         for k in d.inv.keys():
             inv[str(k)] = int(d.inv[k])
+    bank = {}
+    if d.get("bank") is Dictionary:
+        for k in d.bank.keys():
+            bank[str(k)] = int(d.bank[k])
+    skills = {}
+    if d.get("skills") is Array:
+        for k in d.skills:
+            if Items.SKILL.has(str(k)):
+                skills[str(k)] = true
     weapon_tier = clampi(weapon_tier, 0, Items.SWATK.size() - 1)
     var keep_hp := hp
     var keep_mp := mp
@@ -198,21 +225,60 @@ func use_item(id: String) -> String:
         target_mob = null
         position = town.tw(town.SPAWN.x, town.SPAWN.y)
         return "วาปกลับเมืองเอลโดเรียแล้ว"
-    if u.has("hp") and hp >= max_hp and not u.has("mp"):
+    var only_hp: bool = (u.has("hp") or u.has("hpp")) and not (u.has("mp") or u.has("mpp") or u.has("buff"))
+    var only_mp: bool = (u.has("mp") or u.has("mpp")) and not (u.has("hp") or u.has("hpp") or u.has("buff"))
+    if only_hp and hp >= max_hp:
         return "เลือดเต็มอยู่แล้ว"
-    if u.has("mp") and mp >= max_mp and not u.has("hp"):
+    if only_mp and mp >= max_mp:
         return "มานาเต็มอยู่แล้ว"
     inv_take(id, 1)
-    hp = min(float(max_hp), hp + float(u.get("hp", 0)))
-    mp = min(float(max_mp), mp + float(u.get("mp", 0)))
-    return "ใช้ " + Items.item_name(id) + " แล้ว"
+    hp = min(float(max_hp), hp + float(u.get("hp", 0)) + max_hp * float(u.get("hpp", 0)) / 100.0)
+    mp = min(float(max_mp), mp + float(u.get("mp", 0)) + max_mp * float(u.get("mpp", 0)) / 100.0)
+    if u.has("buff"):
+        for k in u.buff.keys():
+            buffs.append({"stat": str(k), "amt": int(u.buff[k]), "t": float(u.get("sec", 60))})
+        recalc_stats()
+    var verb := "กิน " if Items.ITEM.get(id, {}).get("note", "").find("อิ่ม") >= 0 else "ใช้ "
+    return verb + Items.item_name(id) + " แล้ว"
+
+# ---- สกิล (ร้านสกิล) ----
+func learn_skill(id: String) -> bool:
+    if skills.has(id) or not Items.SKILL.has(id):
+        return false
+    skills[id] = true
+    return true
+
+func use_skill(id: String) -> String:
+    if dead or not skills.has(id):
+        return ""
+    var sk: Dictionary = Items.SKILL[id]
+    if float(skill_cd.get(id, 0.0)) > 0.0:
+        return "%s ยังไม่พร้อม (%.1f วิ)" % [sk.name, skill_cd[id]]
+    if mp < float(sk.mp):
+        return "มานาไม่พอ (ต้องใช้ %d)" % int(sk.mp)
+    if id == "heal" and hp >= max_hp:
+        return "เลือดเต็มอยู่แล้ว"
+    mp -= float(sk.mp)
+    skill_cd[id] = float(sk.cd)
+    match id:
+        "whirl":
+            body.action("2H_Melee_Attack_Spin", 0.6)
+            town.field.aoe(self, float(sk.radius), float(sk.mult))
+        "fireball":
+            body.action("Spellcast_Shoot", 0.5)
+            town.field.shoot(self, {"range": sk.range, "speed": sk.speed, "kind": "fire"}, float(sk.mult))
+        "heal":
+            body.action("Spellcast_Raise", 0.6)
+            hp = min(float(max_hp), hp + max_hp * float(sk.heal_pct) / 100.0)
+            town.field.float_text("+%d%%" % int(sk.heal_pct), position + Vector3(0, 2.6, 0), Color(0.5, 1.0, 0.6), 1.1)
+    return sk.name
 
 ## แรงขวาน AXEDMG = 1 + (ระดับขวาน >> 1)  (js/015-core.js)
 func axe_dmg() -> int:
     return 1
 
 func def() -> int:
-    return (stats.vit >> 1) + ((lv - 1) >> 2)
+    return (stat_total("vit") >> 1) + ((lv - 1) >> 2)
 
 func need(l: int) -> int:
     return int(round((20 + l * l * 12) * (1.0 if l < 20 else 1.0 + (l - 20) / 40.0)))
@@ -289,6 +355,10 @@ func set_attack_held(pressed: bool) -> void:
 func attack() -> void:
     if dead or stun > 0.0 or dash_t > 0.0:
         return
+    # ในร้าน: ปุ่มตี = คุยกับเจ้าของร้านเมื่อยืนหน้าเคาน์เตอร์ (เหมือน E/⚔️ ในเกม 2D) · ไม่ฟันในร้าน
+    if town.room != "":
+        town.rooms.interact_if_near()
+        return
     if at >= 0.0:
         queued = true
         return
@@ -296,11 +366,15 @@ func attack() -> void:
     at = 0.0
     queued = false
     path = PackedVector3Array()
-    var s = town.field.nearest_slime(position, 3.5)
+    var s = town.field.nearest_slime(position, 3.5 if not is_ranged() else float(Items.RANGED[weapon].range))
     if s != null:
         heading = atan2(s.position.x - position.x, s.position.z - position.z)
         body.rotation.y = heading
     cur_atk = town.field.new_attack()
+    if is_ranged():
+        body.action("Spellcast_Shoot" if weapon == "staff0" else "1H_Ranged_Shoot", atk_dur)
+        town.field.shoot(self, Items.RANGED[weapon], 1.0)
+        return
     body.action(ATTACK_ANIMATION, atk_dur)
     # ไม่มีสไลม์ใกล้ ๆ และหันหน้าเข้าต้นไม้ = ฟันต้นไม้ (ต้องมีขวาน)
     if s == null and town.field.has_method("try_chop"):
@@ -364,6 +438,17 @@ func _process(delta: float) -> void:
     if _save_t >= 10.0:
         _save_t = 0.0
         save_game()
+    for k in skill_cd.keys():
+        skill_cd[k] = max(0.0, float(skill_cd[k]) - delta)
+    if buffs.size() > 0:
+        var changed := false
+        for i in range(buffs.size() - 1, -1, -1):
+            buffs[i].t -= delta
+            if buffs[i].t <= 0.0:
+                buffs.remove_at(i)
+                changed = true
+        if changed:
+            recalc_stats()
     if dead:
         dead_t -= delta
         if dead_t <= 0.0:
@@ -404,7 +489,8 @@ func _process(delta: float) -> void:
         at += delta
         var u := at / atk_dur
         if u > 0.2 and u < 0.7:
-            town.field.melee(self, false, cur_atk)
+            if not is_ranged():
+                town.field.melee(self, false, cur_atk)
         if u >= 1.0:
             at = -1.0
             if queued:

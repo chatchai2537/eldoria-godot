@@ -81,6 +81,8 @@ var FD: Dictionary = {}
 var frows: Array = []
 var fpath := {}
 var fastar := AStarGrid2D.new()
+var room := ""      # อยู่ในร้านไหน ("" = ข้างนอก)
+var rooms: Node3D
 var f_cut := {}   # ช่องต้นไม้ที่ถูกตัดเหลือตอ (เดินได้)
 var sky_dome_mat: ShaderMaterial
 const STYLE := {
@@ -167,6 +169,10 @@ func _ready() -> void:
     field.set_script(load("res://scripts/field.gd"))
     add_child(field)
     field.setup(self)
+    rooms = Node3D.new()
+    rooms.set_script(load("res://scripts/rooms.gd"))
+    add_child(rooms)
+    rooms.setup(self)
     if is_mobile:
         for c in [ui_dialog, ui_shop, prompt, field.msg]:
             c.anchor_left = 0.0
@@ -273,6 +279,7 @@ func _layout() -> void:
     for d in TD.doors:
         var sh: Dictionary = shops_by_id.get(d.id, {})
         doors.append({"n": sh.get("name", d.id), "p": Vector2(float(d.cx) / 32.0, float(d.cy) / 32.0), "id": d.id})
+    doors.append({"n": "ท้องพระโรงเอลโดเรีย", "p": Vector2(22.0, 9.3), "id": "hall"})
     var ff := FileAccess.open("res://data/field.json", FileAccess.READ)
     FD = JSON.parse_string(ff.get_as_text())
     frows = FD.rows
@@ -314,6 +321,8 @@ func ftile_at(wx: float, wz: float) -> Vector2i:
     return Vector2i(int(floor((wx - FX0) / TS)), int(floor((wz - FZ0) / TS)))
 
 func blocked(wx: float, wz: float) -> bool:
+    if room != "":
+        return rooms.blocked(wx, wz)
     var tx := int(floor((wx - OX) / TS))
     var ty := int(floor((wz - OZ) / TS))
     if tx < 0 or ty < 0 or tx >= TW or ty >= TH:
@@ -326,6 +335,8 @@ func blocked(wx: float, wz: float) -> bool:
     return grid[ty][tx] != 0
 
 func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
+    if room != "":
+        return PackedVector3Array() if blocked(to.x, to.z) else PackedVector3Array([Vector3(to.x, 0, to.z)])
     var fa := from.x < OX
     var fb := to.x < OX
     if fb and blocked(to.x, to.z):
@@ -460,7 +471,9 @@ func _setup_env() -> void:
     _update_sky()
 
 func _update_sky() -> void:
-    var ang := (time_of_day - 0.25) * TAU
+    # ในร้าน: แสงกลางวันคงที่ (ห้องไม่มืดตอนกลางคืน)
+    var tod: float = 0.42 if room != "" else time_of_day
+    var ang := (tod - 0.25) * TAU
     var elev := sin(ang)
     sun.rotation = Vector3(-ang, deg_to_rad(-30.0), 0.0)
     var day: float = clamp(elev * 3.0 + 0.15, 0.0, 1.0)
@@ -506,6 +519,8 @@ func h(x: float, z: float) -> float:
     return n * f + rim - 0.06
 
 func ground_y(x: float, z: float) -> float:
+    if x > 600.0:
+        return 0.0
     if abs(x) <= 44.0 and abs(z) <= 34.0:
         return 0.0
     if in_field_rect(x, z, 0.0):
@@ -1577,6 +1592,13 @@ func shop_buy(it: Dictionary) -> String:
             player.weapon_tier = int(e.get("tier", 0))
         "bag":
             player.inv_add(str(e.item), 1)
+        "skill":
+            if not player.learn_skill(str(e.skill)):
+                return "เรียน " + str(it.name) + " แล้ว"
+            if mobile != null:
+                mobile.refresh_skills()
+            player.coins -= price
+            return "เรียนสกิล " + str(it.name) + " แล้ว (คอม: กด 1/2/3 · มือถือ: ปุ่มรอบปุ่มตี)"
         "now":
             if player.hp >= player.max_hp and player.mp >= player.max_mp:
                 return "เลือดและมานาเต็มอยู่แล้ว"
@@ -1626,9 +1648,13 @@ func open_shop(id: String) -> void:
     if buy.size() > 0:
         ui_shop_body.add_child(_lbl("สินค้าในร้าน", 21, Color(0.7, 1.0, 0.7), true))
         for it in buy:
+            if Items.hidden(str(it.id)):
+                continue
             var ok: bool = Items.can_buy(str(it.id))
             var price := int(it.get("price", 0))
             var label := ("ซื้อ %d" % price) if ok else "เร็ว ๆ นี้"
+            if ok and Items.BUY[str(it.id)].type == "skill":
+                label = "เรียนแล้ว" if player.skills.has(str(Items.BUY[str(it.id)].skill)) else ("เรียน %d" % price)
             var item: Dictionary = it
             var b := _btn(label, ok and player.coins >= price, func(): _shop_msg(shop_buy(item)))
             var sub := str(it.get("note", "")) if it.get("note") else ""
@@ -1657,6 +1683,59 @@ func open_shop(id: String) -> void:
                 if it is Array and it.size() >= 3:
                     names.append(str(it[1]) + " " + _num(it[2]))
             ui_shop_body.add_child(_lbl("ยังไม่มีของที่ร้านนี้รับซื้อ · รับ: " + " · ".join(names), 15, Color(0.75, 0.72, 0.65)))
+    ui_shop.visible = true
+
+## ธนาคาร: ฝาก/ถอนของ (เก็บใน player.bank และเซฟด้วย)
+func bank_move(id: String, n: int, deposit: bool) -> String:
+    if deposit:
+        var have: int = player.inv_count(id)
+        n = have if n < 0 else min(n, have)
+        if n <= 0:
+            return ""
+        player.inv_take(id, n)
+        player.bank[id] = int(player.bank.get(id, 0)) + n
+        return "ฝาก %s ×%d" % [Items.item_name(id), n]
+    var st: int = int(player.bank.get(id, 0))
+    n = st if n < 0 else min(n, st)
+    if n <= 0:
+        return ""
+    player.bank[id] = st - n
+    if player.bank[id] <= 0:
+        player.bank.erase(id)
+    player.inv_add(id, n)
+    return "ถอน %s ×%d" % [Items.item_name(id), n]
+
+func open_bank() -> void:
+    cur_shop = "bank"
+    for c in ui_shop_body.get_children():
+        c.queue_free()
+    var top := HBoxContainer.new()
+    var title := _nowrap(_lbl("ธนาคารเอลโดเรีย", 24, Color(1.0, 0.85, 0.45), true))
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    top.add_child(title)
+    top.add_child(_btn("ปิด X", true, func(): ui_shop.visible = false))
+    ui_shop_body.add_child(top)
+    ui_shop_body.add_child(_lbl("ฝากของไว้ที่ธนาคาร ของปลอดภัยและไม่หาย", 16, Color(0.85, 0.92, 1.0)))
+    ui_shop_body.add_child(_lbl("ในกระเป๋า", 20, Color(0.7, 1.0, 0.7), true))
+    var ids := ["gel", "stone", "wood"]
+    for k in player.inv.keys():
+        ids.append(str(k))
+    for iid in ids:
+        var n: int = player.inv_count(iid)
+        if n <= 0:
+            continue
+        var a: String = iid
+        ui_shop_body.add_child(_row("%s ×%d" % [Items.item_name(iid), n], "", [
+            _btn("ฝาก 1", true, func(): field.say_msg(bank_move(a, 1, true)); open_bank()),
+            _btn("ฝากหมด", true, func(): field.say_msg(bank_move(a, -1, true)); open_bank())]))
+    ui_shop_body.add_child(_lbl("ในธนาคาร", 20, Color(1.0, 0.85, 0.6), true))
+    if player.bank.is_empty():
+        ui_shop_body.add_child(_lbl("ยังไม่ได้ฝากอะไร", 15, Color(0.75, 0.72, 0.65)))
+    for k in player.bank.keys():
+        var b: String = str(k)
+        ui_shop_body.add_child(_row("%s ×%d" % [Items.item_name(b), int(player.bank[k])], "", [
+            _btn("ถอน 1", true, func(): field.say_msg(bank_move(b, 1, false)); open_bank()),
+            _btn("ถอนหมด", true, func(): field.say_msg(bank_move(b, -1, false)); open_bank())]))
     ui_shop.visible = true
 
 ## กระเป๋า: ของทั้งหมด + ปุ่มใช้ยา/ม้วนวาป · เปิดด้วยปุ่ม "กระเป๋า" หรือคีย์ B
@@ -1826,7 +1905,9 @@ func _test_ui(what: String) -> void:
         _test_auto = true
         time_scale = 0.0
         return
-    if what.begins_with("shop:"):
+    if what.begins_with("room:"):
+        rooms.enter(what.substr(5))
+    elif what.begins_with("shop:"):
         open_shop(what.substr(5))
     elif what.begins_with("talk:"):
         var n = npcs[int(what.substr(5))]
@@ -1845,6 +1926,15 @@ func _ground_at(screen: Vector2) -> Variant:
 
 ## คลิก/แตะที่จอ: ตีสไลม์ · คุย NPC · เดินไปจุดนั้น
 func click_at(pos: Vector2) -> void:
+    if room != "":
+        ui_dialog.visible = false
+        if rooms.keeper_at(pos):
+            rooms.walk_to_counter()
+            return
+        var gr = _ground_at(pos)
+        if gr != null and not blocked(gr.x, gr.z):
+            player.set_path(PackedVector3Array([Vector3(gr.x, 0, gr.z)]))
+        return
     var sl = field.slime_at(pos)
     if sl != null:
         player.target_mob = sl
@@ -1889,10 +1979,14 @@ func _unhandled_input(e: InputEvent) -> void:
         cam_pitch = clamp(cam_pitch - e.relative.y * 0.004, -1.4, -0.3)
     elif e is InputEventKey and e.pressed and not e.echo:
         match e.keycode:
-            KEY_1: time_of_day = 0.3
-            KEY_2: time_of_day = 0.48
-            KEY_3: time_of_day = 0.72
-            KEY_4: time_of_day = 0.95
+            KEY_F5: time_of_day = 0.3
+            KEY_F6: time_of_day = 0.48
+            KEY_F7: time_of_day = 0.72
+            KEY_F8: time_of_day = 0.95
+            KEY_1, KEY_2, KEY_3:
+                var sid: String = Items.SKILL_ORDER[e.keycode - KEY_1]
+                var ms: String = player.use_skill(sid)
+                if ms != "" and ms != Items.SKILL[sid].name: field.say_msg(ms)
             KEY_F: time_scale = 20.0 if time_scale < 20.0 else 1.0
             KEY_G: _set_quality(1 if quality == 2 else 2)
             KEY_J, KEY_SPACE: player.attack()
@@ -1955,13 +2049,21 @@ func _process(delta: float) -> void:
         player.set_path(PackedVector3Array())
         _talk(talk_target)
     # เดินเข้าประตูร้าน -> เปิดหน้าร้าน (เหมือนเกมเดิม)
+    if room != "":
+        var hh2 := int(time_of_day * 24.0)
+        var mm2 := int(fmod(time_of_day * 24.0 * 60.0, 60.0))
+        hud.text = "%s · %02d:%02d" % [clean(str(shops_by_id.get(room, {}).get("name", ""))), hh2, mm2]
+        _shot_tick()
+        return
     var pp := Vector2((player.position.x - OX) / TS, (player.position.z - OZ) / TS)
     var near := ""
     for d in doors:
         if pp.distance_to(d.p) < 0.9:
             near = d.id
     if near != "" and near != in_door:
-        open_shop(near)
+        in_door = near
+        rooms.enter(near)
+        return
     in_door = near
     var msg := ""
     if pp.distance_to(Vector2(22.0, 9.3)) < 1.2:
@@ -1989,6 +2091,9 @@ func _process(delta: float) -> void:
         hud.text = "%s · %02d:%02d" % [place, hh, mm]
     else:
         hud.text = "%s · %02d:%02d\nคลิกพื้นเพื่อเดิน · WASD เดิน · J/Space หรือคลิกสไลม์ = ตี · Shift พุ่งหลบ\nคลิกขวาลากหมุนกล้อง · ล้อเมาส์ซูม · F เร่งเวลา" % [place, hh, mm]
+    _shot_tick()
+
+func _shot_tick() -> void:
     if shot_frames > 0:
         shot_frames -= 1
         if shot_frames == 0:

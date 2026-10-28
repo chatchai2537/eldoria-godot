@@ -326,6 +326,114 @@ func _run() -> void:
         f.try_chop(p)
         check(edge.hp == eh, "ต้นไม้ขอบทุ่งตัดไม่ได้")
 
+    # ---------- ห้องในร้าน · ร้านทุกร้าน ----------
+    var room_ids := ["gear", "potion", "inn", "skill", "store", "guild", "fashion", "bank", "ware", "seal113", "hall"]
+    for rid in room_ids:
+        var door = null
+        for d in world.doors:
+            if d.id == rid:
+                door = d
+        check(door != null, "มีประตู " + rid)
+        if door == null:
+            continue
+        world.in_door = ""
+        p.stun = 0.0
+        p.dash_t = 0.0
+        p.position = world.tw(door.p.x, door.p.y)
+        world._process(0.016)
+        check(world.room == rid, "เดินชนประตูแล้วเข้าไปในร้าน " + rid)
+        check(not world.blocked(p.position.x, p.position.z), "จุดเกิดในร้านเดินได้ " + rid)
+        var k: Node3D = world.rooms.keepers[rid]
+        p.position = Vector3(k.position.x, 0, k.position.z + 4.4)
+        check(world.rooms.near_counter(), "ยืนหน้าเคาน์เตอร์ได้ " + rid)
+        world.ui_shop.visible = false
+        world.ui_dialog.visible = false
+        p.attack()
+        var sh: Dictionary = world.shops_by_id[rid]
+        var has_trade: bool = (sh.get("buy", []) as Array).size() > 0 or (sh.get("sell", []) as Array).size() > 0 or rid == "bank"
+        if has_trade:
+            check(world.ui_shop.visible, "กดตีหน้าเคาน์เตอร์แล้วเปิดหน้าร้าน " + rid)
+        else:
+            check(world.ui_dialog.visible, "กดตีหน้าเคาน์เตอร์แล้วคุยกับเจ้าของ " + rid)
+        world.ui_shop.visible = false
+        world.ui_dialog.visible = false
+        check(world.blocked(k.position.x, k.position.z + 2.0), "เคาน์เตอร์เดินผ่านไม่ได้ " + rid)
+        var o: Vector3 = world.rooms.origin(rid)
+        p.position = o + Vector3(13 * 2.0, 0, 14 * 2.0 - 0.1)
+        world.rooms._process(0.016)
+        check(world.room == "" and p.position.x < 100.0, "เดินลงทางออกแล้วออกมาข้างนอก " + rid)
+        check(not world.blocked(p.position.x, p.position.z), "ออกมายืนตรงที่เดินได้ " + rid)
+
+    # ---------- สกิล · อาหาร · อาวุธยิงไกล · ธนาคาร ----------
+    p.coins = 1000
+    p.inv = {}
+    p.skills = {}
+    var sk_shop: Dictionary = world.shops_by_id["skill"]
+    for it in sk_shop.buy:
+        world.shop_buy(it)
+    check(p.skills.size() == 3 and p.coins == 1000 - 60 - 80 - 100, "ร้านสกิล: เรียนครบ 3 สกิลราคาถูก")
+    check(world.shop_buy(sk_shop.buy[0]).find("แล้ว") >= 0 and p.coins == 760, "เรียนซ้ำไม่เสียเงิน")
+    check(world.mobile == null or world.mobile.skill_btns["fireball"].visible, "มือถือ: ปุ่มสกิลขึ้นหลังเรียน")
+    p.position = stand
+    p.heading = 0.0
+    p.mp = 50.0
+    var tgt: Node = f.slimes[1]
+    tgt.position = stand + Vector3(0, 0, 6.0)
+    tgt.dead = false
+    tgt.hp = 99
+    tgt.max_hp = 99
+    var hp_s: int = tgt.hp
+    check(p.use_skill("fireball") == "ลูกไฟ" and p.mp == 42.0, "ใช้ลูกไฟ เสียมานา 8")
+    for i in 30:
+        tgt.position = stand + Vector3(0, 0, 6.0)
+        f._update_projectiles(1.0 / 30.0)
+    check(tgt.hp < hp_s, "ลูกไฟพุ่งไปโดนสไลม์")
+    check(p.use_skill("fireball").find("ยังไม่พร้อม") >= 0, "สกิลติดคูลดาวน์")
+    tgt.position = stand + Vector3(1.5, 0, 0)
+    var hp_w: int = tgt.hp
+    p.use_skill("whirl")
+    check(tgt.hp < hp_w, "ฟันวงพายุโดนรอบตัว")
+    p.hp = 10.0
+    p.use_skill("heal")
+    check(p.hp > 10.0, "เยียวยาฟื้นเลือด")
+    tgt.hp = 0
+    tgt.dead = true
+    var fs: Dictionary = world.shops_by_id["st_bread"]
+    for it in fs.buy:
+        if it.id == "f_pie":
+            world.shop_buy(it)
+    var atk_p: int = p.atk()
+    p.use_item("f_pie")
+    check(p.atk() == atk_p + 4, "กินพายเนื้อ STR +4")
+    p._process(181.0)
+    check(p.atk() == atk_p, "บัฟหมดเวลาแล้ว STR กลับเท่าเดิม")
+    for it in world.shops_by_id["st_farm"].buy:
+        check(not world.Items.hidden(str(it.id)) or str(it.note).find("ที่ดิน") >= 0, "ของที่ดินผู้กล้า (เลิกแล้ว) ซ่อน: " + str(it.id))
+    var gs: Dictionary = world.shops_by_id["gear"]
+    for it in gs.buy:
+        if it.id == "g_staff0":
+            world.shop_buy(it)
+    check(p.weapon == "staff0" and p.is_ranged(), "ซื้อคทาแล้วยิงไกล")
+    p.at = -1.0
+    var np0: int = f.projectiles.size()
+    p.attack()
+    check(f.projectiles.size() == np0 + 1, "ถือคทากดตีแล้วยิงลูกเวท")
+    p.weapon = ""
+    p.at = -1.0
+    p.wood = 5
+    check(world.bank_move("wood", 3, true) != "" and p.wood == 2 and int(p.bank.wood) == 3, "ธนาคาร: ฝากไม้ 3")
+    check(world.bank_move("wood", -1, false) != "" and p.wood == 5 and not p.bank.has("wood"), "ธนาคาร: ถอนหมด")
+    p.bank["gel"] = 4
+    p.save_path = "user://test_save2.json"
+    p.save_enabled = true
+    p.save_game()
+    p.bank = {}
+    p.skills = {}
+    p.load_game()
+    check(int(p.bank.get("gel", 0)) == 4 and p.skills.size() == 3, "เซฟจำของในธนาคารและสกิลที่เรียน")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save2.json"))
+    p.save_enabled = false
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile
