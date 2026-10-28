@@ -16,7 +16,7 @@ func _run() -> void:
     root.add_child(world)
     await world.world_ready
     var p: Node = world.player
-    p.position = Vector3(-68, world.ground_y(-68, 0), 0)
+    p.position = Vector3(-55, world.ground_y(-55, 0), 0)
     var start: Vector3 = p.position
     p.set_attack_held(true)
     var first_id: int = p.cur_atk

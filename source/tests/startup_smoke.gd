@@ -41,7 +41,7 @@ func _run() -> void:
     check(not state.loading, "successful load clears interrupted marker")
     world.process_mode = Node.PROCESS_MODE_DISABLED
     var p: Node = world.player
-    p.position = Vector3(-68, world.ground_y(-68, 0), 0)
+    p.position = Vector3(-55, world.ground_y(-55, 0), 0)
     var before: Vector3 = p.position
     p.drive(Vector3.RIGHT, 0.1)
     check(p.position.x > before.x, "walking works in field")

@@ -11,6 +11,18 @@ const TS := 2.0
 const OX := -44.0
 const OZ := -34.0
 const HALF := 220.0
+# ทุ่งหญ้า = แผนที่เดียวกับเกม 2D (js/013-core.js) 60×44 ช่อง · ประตูเมืองช่อง (59,22) ต่อกับประตูตะวันตกของเมือง
+const FX0 := -164.0
+const FZ0 := -45.0
+const FW := 60
+const FH := 44
+const F_GRASS := 0
+const F_WATER := 1
+const F_SAND := 2
+const F_TREE := 3
+const F_DOOR := 5
+const F_WARP := 8
+const F_GATE := 9
 
 var noise := FastNoiseLite.new()
 var noise_tex: NoiseTexture2D
@@ -65,6 +77,11 @@ var mobile: CanvasLayer
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
+var FD: Dictionary = {}
+var frows: Array = []
+var fpath := {}
+var fastar := AStarGrid2D.new()
+var sky_dome_mat: ShaderMaterial
 const STYLE := {
     "gear": {"roof": Color(0.312, 0.323, 0.344), "wall": Color(0.617, 0.556, 0.480), "kind": "forge"},
     "seal113": {"roof": Color(0.342, 0.255, 0.393), "wall": Color(0.651, 0.611, 0.602), "kind": "gothic"},
@@ -238,6 +255,23 @@ func _layout() -> void:
     for d in TD.doors:
         var sh: Dictionary = shops_by_id.get(d.id, {})
         doors.append({"n": sh.get("name", d.id), "p": Vector2(float(d.cx) / 32.0, float(d.cy) / 32.0), "id": d.id})
+    var ff := FileAccess.open("res://data/field.json", FileAccess.READ)
+    FD = JSON.parse_string(ff.get_as_text())
+    frows = FD.rows
+    for k in FD.path:
+        fpath[int(k)] = true
+    # ทางเชื่อมจากทางเดินถึงประตูเมือง (แถว 21-22)
+    for x in range(52, FW):
+        for y in [21, 22]:
+            fpath[y * FW + x] = true
+    fastar.region = Rect2i(0, 0, FW, FH)
+    fastar.cell_size = Vector2(1, 1)
+    fastar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+    fastar.update()
+    for y in FH:
+        for x in FW:
+            if ftile_solid(ftile(x, y)):
+                fastar.set_point_solid(Vector2i(x, y), true)
     astar.region = Rect2i(0, 0, TW, TH)
     astar.cell_size = Vector2(1, 1)
     astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
@@ -247,11 +281,28 @@ func _layout() -> void:
             if grid[y][x] != 0:
                 astar.set_point_solid(Vector2i(x, y), true)
 
+func ftile(x: int, y: int) -> int:
+    if x < 0 or y < 0 or x >= FW or y >= FH:
+        return -1
+    return int((frows[y] as String).substr(x, 1))
+
+func ftile_solid(t: int) -> bool:
+    return t == -1 or t == F_WATER or t == F_TREE or t == F_DOOR
+
+func fw(x: float, y: float) -> Vector3:
+    return Vector3(FX0 + x * TS, 0.0, FZ0 + y * TS)
+
+func ftile_at(wx: float, wz: float) -> Vector2i:
+    return Vector2i(int(floor((wx - FX0) / TS)), int(floor((wz - FZ0) / TS)))
+
 func blocked(wx: float, wz: float) -> bool:
     var tx := int(floor((wx - OX) / TS))
     var ty := int(floor((wz - OZ) / TS))
     if tx < 0 or ty < 0 or tx >= TW or ty >= TH:
-        return not (wx < OX and wx > -150.0 and abs(wz) < 52.0)
+        if wx < OX:
+            var ft := ftile_at(wx, wz)
+            return ftile_solid(ftile(ft.x, ft.y))
+        return true
     return grid[ty][tx] != 0
 
 func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
@@ -260,20 +311,51 @@ func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
     if fb and blocked(to.x, to.z):
         return PackedVector3Array()
     var gate_in := tw(0.5, 17.0)
-    var gate_out := tw(-1.0, 17.0)
+    var gate_out := fw(59.5, 22.5)
     if fa and fb:
-        return PackedVector3Array([Vector3(to.x, 0, to.z)])
+        return _field_path(from, to)
     if fa and not fb:
-        var rest := _grid_path(gate_in, to)
-        var out := PackedVector3Array([gate_out, gate_in])
-        out.append_array(rest)
+        var out := _field_path(from, gate_out)
+        out.append(gate_in)
+        out.append_array(_grid_path(gate_in, to))
         return out
     if fb and not fa:
         var out2 := _grid_path(from, gate_in)
         out2.append(gate_out)
-        out2.append(Vector3(to.x, 0, to.z))
+        out2.append_array(_field_path(gate_out, to))
         return out2
     return _grid_path(from, to)
+
+func _field_path(from: Vector3, to: Vector3) -> PackedVector3Array:
+    var a := ftile_at(from.x, from.z)
+    var b := ftile_at(to.x, to.z)
+    var out := PackedVector3Array()
+    if not fastar.region.has_point(a) or not fastar.region.has_point(b):
+        return out
+    if fastar.is_point_solid(b):
+        var best := b
+        var bd := 1e9
+        for dy in range(-3, 4):
+            for dx in range(-3, 4):
+                var c := b + Vector2i(dx, dy)
+                if fastar.region.has_point(c) and not fastar.is_point_solid(c):
+                    var dd := Vector2(dx, dy).length()
+                    if dd < bd:
+                        bd = dd
+                        best = c
+        b = best
+        to = fw(b.x + 0.5, b.y + 0.5)
+    if fastar.is_point_solid(a):
+        return PackedVector3Array([Vector3(to.x, 0, to.z)])
+    var pts := fastar.get_id_path(a, b)
+    for i in range(1, pts.size()):
+        var p: Vector2i = pts[i]
+        out.append(fw(p.x + 0.5, p.y + 0.5))
+    if out.size() > 0:
+        out[out.size() - 1] = Vector3(to.x, 0, to.z)
+    else:
+        out.append(Vector3(to.x, 0, to.z))
+    return out
 
 func _grid_path(from: Vector3, to: Vector3) -> PackedVector3Array:
     var a := Vector2i(int((from.x - OX) / TS), int((from.z - OZ) / TS))
@@ -379,7 +461,7 @@ func _update_sky() -> void:
     else:
         env.background_color = hor
     env.fog_light_color = hor.lerp(Color(0.5, 0.6, 0.75), 0.3)
-    env.ambient_light_energy = lerp(0.22, 0.52, day)
+    env.ambient_light_energy = lerp(0.22, 0.52, day) if not is_mobile else lerp(0.3, 0.85, day)
     env.volumetric_fog_albedo = Color(1, 1, 1).lerp(Color(1.0, 0.8, 0.65), low)
     var night := 1.0 - day
     for l in lights:
@@ -392,26 +474,38 @@ func h(x: float, z: float) -> float:
     var dx: float = max(abs(x) - 46.0, 0.0)
     var dz: float = max(abs(z) - 36.0, 0.0)
     var dt := sqrt(dx * dx + dz * dz)
-    var ex: float = max(max(-150.0 - x, x + 46.0), 0.0)
-    var ez: float = max(abs(z) - 52.0, 0.0)
+    if in_field_rect(x, z, 0.0):
+        return -4.0
+    var ex: float = max(max(FX0 - x, x + 46.0), 0.0)
+    var ez: float = max(max(FZ0 - z, z - (FZ0 + FH * TS)), 0.0)
     var df := sqrt(ex * ex + ez * ez)
     var d: float = min(dt, df)
     var n := noise.get_noise_2d(x, z) * 7.0 + noise.get_noise_2d(x * 3.1, z * 3.1) * 1.0
     var f := smoothstep(4.0, 40.0, d)
     var rim := pow(smoothstep(70.0, 125.0, d), 1.4) * 30.0
-    # ทุ่งหญ้า: เนินเตี้ย ๆ เดินได้
-    var roll := 0.0
-    if df < 6.0:
-        roll = (noise.get_noise_2d(x * 0.6 + 50.0, z * 0.6) * 1.4 + 0.5) * clamp((-48.0 - x) / 12.0, 0.0, 1.0) * (1.0 - smoothstep(0.0, 6.0, df))
-    return n * f + rim + roll - 0.06
+    return n * f + rim - 0.06
 
 func ground_y(x: float, z: float) -> float:
     if abs(x) <= 44.0 and abs(z) <= 34.0:
         return 0.0
+    if in_field_rect(x, z, 0.0):
+        return fh(x, z)
     return h(x, z)
 
 func in_field_rect(x: float, z: float, pad: float) -> bool:
-    return x > -150.0 - pad and x < -44.0 and abs(z) < 52.0 + pad
+    return x > FX0 - pad and x < -44.0 and z > FZ0 - pad and z < FZ0 + FH * TS + pad
+
+## ความสูงพื้นทุ่งหญ้า: บ่อน้ำเป็นแอ่งลง ขอบทรายลาดลง
+func fh(x: float, z: float) -> float:
+    var w := 0.0
+    for o in [Vector2(-0.6, -0.6), Vector2(0.6, -0.6), Vector2(-0.6, 0.6), Vector2(0.6, 0.6)]:
+        var t := ftile_at(x + o.x, z + o.y)
+        var k := ftile(t.x, t.y)
+        if k == F_WATER:
+            w += 0.25
+        elif k == -1:
+            w += 0.0
+    return -1.1 * w + 0.02
 
 func _build_terrain() -> void:
     var st := SurfaceTool.new()
@@ -424,7 +518,7 @@ func _build_terrain() -> void:
             var x := -HALF + xi * step
             var z := -HALF + zi * step
             var pm := 0.0
-            if abs(z - 1.0) < 3.0 and ((x > 44.0 and x < 120.0) or (x < -44.0 and x > -150.0)):
+            if abs(z - 1.0) < 3.0 and x > 44.0 and x < 120.0:
                 pm = 1.0 - smoothstep(1.5, 3.0, abs(z - 1.0))
             verts.append([Vector3(x, h(x, z), z), Color(pm, 0.0, 0.0)])
     for zi in n:
@@ -1198,7 +1292,11 @@ func _build_grass() -> void:
         else:
             if abs(x) < 47.5 and abs(z) < 37.5:
                 continue
-            if abs(z - 1.0) < 2.6 and abs(x) < 150.0:
+            if in_field_rect(x, z, 1.0):
+                continue
+            if is_mobile and (abs(x) > 80.0 or abs(z) > 60.0):
+                continue
+            if abs(z - 1.0) < 2.6 and x > 0.0 and x < 150.0:
                 continue
         var n := noise.get_noise_2d(x * 4.0, z * 4.0)
         var s := randf_range(0.5, 1.0) * (1.0 + n * 0.4)
