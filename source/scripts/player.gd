@@ -91,28 +91,13 @@ func gain_xp(n: int) -> void:
 func hurt_by(sl) -> void:
     if dead:
         return
-    var d := Vector3(position.x - sl.position.x, 0, position.z - sl.position.z)
-    var dist: float = max(d.length(), 0.01)
-    if hit_combo_t > 0.0:
-        hit_combo += 1
-    else:
-        hit_combo = 1
-    hit_combo_t = BAL.combo_win
+    # เจ้าของสั่ง: โดนสไลม์ตีไม่กระเด็น ไม่ชะงัก (เตรียมทำระบบหลบ) — โดนแค่เลือดลด
     var dmg: int = max(1, BAL.slime_dmg + (sl.lv - 1) * 2 - def())
-    var kb: float = BAL.kb
-    if hit_combo >= 2:
-        dmg += BAL.combo_dmg
-        kb = BAL.kb_heavy
-        hit_combo = 0
-        hit_combo_t = 0.0
     hp = max(0.0, hp - dmg)
     iframe = BAL.iframe
-    stun = BAL.stun
-    kx = d.x / dist * kb * K
-    kz = d.z / dist * kb * K
     since_hit = 0.0
     town.field.float_text("-%d" % dmg, position + Vector3(0, 2.4, 0), Color(1.0, 0.35, 0.3), 1.1)
-    town.field.say_msg(("โดนสไลม์ซ้ำ! กระเด็นถอยหลัง เลือด -%d" if kb > BAL.kb else "โดนสไลม์ตี เลือด -%d") % dmg)
+    town.field.say_msg("โดนสไลม์ตี เลือด -%d" % dmg)
     if hp <= 0.0:
         _die()
     elif at < 0.0:
