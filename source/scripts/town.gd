@@ -186,6 +186,15 @@ func _ready() -> void:
         ui_bag.anchor_bottom = 1.0
         ui_bag.offset_top = 40
         ui_bag.offset_bottom = -100
+        for pn in [ui_char]:
+            pn.anchor_left = 0.0
+            pn.anchor_right = 1.0
+            pn.offset_left = 8
+            pn.offset_right = -8
+            pn.anchor_top = 0.0
+            pn.anchor_bottom = 1.0
+            pn.offset_top = 40
+            pn.offset_bottom = -100
         field.hud_card.position = Vector2(10, 36)
         field.hud_box.add_theme_constant_override("separation", 3)
         for b in field.bars:
@@ -1346,6 +1355,15 @@ func _build_player() -> void:
     player.set_script(load("res://scripts/player.gd"))
     add_child(player)
     player.setup(self, tw(SPAWN.x, SPAWN.y))
+    var all_args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
+    var testing := all_args.has("--script")
+    for a in all_args:
+        if str(a).begins_with("--shot="):
+            testing = true
+    if testing:
+        player.save_enabled = false
+    elif player.load_game():
+        loading_stage.emit("โหลดเซฟแล้ว", 0.95)
     cam = Camera3D.new()
     cam.fov = 45.0
     cam.far = 800.0
@@ -1463,6 +1481,17 @@ func _setup_hud() -> void:
     bag_btn.offset_top = 12
     bag_btn.offset_bottom = 52
     cl.add_child(bag_btn)
+    char_btn = _btn("ตัวละคร", true, toggle_char)
+    char_btn.anchor_left = 1.0
+    char_btn.anchor_right = 1.0
+    char_btn.offset_left = -262
+    char_btn.offset_right = -138
+    char_btn.offset_top = 12
+    char_btn.offset_bottom = 52
+    cl.add_child(char_btn)
+    var built := _panel(cl, ui_shop.get_theme_stylebox("panel"))
+    ui_char = built[0]
+    ui_char_body = built[1]
 
 # ---------- คุยกับ NPC / หน้าร้าน ----------
 ## ตัดอีโมจิออก (บนเว็บไม่มีฟอนต์อีโมจิ จะขึ้นเป็นกล่องสี่เหลี่ยม)
@@ -1495,6 +1524,9 @@ func say(name: String, text: String) -> void:
 const Items = preload("res://scripts/items.gd")
 var cur_shop := ""
 var ui_bag: PanelContainer
+var ui_char: PanelContainer
+var ui_char_body: VBoxContainer
+var char_btn: Button
 var bag_btn: Button
 var ui_bag_body: VBoxContainer
 
@@ -1630,6 +1662,7 @@ func toggle_bag() -> void:
         ui_bag.visible = false
         return
     ui_shop.visible = false
+    ui_char.visible = false
     refresh_bag()
     ui_bag.visible = true
 
@@ -1665,6 +1698,62 @@ func refresh_bag() -> void:
         ui_bag_body.add_child(_row("%s ×%d" % [Items.item_name(iid), n], str(info.get("note", "")), btns))
     if not any:
         ui_bag_body.add_child(_lbl("กระเป๋าว่าง — ตีสไลม์ เก็บหิน/กิ่งไม้ในทุ่งหญ้า", 16, Color(0.75, 0.72, 0.65)))
+
+func _panel(cl: CanvasLayer, sb: StyleBox) -> Array:
+    var pnl := PanelContainer.new()
+    pnl.add_theme_stylebox_override("panel", sb)
+    pnl.anchor_left = 0.5
+    pnl.anchor_right = 0.5
+    pnl.anchor_top = 0.5
+    pnl.anchor_bottom = 0.5
+    pnl.offset_left = -330
+    pnl.offset_right = 330
+    pnl.offset_top = -280
+    pnl.offset_bottom = 280
+    var sc := ScrollContainer.new()
+    sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    pnl.add_child(sc)
+    var body := VBoxContainer.new()
+    body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    body.add_theme_constant_override("separation", 6)
+    sc.add_child(body)
+    pnl.visible = false
+    cl.add_child(pnl)
+    return [pnl, body]
+
+## หน้าตัวละคร: แต้มสเตตัส (ปุ่ม +1 / +5) · ค่าที่ได้ · เปิดด้วยปุ่ม "ตัวละคร" หรือคีย์ C
+func toggle_char() -> void:
+    if ui_char.visible:
+        ui_char.visible = false
+        return
+    ui_shop.visible = false
+    ui_bag.visible = false
+    refresh_char()
+    ui_char.visible = true
+
+func refresh_char() -> void:
+    for c in ui_char_body.get_children():
+        c.queue_free()
+    var p = player
+    var top := HBoxContainer.new()
+    var title := _nowrap(_lbl("ตัวละคร  Lv.%d" % p.lv, 24, Color(1.0, 0.85, 0.45), true))
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    top.add_child(title)
+    top.add_child(_nowrap(_lbl("แต้มเหลือ %d" % p.sp, 18, Color(0.6, 1.0, 0.6), true)))
+    top.add_child(_btn("ปิด X", true, func(): ui_char.visible = false))
+    ui_char_body.add_child(top)
+    ui_char_body.add_child(_lbl("เลือด %d · มานา %d · ATK %d · DEF %d · คริ %.1f%%" % [p.max_hp, p.max_mp, p.atk(), p.def(), p.crit_rate() * 100.0], 17, Color(0.85, 0.92, 1.0)))
+    for k in ["str", "vit", "int", "agi", "end"]:
+        var kk: String = k
+        ui_char_body.add_child(_row("%s : %d" % [p.STAT_NAMES[k], int(p.stats[k])], "", [
+            _btn("+1", p.sp > 0, func():
+                p.stat_add(kk, 1)
+                refresh_char()),
+            _btn("+5", p.sp >= 5, func():
+                p.stat_add(kk, 5)
+                refresh_char())]))
+    if p.sp <= 0:
+        ui_char_body.add_child(_lbl("ได้แต้ม +3 ทุกครั้งที่เลเวลอัป", 15, Color(0.75, 0.72, 0.65)))
 
 func _build_bag_ui(cl: CanvasLayer, sb: StyleBox) -> void:
     ui_bag = PanelContainer.new()
@@ -1806,6 +1895,7 @@ func _unhandled_input(e: InputEvent) -> void:
             KEY_J, KEY_SPACE: player.attack()
             KEY_SHIFT: player.dash(_key_dir())
             KEY_B, KEY_I: toggle_bag()
+            KEY_C: toggle_char()
             KEY_H:
                 var mh: String = player.use_item("hpp")
                 if mh != "": field.say_msg(mh)

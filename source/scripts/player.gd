@@ -80,6 +80,87 @@ func atk() -> int:
     var w: int = Items.SWATK[weapon_tier] if weapon != "" else 0
     return 1 + w + stats.str + ((lv - 1) >> 1)
 
+# ---- สเตตัส (js/031-core.js recalcStats / statAdd) ----
+const STAT_NAMES := {"str": "STR พลัง (โจมตี)", "vit": "VIT อึด (เลือด +12 · ป้องกัน)", "int": "INT ปัญญา (มานา +6)", "agi": "AGI ว่องไว (คริ +0.4%)", "end": "END ทนทาน"}
+
+func recalc_stats() -> void:
+    max_hp = 100 + (lv - 1) * 15 + int(stats.vit) * 12
+    max_mp = 50 + (lv - 1) * 5 + int(stats.int) * 6
+    hp = min(hp, float(max_hp))
+    mp = min(mp, float(max_mp))
+
+func stat_add(k: String, n: int = 1) -> int:
+    if sp <= 0 or not stats.has(k):
+        return 0
+    n = min(max(1, n), sp)
+    sp -= n
+    stats[k] = int(stats[k]) + n
+    recalc_stats()
+    if k == "vit":
+        hp = min(float(max_hp), hp + 12 * n)
+    if k == "int":
+        mp = min(float(max_mp), mp + 6 * n)
+    return n
+
+func crit_rate() -> float:
+    return 0.08 + int(stats.agi) * 0.004
+
+# ---- เซฟเกม (ในเครื่อง · เซฟเองทุก 10 วิ และตอนออก/สลับแอป) ----
+var save_path := "user://eldoria_save.json"
+var save_enabled := true
+var _save_t := 0.0
+const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "weapon", "weapon_tier"]
+
+func save_game() -> bool:
+    if not save_enabled:
+        return false
+    var d := {"v": 1, "stats": stats.duplicate(), "inv": inv.duplicate()}
+    for k in SAVE_KEYS:
+        d[k] = get(k)
+    var tmp := save_path + ".tmp"
+    var f := FileAccess.open(tmp, FileAccess.WRITE)
+    if f == null:
+        return false
+    f.store_string(JSON.stringify(d))
+    f.close()
+    DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(save_path))
+    return true
+
+func load_game() -> bool:
+    if not save_enabled or not FileAccess.file_exists(save_path):
+        return false
+    var d = JSON.parse_string(FileAccess.get_file_as_string(save_path))
+    if not (d is Dictionary):
+        return false
+    for k in SAVE_KEYS:
+        if d.has(k):
+            var v = d[k]
+            if typeof(get(k)) == TYPE_INT:
+                v = int(v)
+            elif typeof(get(k)) == TYPE_FLOAT:
+                v = float(v)
+            else:
+                v = str(v)
+            set(k, v)
+    if d.get("stats") is Dictionary:
+        for k in stats.keys():
+            stats[k] = int(d.stats.get(k, 0))
+    inv = {}
+    if d.get("inv") is Dictionary:
+        for k in d.inv.keys():
+            inv[str(k)] = int(d.inv[k])
+    weapon_tier = clampi(weapon_tier, 0, Items.SWATK.size() - 1)
+    var keep_hp := hp
+    var keep_mp := mp
+    recalc_stats()
+    hp = clamp(keep_hp, 1.0, float(max_hp))
+    mp = clamp(keep_mp, 0.0, float(max_mp))
+    return true
+
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_GO_BACK_REQUEST:
+        save_game()
+
 # ---- กระเป๋า ----
 func inv_count(id: String) -> int:
     match id:
@@ -135,13 +216,14 @@ func need(l: int) -> int:
 func gain_xp(n: int) -> void:
     xp += n
     town.field.float_text("+%d EXP" % n, position + Vector3(0, 2.6, 0), Color(0.6, 1.0, 0.5), 0.7)
-    var up := false
+    var ups := 0
     while xp >= need(lv) and lv < 99:
         xp -= need(lv)
         lv += 1
-        up = true
-    if up:
-        sp += 3
+        ups += 1
+    if ups > 0:
+        sp += 3 * ups
+        recalc_stats()
         hp = max_hp
         mp = max_mp
         town.field.say_msg("เลเวลอัป! Lv.%d ได้แต้มสเตตัส +3" % lv, 3.5)
@@ -271,6 +353,10 @@ func _face(dir: Vector3, delta: float) -> void:
     body.rotation.y = heading
 
 func _process(delta: float) -> void:
+    _save_t += delta
+    if _save_t >= 10.0:
+        _save_t = 0.0
+        save_game()
     if dead:
         dead_t -= delta
         if dead_t <= 0.0:
@@ -317,7 +403,7 @@ func _process(delta: float) -> void:
             if queued:
                 attack()
     var holding := attack_held or Input.is_key_pressed(KEY_J) or Input.is_key_pressed(KEY_SPACE)
-    if holding and at < 0.0 and not town.ui_shop.visible and not town.ui_dialog.visible and not town.ui_bag.visible:
+    if holding and at < 0.0 and not town.ui_shop.visible and not town.ui_dialog.visible and not town.ui_bag.visible and not town.ui_char.visible:
         attack()
     # คลิกที่สไลม์: เดินเข้าไปแล้วฟันจนกว่าจะแตก
     if target_mob != null:

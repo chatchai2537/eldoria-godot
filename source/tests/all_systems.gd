@@ -172,7 +172,52 @@ func _run() -> void:
     p.gain_xp(p.need(p.lv) - p.xp)
     check(p.lv == lv0 + 1 and p.sp == sp0 + 3, "EXP เต็มแล้วเลเวลอัป + แต้มสเตตัส 3")
 
+    # ---------- สเตตัส · หน้าตัวละคร ----------
+    var lvA: int = p.lv
+    var hpA: int = p.max_hp
+    var spA: int = p.sp
+    p.gain_xp(p.need(p.lv) - p.xp + p.need(p.lv + 1))
+    check(p.lv == lvA + 2 and p.sp == spA + 6, "ขึ้น 2 เลเวลรวดได้แต้ม 6")
+    check(p.max_hp == hpA + 30, "เลเวลอัปเลือดสูงสุด +15/เลเวล (ได้ %d จาก %d)" % [p.max_hp, hpA])
+    var hpB: int = p.max_hp
+    var mpB: int = p.max_mp
+    check(p.stat_add("vit", 2) == 2 and p.max_hp == hpB + 24 and p.stats.vit == 2, "อัป VIT +2 เลือดสูงสุด +24")
+    check(p.stat_add("int", 1) == 1 and p.max_mp == mpB + 6, "อัป INT +1 มานาสูงสุด +6")
+    var str0: int = p.atk()
+    p.stat_add("str", 1)
+    check(p.atk() == str0 + 1, "อัป STR +1 โจมตี +1")
+    var spC: int = p.sp
+    p.sp = 0
+    check(p.stat_add("agi", 1) == 0, "ไม่มีแต้มอัปไม่ได้")
+    p.sp = spC
+    world.toggle_char()
+    check(world.ui_char.visible, "เปิดหน้าตัวละครได้")
+    world.toggle_char()
+
+    # ---------- เซฟ/โหลด ----------
+    p.save_path = "user://test_save.json"
+    p.save_enabled = true
+    p.coins = 321
+    p.inv_add("hpp", 2)
+    p.weapon = "sword0"
+    p.stats.agi = 7
+    var lvS: int = p.lv
+    check(p.save_game(), "เซฟเกมได้")
+    p.coins = 0
+    p.inv = {}
+    p.weapon = ""
+    p.stats.agi = 0
+    p.lv = 1
+    check(p.load_game(), "โหลดเซฟได้")
+    check(p.coins == 321 and p.inv_count("hpp") == 2 and p.weapon == "sword0" and p.stats.agi == 7 and p.lv == lvS, "โหลดแล้วเหรียญ/ของ/อาวุธ/สเตตัส/เลเวลกลับมาครบ")
+    check(p.max_hp == 100 + (p.lv - 1) * 15 + p.stats.vit * 12, "โหลดแล้วคำนวณเลือดสูงสุดใหม่ถูก")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save.json"))
+    p.save_enabled = false
+
     # ---------- ร้านค้า · กระเป๋า ----------
+    p.weapon = ""
+    p.weapon_tier = 0
+    p.inv = {}
     var gear: Dictionary = world.shops_by_id["gear"]
     var sword_it: Dictionary = {}
     for it in gear.buy:

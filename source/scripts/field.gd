@@ -464,7 +464,7 @@ func melee(p, spin: bool, id: int) -> void:
         var d := Vector2(s.position.x - c.x, s.position.z - c.z).length()
         if d < r + s.radius * 0.6:
             s.last_atk = id
-            var cr: bool = randf() < 0.08 + p.stats.agi * 0.004
+            var cr: bool = randf() < p.crit_rate()
             var dm: int = max(1, int(round(p.atk() * randf_range(0.9, 1.1) * (1.8 if cr else 1.0))))
             s.take_hit(dm, p.position)
             float_text(("คริ! " if cr else "") + str(dm), s.position + Vector3(0, s.radius * 2.0 + 0.4, 0), Color(1.0, 0.85, 0.3) if cr else Color(1, 1, 1), 1.4 if cr else 1.0)
@@ -653,6 +653,8 @@ func _update_hud() -> void:
     xp_bar.max_value = p.need(p.lv)
     xp_bar.value = p.xp
     lv_txt.text = "Lv.%d  ·  ATK %d  DEF %d" % [p.lv, p.atk(), p.def()]
+    if town.char_btn != null:
+        town.char_btn.text = ("ตัวละคร +%d" % p.sp) if p.sp > 0 else "ตัวละคร"
     bag_txt.text = "เหรียญ %d · เจล %d · หิน %d · ไม้ %d" % [p.coins, p.gel, p.stone, p.wood]
 
 func _process(delta: float) -> void:

@@ -13,6 +13,8 @@
 | ภาพ/วัสดุ | visual_style.gd · town.gd `M` `box` `gable` · shaders/ | normal map เฉพาะคอม | visual_smoke |
 | ร้านค้า | town.gd `open_shop` `shop_buy` `shop_sell` `_row` `_btn` · items.gd `BUY` | ซื้อได้เฉพาะของที่มีใน `Items.BUY` (equip/bag/now) · อื่น ๆ ปุ่ม "เร็ว ๆ นี้" · ขายตาม sell ของร้าน | "ร้าน:" "ร้านยา" "ร้านชำ" |
 | กระเป๋า/ไอเท็ม | player.gd `inv` `inv_count` `inv_add` `inv_take` `use_item` · town.gd `toggle_bag` `refresh_bag` · items.gd `ITEM` | เจล/หิน/ไม้เก็บในตัวแปรของมัน · ยา H/N · ม้วนวาปใช้นอกเมือง · ฟีนิกซ์ใช้เองตอนล้ม (`_die`) · ยังไม่มีจำกัดช่อง/น้ำหนัก | "กระเป๋า" "ม้วนวาป" "ฟีนิกซ์" |
+| สเตตัส/หน้าตัวละคร | player.gd `recalc_stats` `stat_add` `crit_rate` `STAT_NAMES` · town.gd `toggle_char` `refresh_char` | เลือด 100+(lv-1)×15+vit×12 · มานา 50+(lv-1)×5+int×6 · แต้ม +3/เลเวล (`js/031-core.js` 320) | "อัป VIT" "เลเวลอัป" |
+| เซฟเกม | player.gd `save_game` `load_game` `_notification` `SAVE_KEYS` · town.gd `_build_player` (โหลดตอนเริ่ม) | เซฟทุก 10 วิ + ตอนออก/สลับแอป · เขียน .tmp แล้ว rename · ปิดเซฟเองตอนรันเทส/--shot · เพิ่มค่าที่ต้องเซฟ → ใส่ใน SAVE_KEYS | "เซฟ" "โหลด" |
 | อาวุธ/ATK | player.gd `weapon` `weapon_tier` `atk` · items.gd `SWATK` | ATK = 1 + SWATK[ระดับ] (ถ้าถือ) + str + (lv-1)>>1 | "ดาบ" |
 | คุย NPC | town.gd `_talk` `say` · npc.gd | บทพูดจาก NL ของเกม 2D | "คุยกับ NPC" |
 | เดิน/หาทาง | town.gd `blocked` `find_path` `_grid_path` `_field_path` · player.gd `_try_move` `drive` | เมือง A* 44×34 · ทุ่ง A* 60×44 · ต่อกันที่ประตูตะวันตก | "หาทาง" "เดินจากเมือง" |
