@@ -1,0 +1,17 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+STARTUP stage=กำลังเริ่มเกม progress=0.0
+STARTUP version=0.4-modern os=Linux recovery=true
+STARTUP stage=กำลังเตรียมแผนที่ progress=0.05
+STARTUP stage=กำลังสร้างพื้นเมือง progress=0.15
+STARTUP stage=กำลังสร้างกำแพง progress=0.25
+STARTUP stage=กำลังสร้างปราสาท progress=0.35
+STARTUP stage=กำลังสร้างร้านค้า progress=0.45
+STARTUP stage=กำลังสร้างวิหาร progress=0.55
+STARTUP stage=กำลังตกแต่งเมือง progress=0.65
+STARTUP stage=กำลังสร้างธรรมชาติ progress=0.75
+STARTUP stage=กำลังเตรียมชาวเมือง progress=0.85
+STARTUP stage=กำลังเตรียมผู้เล่น progress=0.92
+STARTUP stage=พร้อมเข้าเกม progress=1.0
+STARTUP ready
+SMOKE recovery=true failures=0 load_ms=930

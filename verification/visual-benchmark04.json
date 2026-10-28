@@ -1,0 +1,18 @@
+{
+  "before_v03": {
+    "draw_calls": 663.0,
+    "environment": "Linux Xvfb Mesa llvmpipe software OpenGL, 1600x900, mobile profile, town",
+    "median_frame_ms": 65.053,
+    "p95_frame_ms": 76.532,
+    "primitives": 231400.0,
+    "texture_mib": 58.4472713470459
+  },
+  "after_v04": {
+    "draw_calls": 675.0,
+    "environment": "Linux Xvfb Mesa llvmpipe software OpenGL, 1600x900, mobile profile, town",
+    "median_frame_ms": 64.695,
+    "p95_frame_ms": 99.587,
+    "primitives": 231302.0,
+    "texture_mib": 56.0514326095581
+  }
+}

@@ -14,8 +14,9 @@ void vertex() {
 }
 void fragment() {
 	float n = texture(noise_tex, wpos.xz * 0.35 + wpos.y * 0.2).r;
-	ALBEDO = tint * (0.78 + 0.4 * n);
+	float luma = dot(tint, vec3(0.21, 0.72, 0.07));
+	ALBEDO = mix(tint, vec3(luma), 0.16) * (0.78 + 0.24 * n);
 	ROUGHNESS = 0.8;
 	SPECULAR = 0.25;
-	BACKLIGHT = tint * 0.35;
+	BACKLIGHT = tint * 0.12;
 }

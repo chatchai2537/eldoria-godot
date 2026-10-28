@@ -32,8 +32,10 @@ var msg: Label
 var msg_t := 0.0
 var atk_btn: Button
 var death_panel: PanelContainer
+var hud_card: PanelContainer
 var hud_box: VBoxContainer
 var bars: Array = []
+var _hud_tick := 0.0
 
 func setup(t) -> void:
     town = t
@@ -234,12 +236,12 @@ func float_text(t: String, at: Vector3, c: Color, sc: float = 1.0) -> void:
 func _bar(col: Color, w: float) -> ProgressBar:
     var b := ProgressBar.new()
     b.show_percentage = false
-    b.custom_minimum_size = Vector2(w, 18)
+    b.custom_minimum_size = Vector2(w, 10)
     var bg := StyleBoxFlat.new()
-    bg.bg_color = Color(0.08, 0.06, 0.05, 0.85)
+    bg.bg_color = Color(0.025, 0.04, 0.06, 0.94)
     bg.set_corner_radius_all(5)
-    bg.border_color = Color(0.85, 0.7, 0.4, 0.9)
-    bg.set_border_width_all(2)
+    bg.border_color = Color(0.42, 0.48, 0.51, 0.45)
+    bg.set_border_width_all(1)
     var fg := StyleBoxFlat.new()
     fg.bg_color = col
     fg.set_corner_radius_all(4)
@@ -253,7 +255,7 @@ func _text(sz: int, col: Color = Color(1, 1, 1)) -> Label:
     l.add_theme_font_size_override("font_size", sz)
     l.add_theme_color_override("font_color", col)
     l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-    l.add_theme_constant_override("outline_size", 6)
+    l.add_theme_constant_override("outline_size", 1)
     return l
 
 func _build_hud() -> void:
@@ -261,24 +263,33 @@ func _build_hud() -> void:
     add_child(cl)
     var box := VBoxContainer.new()
     hud_box = box
-    box.anchor_top = 1.0
-    box.anchor_bottom = 1.0
-    box.offset_left = 16
-    box.offset_top = -150
+    hud_card = PanelContainer.new()
+    hud_card.position = Vector2(16, 44)
+    var card := StyleBoxFlat.new()
+    card.bg_color = Color(0.035, 0.055, 0.075, 0.9)
+    card.border_color = Color(0.62, 0.55, 0.37, 0.65)
+    card.set_border_width_all(1)
+    card.set_corner_radius_all(10)
+    card.content_margin_left = 10
+    card.content_margin_right = 10
+    card.content_margin_top = 8
+    card.content_margin_bottom = 8
+    hud_card.add_theme_stylebox_override("panel", card)
+    cl.add_child(hud_card)
     box.add_theme_constant_override("separation", 4)
-    cl.add_child(box)
-    lv_txt = _text(22, Color(1.0, 0.88, 0.45))
+    hud_card.add_child(box)
+    lv_txt = _text(13, Color(0.86, 0.79, 0.61))
     box.add_child(lv_txt)
-    for row in [["HP", Color(0.85, 0.15, 0.18)], ["MP", Color(0.2, 0.45, 0.95)], ["EXP", Color(0.95, 0.8, 0.25)]]:
+    for row in [["HP", Color(0.65, 0.24, 0.23)], ["MP", Color(0.20, 0.46, 0.64)], ["EXP", Color(0.72, 0.61, 0.34)]]:
         var hb := HBoxContainer.new()
-        var tag := _text(16)
+        var tag := _text(10)
         tag.text = row[0]
-        tag.custom_minimum_size = Vector2(40, 0)
+        tag.custom_minimum_size = Vector2(24, 0)
         hb.add_child(tag)
-        var b := _bar(row[1], 240)
+        var b := _bar(row[1], 118)
         bars.append(b)
         hb.add_child(b)
-        var tx := _text(15)
+        var tx := _text(10)
         hb.add_child(tx)
         box.add_child(hb)
         if row[0] == "HP":
@@ -289,9 +300,9 @@ func _build_hud() -> void:
             mp_txt = tx
         else:
             xp_bar = b
-    bag_txt = _text(18, Color(0.95, 0.95, 0.85))
+    bag_txt = _text(11, Color(0.72, 0.78, 0.81))
     box.add_child(bag_txt)
-    msg = _text(24, Color(1.0, 0.95, 0.7))
+    msg = _text(16, Color(0.91, 0.84, 0.67))
     msg.anchor_left = 0.5
     msg.anchor_right = 0.5
     msg.offset_left = -400
@@ -323,7 +334,8 @@ func _build_hud() -> void:
     atk_btn.offset_top = -150
     atk_btn.offset_bottom = -30
     atk_btn.focus_mode = Control.FOCUS_NONE
-    atk_btn.button_down.connect(func(): town.player.attack())
+    atk_btn.button_down.connect(func(): town.player.set_attack_held(true))
+    atk_btn.button_up.connect(func(): town.player.set_attack_held(false))
     cl.add_child(atk_btn)
 
 func say_msg(t: String, dur: float = 2.5) -> void:
@@ -360,7 +372,9 @@ func _process(delta: float) -> void:
         var d: Dictionary = drops[i]
         var n: MeshInstance3D = d.n
         d.t += delta
-        var gy: float = town.ground_y(n.position.x, n.position.z) + 0.15
+        if d.t < 0.65 or not d.has("gy"):
+            d.gy = town.ground_y(n.position.x, n.position.z) + 0.15
+        var gy: float = d.gy
         if d.t < 0.6:
             var v: Vector3 = d.v
             v.y -= 18.0 * delta
@@ -397,4 +411,7 @@ func _process(delta: float) -> void:
         msg_t -= delta
         if msg_t <= 0.0:
             msg.text = ""
-    _update_hud()
+    _hud_tick += delta
+    if _hud_tick >= 0.1:
+        _hud_tick = 0.0
+        _update_hud()

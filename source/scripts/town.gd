@@ -1,4 +1,7 @@
 extends Node3D
+const VisualStyle = preload("res://scripts/visual_style.gd")
+signal loading_stage(message: String, progress: float)
+signal world_ready
 ## ตำนานเอลโดเรีย (Godot) · ขั้นที่ 1: เมืองเอลโดเรีย เดินได้
 ## ผังเมืองยกมาจากเกมเว็บ (js/031-core.js buildTown): 44 x 34 ช่อง · 1 ช่อง = 2 เมตร
 
@@ -59,17 +62,20 @@ var _test_auto := false
 var is_mobile := false
 var test_lv := 0  # ทดสอบหาต้นเหตุจอดำ: ?t=1 ไม่มีหญ้า/ป่า · ?t=2 +ไม่มีคน · ?t=3 +ไม่มีฟ้าจำลอง
 var mobile: CanvasLayer
+var world_loaded := false
+var recovery_mode := false
+var _sky_tick := 0.0
 const STYLE := {
-    "gear": {"roof": Color(0.3, 0.32, 0.36), "wall": Color(0.42, 0.33, 0.26), "kind": "forge"},
-    "seal113": {"roof": Color(0.42, 0.2, 0.55), "wall": Color(0.5, 0.46, 0.55), "kind": "gothic"},
-    "skill": {"roof": Color(0.2, 0.33, 0.66), "wall": Color(0.74, 0.68, 0.56), "kind": "gothic"},
-    "store": {"roof": Color(0.24, 0.5, 0.3), "wall": Color(0.76, 0.68, 0.54), "kind": "shop"},
-    "inn": {"roof": Color(0.66, 0.18, 0.15), "wall": Color(0.78, 0.7, 0.56), "kind": "inn"},
-    "potion": {"roof": Color(0.26, 0.5, 0.28), "wall": Color(0.76, 0.7, 0.58), "kind": "potion"},
-    "guild": {"roof": Color(0.16, 0.38, 0.44), "wall": Color(0.62, 0.56, 0.46), "kind": "guild"},
-    "bank": {"roof": Color(0.18, 0.3, 0.6), "wall": Color(0.8, 0.76, 0.66), "kind": "bank"},
-    "fashion": {"roof": Color(0.74, 0.26, 0.36), "wall": Color(0.82, 0.74, 0.66), "kind": "shop"},
-    "ware": {"roof": Color(0.8, 0.42, 0.18), "wall": Color(0.76, 0.68, 0.54), "kind": "house"},
+    "gear": {"roof": Color(0.312, 0.323, 0.344), "wall": Color(0.617, 0.556, 0.480), "kind": "forge"},
+    "seal113": {"roof": Color(0.342, 0.255, 0.393), "wall": Color(0.651, 0.611, 0.602), "kind": "gothic"},
+    "skill": {"roof": Color(0.260, 0.306, 0.422), "wall": Color(0.752, 0.703, 0.606), "kind": "gothic"},
+    "store": {"roof": Color(0.271, 0.380, 0.296), "wall": Color(0.760, 0.703, 0.598), "kind": "shop"},
+    "inn": {"roof": Color(0.422, 0.253, 0.242), "wall": Color(0.768, 0.712, 0.606), "kind": "inn"},
+    "potion": {"roof": Color(0.280, 0.380, 0.288), "wall": Color(0.760, 0.712, 0.615), "kind": "potion"},
+    "guild": {"roof": Color(0.237, 0.337, 0.364), "wall": Color(0.701, 0.653, 0.564), "kind": "guild"},
+    "bank": {"roof": Color(0.250, 0.294, 0.406), "wall": Color(0.777, 0.737, 0.648), "kind": "bank"},
+    "fashion": {"roof": Color(0.442, 0.285, 0.317), "wall": Color(0.785, 0.728, 0.648), "kind": "shop"},
+    "ware": {"roof": Color(0.450, 0.332, 0.258), "wall": Color(0.760, 0.703, 0.598), "kind": "house"},
 }
 const TREES := [[2, 9], [14, 3], [29, 9], [42, 9], [2, 14], [2, 27], [3, 31], [8, 31], [12, 31], [31, 31], [38, 31], [29, 3], [13, 8]]
 const LAMPS := [[14, 15], [34, 15], [13, 18], [29, 18], [15, 10], [28, 10], [12, 23], [31, 23], [14, 30], [20, 30], [23, 30], [34, 30]]
@@ -81,12 +87,16 @@ func tw(x: float, y: float) -> Vector3:
     return Vector3(OX + x * TS, 0.0, OZ + y * TS)
 
 func _ready() -> void:
+    set_process(false)
+    set_process_unhandled_input(false)
     seed(5)
     if OS.has_feature("web"):
         var q = JavaScriptBridge.eval("(new URLSearchParams(location.search)).get('t')||'0'", true)
         test_lv = int(str(q))
-    is_mobile = DisplayServer.is_touchscreen_available() or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--mobile")
+    is_mobile = OS.has_feature("android") or OS.has_feature("ios") or DisplayServer.is_touchscreen_available() or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--mobile")
+    recovery_mode = bool(get_meta("recovery_mode", false))
     if is_mobile:
+        Engine.max_fps = 30
         quality = 0
         get_viewport().scaling_3d_scale = 0.8
         get_viewport().msaa_3d = Viewport.MSAA_DISABLED
@@ -107,22 +117,32 @@ func _ready() -> void:
     tn.frequency = 0.02
     tn.fractal_octaves = 3
     noise_tex.noise = tn
+    await _stage("กำลังเตรียมแผนที่", 0.05)
     _layout()
     _setup_env()
+    await _stage("กำลังสร้างพื้นเมือง", 0.15)
     _build_terrain()
     _build_ground()
+    await _stage("กำลังสร้างกำแพง", 0.25)
     _build_walls()
+    await _stage("กำลังสร้างปราสาท", 0.35)
     _build_castle()
+    await _stage("กำลังสร้างร้านค้า", 0.45)
     _build_shops()
+    await _stage("กำลังสร้างวิหาร", 0.55)
     _build_temple()
     _build_plaza()
+    await _stage("กำลังตกแต่งเมือง", 0.65)
     _build_training()
     _build_props()
-    if test_lv < 1:
+    await _stage("กำลังสร้างธรรมชาติ", 0.75)
+    if test_lv < 1 and not recovery_mode:
         _build_outside()
         _build_grass()
+    await _stage("กำลังเตรียมชาวเมือง", 0.85)
     if test_lv < 2:
         _build_npcs()
+    await _stage("กำลังเตรียมผู้เล่น", 0.92)
     _build_player()
     _setup_hud()
     field = Node3D.new()
@@ -141,13 +161,10 @@ func _ready() -> void:
         ui_shop.anchor_bottom = 1.0
         ui_shop.offset_top = 40
         ui_shop.offset_bottom = -100
-        field.hud_box.anchor_top = 0.0
-        field.hud_box.anchor_bottom = 0.0
-        field.hud_box.offset_top = 40
-        field.hud_box.offset_left = 10
-        field.hud_box.add_theme_constant_override("separation", 1)
+        field.hud_card.position = Vector2(10, 36)
+        field.hud_box.add_theme_constant_override("separation", 3)
         for b in field.bars:
-            b.custom_minimum_size = Vector2(130, 12)
+            b.custom_minimum_size = Vector2(118, 9)
         field.msg.offset_top = 150
         field.msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -158,6 +175,11 @@ func _ready() -> void:
         add_child(mobile)
         mobile.setup(self)
         field.atk_btn.visible = false
+    world_loaded = true
+    set_process(true)
+    set_process_unhandled_input(true)
+    loading_stage.emit("พร้อมเข้าเกม", 1.0)
+    world_ready.emit()
     var args := OS.get_cmdline_user_args()
     for a in args:
         if a.begins_with("--shot="):
@@ -172,6 +194,12 @@ func _ready() -> void:
             shot_frames = 45
             if p.size() > 6:
                 call_deferred("_test_ui", p[6])
+
+func _stage(message: String, progress: float) -> void:
+    loading_stage.emit(message, progress)
+    # ให้หน้ารอโหลดและงาน GPU ได้ทำงานระหว่างสร้างแต่ละส่วน
+    await get_tree().process_frame
+    await get_tree().process_frame
 
 ## มือถือ: ขยาย UI ตามขนาดจอจริง (เดิมย่อจาก 1600×900 จนตัวหนังสือเล็กมาก)
 func _mobile_scale() -> void:
@@ -277,41 +305,39 @@ func _grid_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 # ---------- ฟ้า แสง ----------
 func _setup_env() -> void:
     env = Environment.new()
-    env.background_mode = Environment.BG_SKY if test_lv < 3 else Environment.BG_COLOR
+    var advanced_effects := not is_mobile and RenderingServer.get_current_rendering_method() == "forward_plus"
+    var use_sky := not is_mobile and test_lv < 3
+    env.background_mode = Environment.BG_SKY if use_sky else Environment.BG_COLOR
     env.background_color = Color(0.55, 0.7, 0.85)
-    var sky := Sky.new()
-    sky_mat = ProceduralSkyMaterial.new()
-    sky.sky_material = sky_mat
-    env.sky = sky
-    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY if test_lv < 3 else Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color(0.7, 0.75, 0.8)
-    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY if test_lv < 3 else Environment.REFLECTION_SOURCE_DISABLED
+    if use_sky:
+        var sky := Sky.new()
+        sky_mat = ProceduralSkyMaterial.new()
+        sky.sky_material = sky_mat
+        env.sky = sky
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY if use_sky else Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_color = Color(0.61, 0.69, 0.79)
+    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY if use_sky else Environment.REFLECTION_SOURCE_DISABLED
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
     env.tonemap_white = 6.0
     env.tonemap_exposure = 0.88
-    env.ssao_enabled = true
+    env.ssao_enabled = advanced_effects
     env.ssao_radius = 1.0
     env.ssao_intensity = 2.0
-    env.glow_enabled = true
+    env.glow_enabled = not is_mobile
     env.glow_intensity = 0.45
     env.glow_bloom = 0.05
     env.glow_hdr_threshold = 1.3
-    env.fog_enabled = true
+    env.fog_enabled = not is_mobile
     env.fog_density = 0.0008
     env.fog_aerial_perspective = 0.15
     env.fog_sky_affect = 0.2
-    env.volumetric_fog_enabled = true
+    env.volumetric_fog_enabled = advanced_effects
     env.volumetric_fog_density = 0.005
     env.volumetric_fog_anisotropy = 0.6
     env.volumetric_fog_length = 100.0
     env.adjustment_enabled = true
-    env.adjustment_saturation = 1.12
-    env.adjustment_contrast = 1.04
-    if is_mobile:
-        env.glow_enabled = false
-        env.ssao_enabled = false
-        env.volumetric_fog_enabled = false
-        env.fog_enabled = false
+    env.adjustment_saturation = 0.92
+    env.adjustment_contrast = 1.06
     var we := WorldEnvironment.new()
     we.environment = env
     add_child(we)
@@ -337,26 +363,29 @@ func _update_sky() -> void:
     sun.rotation = Vector3(-ang, deg_to_rad(-30.0), 0.0)
     var day: float = clamp(elev * 3.0 + 0.15, 0.0, 1.0)
     var low: float = clamp(1.0 - elev * 2.6, 0.0, 1.0) * day
-    sun.light_color = Color(1.0, 0.96, 0.88).lerp(Color(1.0, 0.58, 0.32), low)
-    sun.light_energy = 1.25 * day
+    sun.light_color = Color(1.0, 0.92, 0.79).lerp(Color(1.0, 0.64, 0.42), low)
+    sun.light_energy = 1.15 * day
     sun.visible = day > 0.01
     moon.rotation = Vector3(deg_to_rad(-55.0), deg_to_rad(150.0), 0.0)
     moon.light_energy = 0.35 * (1.0 - day)
     var top := Color(0.02, 0.03, 0.09).lerp(Color(0.3, 0.52, 0.85).lerp(Color(0.3, 0.32, 0.55), low), day)
     var hor := Color(0.06, 0.08, 0.16).lerp(Color(0.72, 0.82, 0.92).lerp(Color(1.0, 0.62, 0.38), low), day)
-    sky_mat.sky_top_color = top
-    sky_mat.sky_horizon_color = hor
-    sky_mat.ground_horizon_color = hor.darkened(0.15)
-    sky_mat.ground_bottom_color = hor.darkened(0.6)
-    sky_mat.sun_angle_max = 18.0 + low * 25.0
+    if sky_mat != null:
+        sky_mat.sky_top_color = top
+        sky_mat.sky_horizon_color = hor
+        sky_mat.ground_horizon_color = hor.darkened(0.15)
+        sky_mat.ground_bottom_color = hor.darkened(0.6)
+        sky_mat.sun_angle_max = 18.0 + low * 25.0
+    else:
+        env.background_color = hor
     env.fog_light_color = hor.lerp(Color(0.5, 0.6, 0.75), 0.3)
-    env.ambient_light_energy = lerp(0.3, 0.5, day)
+    env.ambient_light_energy = lerp(0.22, 0.52, day)
     env.volumetric_fog_albedo = Color(1, 1, 1).lerp(Color(1.0, 0.8, 0.65), low)
     var night := 1.0 - day
     for l in lights:
         l.light_energy = night * 2.6
     for m in glow_mats:
-        m.emission_energy_multiplier = 0.3 + night * 3.0
+        m.emission_energy_multiplier = 0.08 + night * 2.1
 
 # ---------- พื้นที่ ----------
 func h(x: float, z: float) -> float:
@@ -387,7 +416,7 @@ func in_field_rect(x: float, z: float, pad: float) -> bool:
 func _build_terrain() -> void:
     var st := SurfaceTool.new()
     st.begin(Mesh.PRIMITIVE_TRIANGLES)
-    var n := 230
+    var n := 80 if is_mobile else 230
     var step := HALF * 2.0 / n
     var verts := []
     for zi in n + 1:
@@ -435,6 +464,7 @@ func _build_ground() -> void:
     var mat := ShaderMaterial.new()
     mat.shader = load("res://shaders/town_ground.gdshader")
     mat.set_shader_parameter("tilemap", tex)
+    mat.set_shader_parameter("contact_ao", VisualStyle.texture_for("town_ao"))
     mat.set_shader_parameter("noise_tex", noise_tex)
     mi.material_override = mat
     mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -446,13 +476,7 @@ func M(c: Color, rough: float = 0.85, emit: float = 0.0) -> StandardMaterial3D:
     var key := str(c) + str(rough) + str(emit)
     if _mats.has(key):
         return _mats[key]
-    var m := StandardMaterial3D.new()
-    m.albedo_color = c
-    m.roughness = rough
-    if emit > 0.0:
-        m.emission_enabled = true
-        m.emission = c
-        m.emission_energy_multiplier = emit
+    var m := VisualStyle.surface(c, rough, emit)
     _mats[key] = m
     return m
 
@@ -486,7 +510,7 @@ func gable(parent: Node3D, w: float, d: float, hh: float, pos: Vector3, m: Mater
     pm.size = Vector3(d, hh, w)
     var mi := MeshInstance3D.new()
     mi.mesh = pm
-    mi.material_override = m
+    mi.material_override = VisualStyle.roof(m) if m is StandardMaterial3D else m
     mi.position = pos + Vector3(0, hh * 0.5, 0)
     mi.rotation.y = PI / 2.0
     parent.add_child(mi)
@@ -497,10 +521,10 @@ func label3d(text: String, pos: Vector3, size: int = 48, col: Color = Color(1, 0
     l.text = clean(text)
     l.font = font_b
     l.font_size = size
-    l.pixel_size = 0.012
+    l.pixel_size = 0.009
     l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
     l.modulate = col
-    l.outline_size = 14
+    l.outline_size = 7
     l.outline_modulate = Color(0.1, 0.07, 0.04, 0.9)
     l.position = pos
     l.no_depth_test = false
@@ -531,7 +555,7 @@ func lantern(p: Vector3, hh: float = 3.2) -> void:
 
 func window(parent: Node3D, pos: Vector3, size: Vector2, rot: float = 0.0) -> void:
     var gm := StandardMaterial3D.new()
-    gm.albedo_color = Color(0.35, 0.42, 0.5)
+    gm.albedo_color = Color(0.16, 0.26, 0.30)
     gm.roughness = 0.2
     gm.emission_enabled = true
     gm.emission = Color(1.0, 0.72, 0.38)
@@ -864,6 +888,11 @@ func _build_plaza() -> void:
     cyl(self, 1.3, 1.1, 0.35, c + Vector3(0, 2.7, 0), stone, 24)
     cyl(self, 0.18, 0.25, 1.4, c + Vector3(0, 3.5, 0), stone, 12)
     cyl(self, 0.65, 0.5, 0.25, c + Vector3(0, 4.2, 0), stone, 20)
+    if not is_mobile:
+        _build_fountain_particles(c)
+    _build_plaza_details()
+
+func _build_fountain_particles(c: Vector3) -> void:
     var ps := GPUParticles3D.new()
     ps.amount = 140
     ps.lifetime = 1.4
@@ -888,6 +917,8 @@ func _build_plaza() -> void:
     ps.draw_pass_1 = q
     ps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     add_child(ps)
+
+func _build_plaza_details() -> void:
     # ลายเข็มทิศกลางจัตุรัส
     var cr := tw(22, 17)
     for rr in [3.2, 3.6]:
@@ -1110,9 +1141,9 @@ func _build_outside() -> void:
     var bark := StandardMaterial3D.new()
     bark.vertex_color_use_as_albedo = true
     bark.roughness = 0.95
-    _mm(cm, tx, tc, bark)
-    _mm(cone, px, pc, _foliage(0.15))
-    _mm(blob, bx, bc, _foliage(0.3))
+    _mm_chunks(cm, tx, tc, bark)
+    _mm_chunks(cone, px, pc, _foliage(0.15))
+    _mm_chunks(blob, bx, bc, _foliage(0.3))
     var rx := []
     var rc := []
     for i in 180:
@@ -1131,7 +1162,7 @@ func _build_outside() -> void:
     var rmat := StandardMaterial3D.new()
     rmat.vertex_color_use_as_albedo = true
     rmat.roughness = 0.95
-    _mm(rm, rx, rc, rmat)
+    _mm_chunks(rm, rx, rc, rmat)
 
 func _build_grass() -> void:
     var st := SurfaceTool.new()
@@ -1144,7 +1175,7 @@ func _build_grass() -> void:
     var blade := st.commit()
     var gx := []
     var gc := []
-    var target := 70000 if not is_mobile else 9000
+    var target := 70000 if not is_mobile else 3000
     var tries := 0
     while gx.size() < target and tries < target * 4:
         tries += 1
@@ -1176,7 +1207,20 @@ func _build_grass() -> void:
     var gm := ShaderMaterial.new()
     gm.shader = load("res://shaders/grass.gdshader")
     gm.set_shader_parameter("noise_tex", noise_tex)
-    _mm(blade, gx, gc, gm, false)
+    _mm_chunks(blade, gx, gc, gm, false)
+
+func _mm_chunks(mesh: Mesh, xforms: Array, cols: Array, mat: Material, shadows: bool = true) -> void:
+    # แบ่งตามพื้นที่ เพื่อคัดส่วนพ้นจอออกได้ ไม่วาดหญ้าหรือป่าทั้งแผนที่
+    var chunks := {}
+    for i in xforms.size():
+        var xf: Transform3D = xforms[i]
+        var key := Vector2i(floori(xf.origin.x / 32.0), floori(xf.origin.z / 32.0))
+        if not chunks.has(key):
+            chunks[key] = {"x": [], "c": []}
+        chunks[key].x.append(xf)
+        chunks[key].c.append(cols[i])
+    for chunk in chunks.values():
+        _mm(mesh, chunk.x, chunk.c, mat, shadows)
 
 # ---------- ชาวเมือง ----------
 func _build_npcs() -> void:
@@ -1205,7 +1249,7 @@ func _build_player() -> void:
     tm.inner_radius = 0.35
     tm.outer_radius = 0.5
     click_marker.mesh = tm
-    click_marker.material_override = M(Color(0.5, 1.0, 0.6), 0.3, 2.0)
+    click_marker.material_override = M(Color(0.76, 0.67, 0.46), 0.5, 0.25)
     click_marker.visible = false
     add_child(click_marker)
     _update_cam(1.0)
@@ -1230,9 +1274,9 @@ func _setup_hud() -> void:
     hud = Label.new()
     hud.position = Vector2(16, 12)
     hud.add_theme_font_override("font", font_b)
-    hud.add_theme_font_size_override("font_size", 20)
+    hud.add_theme_font_size_override("font_size", 13)
     hud.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-    hud.add_theme_constant_override("outline_size", 6)
+    hud.add_theme_constant_override("outline_size", 2)
     cl.add_child(hud)
     prompt = Label.new()
     prompt.add_theme_font_override("font", font_b)
@@ -1501,13 +1545,17 @@ func _key_dir() -> Vector3:
 
 func _set_quality(q: int) -> void:
     quality = q
-    env.volumetric_fog_enabled = q >= 2
-    env.ssao_enabled = q >= 2
+    var advanced_effects := q >= 2 and not is_mobile and RenderingServer.get_current_rendering_method() == "forward_plus"
+    env.volumetric_fog_enabled = advanced_effects
+    env.ssao_enabled = advanced_effects
     sun.directional_shadow_max_distance = 120.0 if q >= 2 else 60.0
 
 func _process(delta: float) -> void:
     time_of_day = fposmod(time_of_day + delta / day_len * time_scale, 1.0)
-    _update_sky()
+    _sky_tick += delta
+    if _sky_tick >= (0.5 if is_mobile else 0.1):
+        _sky_tick = 0.0
+        _update_sky()
     if Input.is_key_pressed(KEY_Q):
         cam_yaw += delta * 1.5
     if Input.is_key_pressed(KEY_E):

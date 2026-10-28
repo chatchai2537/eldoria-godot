@@ -1,4 +1,5 @@
 extends Node3D
+const VisualStyle = preload("res://scripts/visual_style.gd")
 ## ตัวละครโมเดล 3D มีโครงกระดูกและท่าทางจริง (KayKit Adventurers, CC0)
 ## ใช้แทนหุ่นบล็อกเดิม: build(o) / animate(delta, speed) / action(name, dur)
 
@@ -18,6 +19,8 @@ var cur := ""
 var act_t := 0.0
 var idle_name := "Idle"
 var dead := false
+var roll_pivot: Node3D
+var base_scale := Vector3.ONE
 
 func build(o: Dictionary) -> void:
     var kind: String = o.get("model", "rogue")
@@ -26,7 +29,9 @@ func build(o: Dictionary) -> void:
         ps = load(FILES[kind])
         _cache[kind] = ps
     inst = ps.instantiate()
-    add_child(inst)
+    roll_pivot = Node3D.new()
+    add_child(roll_pivot)
+    roll_pivot.add_child(inst)
     ap = inst.get_node("AnimationPlayer")
     for n in LOOPS:
         if ap.has_animation(n):
@@ -51,8 +56,13 @@ func build(o: Dictionary) -> void:
                         var dup: StandardMaterial3D = base.duplicate()
                         dup.albedo_color = Color(1, 1, 1).lerp(tint, 0.45)
                         m.set_surface_override_material(si, dup)
+    _finish_materials(sk, kind)
+    var head: int = sk.find_bone("head")
+    if head >= 0:
+        sk.set_bone_pose_scale(head, Vector3.ONE * 0.84)
     var sc: float = o.get("scale", 1.0)
     inst.scale = Vector3.ONE * 0.92 * sc
+    base_scale = inst.scale
     idle_name = o.get("idle", "Idle")
     _play(idle_name, 0.0)
 
@@ -78,10 +88,30 @@ func action(n: String, dur: float = 0.0) -> void:
         dead = true
 
 func revive() -> void:
+    end_roll()
     dead = false
     act_t = 0.0
     cur = ""
     _play(idle_name, 0.1)
+
+func begin_roll(duration: float) -> void:
+    action("Dodge_Forward", duration)
+    update_roll(0.0)
+
+func update_roll(progress: float) -> void:
+    var u := clampf(progress, 0.0, 1.0)
+    var tuck := sin(u * PI)
+    roll_pivot.position.y = 0.75 + tuck * 0.25
+    roll_pivot.rotation.x = TAU * u
+    inst.position.y = -0.75
+    inst.scale = base_scale * Vector3(1.0, 1.0 - tuck * 0.3, 1.0)
+
+func end_roll() -> void:
+    if roll_pivot == null:
+        return
+    roll_pivot.transform = Transform3D.IDENTITY
+    inst.position = Vector3.ZERO
+    inst.scale = base_scale
 
 func animate(delta: float, speed: float) -> void:
     if dead:
@@ -95,3 +125,18 @@ func animate(delta: float, speed: float) -> void:
         _play("Walking_A", 0.18, max(0.7, speed / 2.2))
     else:
         _play(idle_name, 0.2)
+
+func _finish_materials(skeleton: Skeleton3D, kind: String) -> void:
+    for node in skeleton.get_children():
+        if node is MeshInstance3D:
+            for surface in node.mesh.get_surface_count():
+                var source: Material = node.get_active_material(surface)
+                if source is StandardMaterial3D:
+                    var material: StandardMaterial3D = source.duplicate()
+                    material.roughness = 0.46 if kind == "knight" else 0.86
+                    material.metallic = 0.6 if kind == "knight" and not "Head" in node.name else 0.0
+                    material.normal_enabled = VisualStyle.normals_enabled()
+                    if material.normal_enabled:
+                        material.normal_texture = VisualStyle.texture_for("plaster_normal")
+                    material.normal_scale = 0.12
+                    node.set_surface_override_material(surface, material)

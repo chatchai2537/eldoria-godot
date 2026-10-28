@@ -1,4 +1,5 @@
 extends Node3D
+const VisualStyle = preload("res://scripts/visual_style.gd")
 ## ชาวเมือง (ข้อมูลจริงจาก NPC_DATA ของเกมเว็บ): ยืนประจำที่ หรือเดินวนใกล้จุดของตัวเอง · มีป้ายชื่อ · คุยได้
 
 var town
@@ -43,13 +44,14 @@ func setup(t, d: Dictionary, ls: Array) -> void:
     elif n == "ทหารฝึก" or n.find("ฝึก") >= 0:
         o = {"model": "barbarian", "keep": ["1H_Axe", "Round_Shield"], "idle": "Idle"}
     body.build(o)
+    VisualStyle.add_contact(self, 1.3, 1.1)
     var l := Label3D.new()
     l.text = n
     l.font = town.font
     l.font_size = 40
-    l.pixel_size = 0.011
+    l.pixel_size = 0.0085
     l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-    l.outline_size = 10
+    l.outline_size = 6
     l.outline_modulate = Color(0, 0, 0, 0.85)
     l.modulate = Color(1, 1, 0.8)
     l.position = Vector3(0, 2.75 * (0.8 if n.begins_with("เด็ก") else 1.0), 0)

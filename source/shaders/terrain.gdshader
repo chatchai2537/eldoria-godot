@@ -1,8 +1,8 @@
 shader_type spatial;
 uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
-uniform vec3 grass_a : source_color = vec3(0.17, 0.33, 0.08);
-uniform vec3 grass_b : source_color = vec3(0.36, 0.5, 0.13);
-uniform vec3 dirt : source_color = vec3(0.52, 0.40, 0.26);
+uniform vec3 grass_a : source_color = vec3(0.17, 0.25, 0.13);
+uniform vec3 grass_b : source_color = vec3(0.32, 0.40, 0.23);
+uniform vec3 dirt : source_color = vec3(0.43, 0.35, 0.25);
 uniform vec3 rock : source_color = vec3(0.46, 0.45, 0.42);
 uniform vec3 sand : source_color = vec3(0.72, 0.64, 0.45);
 varying vec3 wpos;

@@ -1,6 +1,6 @@
 extends CanvasLayer
 ## ปุ่มมือถือ แบบเดียวกับเกม 2D (fix30): จอยสติ๊กลอยด้านซ้าย "ลากเพื่อเดิน" ขนาด 140
-## ปุ่มโจมตีวงใหญ่มุมขวาล่าง + ปุ่ม 💨 พุ่งหลบข้าง ๆ · ลากนิ้วที่ว่างด้านขวา = หมุนกล้อง · สองนิ้ว = ซูม
+## กดตีค้างเพื่อยืนฟันต่อเนื่อง · ปุ่มกลิ้งหลบ · ลากหมุนกล้อง · สองนิ้วซูม
 ## แตะสั้น ๆ (ไม่ลาก) = คลิก: เดินไปจุดนั้น / คุย NPC / ตีสไลม์
 
 const JOY_SIZE := 140.0
@@ -12,6 +12,7 @@ var joy_origin := Vector2.ZERO
 var cam_ids := {}                # นิ้วที่ใช้หมุนกล้อง/ซูม: id -> ตำแหน่งล่าสุด
 var touch_start := {}            # id -> [ตำแหน่งเริ่ม, เวลาเริ่ม, ลากแล้วไหม]
 var pinch_d := 0.0
+var attack_touch_id := -1
 
 var root: Control
 var joy_base: Panel
@@ -39,8 +40,8 @@ func setup(t) -> void:
     joy_knob.visible = false
     root.add_child(joy_base)
     root.add_child(joy_knob)
-    atk = _button("ตี", 76, Color(0.62, 0.17, 0.11, 0.88), 28)
-    dash = _button("หลบ", 52, Color(0.18, 0.22, 0.3, 0.8), 18)
+    atk = _button("ตี", 76, Color(0.07, 0.13, 0.18, 0.94), 28)
+    dash = _button("กลิ้ง", 52, Color(0.08, 0.18, 0.20, 0.93), 18)
     root.add_child(atk)
     root.add_child(dash)
     _layout()
@@ -78,7 +79,7 @@ func _circle_label(t: String, sz: float, bg: Color, border: Color, fs: int) -> L
     return l
 
 func _button(t: String, sz: float, col: Color, fs: int) -> Panel:
-    var p := _circle(sz, col, Color(1.0, 0.82, 0.45), 3)
+    var p := _circle(sz, col, Color(0.76, 0.67, 0.46), 2)
     var l := Label.new()
     l.text = t
     l.size = Vector2(sz, sz)
@@ -120,7 +121,9 @@ func _input(e: InputEvent) -> void:
                 return
             if _in(atk, pos):
                 _press(atk)
-                town.player.attack()
+                if attack_touch_id < 0:
+                    attack_touch_id = e.index
+                    town.player.set_attack_held(true)
                 get_viewport().set_input_as_handled()
                 return
             if _in(dash, pos):
@@ -144,6 +147,11 @@ func _input(e: InputEvent) -> void:
                     pinch_d = (ps[0] as Vector2).distance_to(ps[1])
             touch_start[e.index] = [pos, Time.get_ticks_msec(), false]
         else:
+            if e.index == attack_touch_id:
+                attack_touch_id = -1
+                town.player.set_attack_held(false)
+                get_viewport().set_input_as_handled()
+                return
             var ts = touch_start.get(e.index)
             if ts != null and not ts[2] and Time.get_ticks_msec() - int(ts[1]) < 350 and e.index != joy_id:
                 town.click_at(pos)
@@ -158,6 +166,10 @@ func _input(e: InputEvent) -> void:
                 joy_hint.visible = true
             cam_ids.erase(e.index)
     elif e is InputEventScreenDrag:
+        if e.index == attack_touch_id:
+            town.player.attack_held = _in(atk, e.position)
+            get_viewport().set_input_as_handled()
+            return
         var ts2 = touch_start.get(e.index)
         if ts2 != null and (e.position as Vector2).distance_to(ts2[0]) > 14.0:
             ts2[2] = true
@@ -183,7 +195,13 @@ func _input(e: InputEvent) -> void:
                 town.cam_yaw -= e.relative.x * 0.008
                 town.cam_pitch = clamp(town.cam_pitch - e.relative.y * 0.005, -1.4, -0.3)
 
-## ทิศที่จะพุ่งหลบ: ตามจอย ถ้าไม่ดันจอย = ทิศที่หันอยู่
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+        attack_touch_id = -1
+        if town != null and town.player != null:
+            town.player.set_attack_held(false)
+
+## ทิศกลิ้ง: ตามจอย ถ้าไม่ดันจอย = ทิศที่หันอยู่
 func _world_dir() -> Vector3:
     if joy.length() > 0.1:
         return Vector3(joy.x, 0, joy.y).normalized().rotated(Vector3.UP, town.cam_yaw)

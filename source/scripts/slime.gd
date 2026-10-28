@@ -4,6 +4,19 @@ extends Node3D
 ## เลือด = 2 + เลเวล · ตีแรง = 4 + (เลเวล-1)×2
 
 const K := 2.0 / 32.0  # พิกเซลเกมเดิม -> หน่วยโลก 3D (1 ช่อง = 32px = 2 หน่วย)
+static var _meshes := {}
+static var _eye_material: StandardMaterial3D
+static var _shine_material: StandardMaterial3D
+
+static func _sphere(key: String, r: float, h: float, segments: int, rings: int) -> SphereMesh:
+    if not _meshes.has(key):
+        var mesh := SphereMesh.new()
+        mesh.radius = r
+        mesh.height = h
+        mesh.radial_segments = segments
+        mesh.rings = rings
+        _meshes[key] = mesh
+    return _meshes[key]
 
 var field
 var lv := 1
@@ -12,8 +25,6 @@ var max_hp := 3
 var t := 0.0
 var dx := 0.0
 var dz := 0.0
-var kx := 0.0
-var kz := 0.0
 var hurt := 0.0
 var cool := 0.0
 var last_atk := -1
@@ -40,11 +51,8 @@ func setup(f, level: int, pos: Vector3) -> void:
     vis = Node3D.new()
     add_child(vis)
     body = MeshInstance3D.new()
-    var sm := SphereMesh.new()
-    sm.radius = radius
-    sm.height = radius * 1.7
-    sm.radial_segments = 32
-    sm.rings = 16
+    var detail: int = 16 if field.town.is_mobile else 32
+    var sm := _sphere("body_%d_%d" % [lv, detail], radius, radius * 1.7, detail, 8 if field.town.is_mobile else 16)
     body.mesh = sm
     mat = ShaderMaterial.new()
     mat.shader = preload("res://shaders/slime.gdshader")
@@ -56,27 +64,24 @@ func setup(f, level: int, pos: Vector3) -> void:
     body.position.y = radius * 0.85
     vis.add_child(body)
     # ตา + จุดสะท้อนแสง
-    var eye_m := StandardMaterial3D.new()
-    eye_m.albedo_color = Color(0.03, 0.08, 0.2)
-    eye_m.roughness = 0.1
-    var hi_m := StandardMaterial3D.new()
-    hi_m.albedo_color = Color(1, 1, 1)
-    hi_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    if _eye_material == null:
+        _eye_material = StandardMaterial3D.new()
+        _eye_material.albedo_color = Color(0.03, 0.08, 0.2)
+        _eye_material.roughness = 0.1
+        _shine_material = StandardMaterial3D.new()
+        _shine_material.albedo_color = Color(1, 1, 1)
+        _shine_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     for sx in [-1.0, 1.0]:
         var e := MeshInstance3D.new()
-        var es := SphereMesh.new()
-        es.radius = radius * 0.13
-        es.height = radius * 0.32
+        var es := _sphere("eye_%d" % lv, radius * 0.13, radius * 0.32, 8, 4)
         e.mesh = es
-        e.material_override = eye_m
+        e.material_override = _eye_material
         e.position = Vector3(sx * radius * 0.32, radius * 1.0, radius * 0.86)
         vis.add_child(e)
         var hl := MeshInstance3D.new()
-        var hs := SphereMesh.new()
-        hs.radius = radius * 0.045
-        hs.height = radius * 0.09
+        var hs := _sphere("shine_%d" % lv, radius * 0.045, radius * 0.09, 8, 4)
         hl.mesh = hs
-        hl.material_override = hi_m
+        hl.material_override = _shine_material
         hl.position = e.position + Vector3(radius * 0.04, radius * 0.08, radius * 0.1)
         vis.add_child(hl)
     shadow = MeshInstance3D.new()
@@ -126,15 +131,9 @@ func _bar(c: Color, w: float, z: float) -> MeshInstance3D:
     add_child(m)
     return m
 
-func take_hit(dmg: int, from: Vector3) -> void:
+func take_hit(dmg: int, _from: Vector3) -> void:
     hp -= dmg
     hurt = 0.25
-    var d := Vector3(position.x - from.x, 0, position.z - from.z)
-    if d.length() < 0.01:
-        d = Vector3(0, 0, 1)
-    d = d.normalized()
-    kx = d.x * 240.0 * K
-    kz = d.z * 240.0 * K
     bar_bg.visible = true
     bar.visible = true
     var f: float = clamp(float(hp) / max_hp, 0.0, 1.0)
@@ -174,21 +173,11 @@ func _process(delta: float) -> void:
             dz = 0.0
     if cyc >= 0.3 and cyc < 0.7:
         _mv(dx * 70.0 * K * delta, dz * 70.0 * K * delta)
-    if kx != 0.0 or kz != 0.0:
-        _mv(kx * delta, kz * delta)
-        var dd := pow(0.02, delta)
-        kx *= dd
-        kz *= dd
-        if abs(kx) + abs(kz) < 4.0 * K:
-            kx = 0.0
-            kz = 0.0
     hurt = max(0.0, hurt - delta)
     cool = max(0.0, cool - delta)
     if p.iframe <= 0.0 and not p.dead and cyc >= 0.3 and cool <= 0.0 and hurt <= 0.0 and dist < 1.35:
         cool = 1.2
         p.hurt_by(self)
-        kx = -to.x / max(dist, 0.01) * 140.0 * K
-        kz = -to.z / max(dist, 0.01) * 140.0 * K
     # ท่าทาง: ยุบ -> เด้งขึ้น -> ลงพื้น (เหมือน drawSlime เดิม)
     var sy := 1.0
     var z := 0.0

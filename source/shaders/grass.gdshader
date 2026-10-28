@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode cull_disabled;
-uniform vec3 base_col : source_color = vec3(0.1, 0.22, 0.05);
-uniform vec3 tip_col : source_color = vec3(0.45, 0.6, 0.18);
+uniform vec3 base_col : source_color = vec3(0.13, 0.20, 0.09);
+uniform vec3 tip_col : source_color = vec3(0.35, 0.43, 0.23);
 uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
 uniform float wind = 1.0;
 varying float hgt;

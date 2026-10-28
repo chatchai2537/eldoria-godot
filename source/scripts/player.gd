@@ -1,9 +1,11 @@
 extends Node3D
-## ผู้เล่น: คลิกเดิน (A*) / WASD · ระบบตีคอมโบ 3 จังหวะ · เลือด มานา EXP ตามค่าเกมเดิม (BAL ใน js/005-core.js)
+const VisualStyle = preload("res://scripts/visual_style.gd")
+## ผู้เล่น: คลิกเดิน / WASD · ยืนฟันธรรมดาซ้ำเมื่อกดค้าง · กลิ้งหลบ
 
 const BAL := {"hp": 100, "mp": 50, "slime_dmg": 4, "combo_dmg": 8, "iframe": 0.8, "combo_win": 4.0, "kb": 55.0, "kb_heavy": 240.0, "stun": 0.28, "regen_delay": 6.0, "regen": 1.5, "mp_regen": 2.0}
 const K := 2.0 / 32.0
-const ATK_ANIM := ["1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal", "2H_Melee_Attack_Spin"]
+const ATTACK_ANIMATION := "1H_Melee_Attack_Slice_Diagonal"
+const ATTACK_DURATION := 0.45
 
 var town
 var body: Node3D
@@ -33,15 +35,14 @@ var since_hit := 99.0
 var dead := false
 var dead_t := 0.0
 # ฟันดาบ
-var cmb := 0
 var at := -1.0
-var atk_dur := 0.55
-var chain_t := 0.0
+var atk_dur := ATTACK_DURATION
 var queued := false
+var attack_held := false
 var cur_atk := 0
 var target_mob = null
-# พุ่งหลบ (DASH ในเกม 2D: เวลา .17 วิ · คูลดาวน์ .65 วิ · เร็ว 430px/วิ · อมตะระหว่างพุ่ง)
-const DASH := {"time": 0.17, "cd": 0.65, "speed": 430.0}
+# เก็บชื่อ dash() ไว้ให้ input เดิมเรียกได้ แต่เป็นกลิ้ง 0.5 วิ ไม่พุ่ง
+const ROLL := {"time": 0.5, "cd": 0.65, "distance": 2.3}
 var dash_t := 0.0
 var dash_cd := 0.0
 var dash_v := Vector3.ZERO
@@ -53,13 +54,14 @@ func setup(t, pos: Vector3) -> void:
     body.set_script(load("res://scripts/model.gd"))
     add_child(body)
     body.build({"model": "knight", "keep": ["1H_Sword", "Round_Shield", "Knight_Cape", "Knight_Helmet"]})
+    VisualStyle.add_contact(self, 1.65, 1.3)
     var ring := MeshInstance3D.new()
     var tm := TorusMesh.new()
-    tm.inner_radius = 0.55
+    tm.inner_radius = 0.61
     tm.outer_radius = 0.65
     ring.mesh = tm
     var rm := StandardMaterial3D.new()
-    rm.albedo_color = Color(0.5, 1.0, 0.6, 0.6)
+    rm.albedo_color = Color(0.80, 0.72, 0.50, 0.5)
     rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     ring.material_override = rm
@@ -114,6 +116,10 @@ func _die() -> void:
     path = PackedVector3Array()
     target_mob = null
     at = -1.0
+    queued = false
+    attack_held = false
+    dash_t = 0.0
+    body.end_roll()
     body.action("Death_A")
     town.field.say_msg("คุณล้มลงแล้ว... วิญญาณกำลังกลับสู่วิหารแห่งแสง", 3.0)
 
@@ -130,15 +136,19 @@ func _revive() -> void:
     body.revive()
     town.field.say_msg("ฟื้นที่วิหารแห่งแสง — เลือดเต็มแล้ว", 3.0)
 
-# ---- ฟันดาบ: กดต่อเนื่อง = คอมโบ 3 จังหวะ (จังหวะ 3 หมุนตัวฟันรอบทิศ) ----
+# ---- ตีธรรมดาท่าเดียว: แตะ = หนึ่งครั้ง / กดค้าง = ฟันซ้ำโดยยืนที่เดิม ----
+func set_attack_held(pressed: bool) -> void:
+    attack_held = pressed
+    if pressed:
+        attack()
+
 func attack() -> void:
-    if dead or stun > 0.0:
+    if dead or stun > 0.0 or dash_t > 0.0:
         return
     if at >= 0.0:
         queued = true
         return
-    cmb = (cmb + 1) % 3 if chain_t > 0.0 else 0
-    atk_dur = 0.85 if cmb == 2 else 0.55
+    atk_dur = ATTACK_DURATION
     at = 0.0
     queued = false
     path = PackedVector3Array()
@@ -147,21 +157,24 @@ func attack() -> void:
         heading = atan2(s.position.x - position.x, s.position.z - position.z)
         body.rotation.y = heading
     cur_atk = town.field.new_attack()
-    body.action(ATK_ANIM[cmb], atk_dur)
+    body.action(ATTACK_ANIMATION, atk_dur)
 
 func dash(dir: Vector3) -> void:
-    if dead or dash_t > 0.0 or dash_cd > 0.0 or at >= 0.0:
+    if dead or dash_t > 0.0 or dash_cd > 0.0:
         return
     if dir.length() < 0.1:
         dir = Vector3(sin(heading), 0, cos(heading))
     dash_v = dir.normalized()
     heading = atan2(dash_v.x, dash_v.z)
     body.rotation.y = heading
-    dash_t = DASH.time
-    dash_cd = DASH.cd
+    dash_t = ROLL.time
+    dash_cd = ROLL.cd
+    at = -1.0
+    queued = false
     path = PackedVector3Array()
     target_mob = null
-    body.action("Dodge_Forward", 0.4)
+    iframe = max(iframe, ROLL.time)
+    body.begin_roll(ROLL.time)
 
 func set_path(p: PackedVector3Array) -> void:
     path = p
@@ -183,7 +196,7 @@ func _try_move(v: Vector3) -> bool:
     return moved
 
 func drive(dir: Vector3, delta: float) -> void:
-    if dead or at >= 0.0 or stun > 0.0 or dash_t > 0.0:
+    if dead or at >= 0.0 or attack_held or stun > 0.0 or dash_t > 0.0:
         return
     path = PackedVector3Array()
     target_mob = null
@@ -210,14 +223,19 @@ func _process(delta: float) -> void:
     stun = max(0.0, stun - delta)
     dash_cd = max(0.0, dash_cd - delta)
     if dash_t > 0.0:
-        dash_t -= delta
+        var previous := 1.0 - dash_t / float(ROLL.time)
+        dash_t = max(0.0, dash_t - delta)
+        var progress := 1.0 - dash_t / float(ROLL.time)
+        var distance_step: float = (cos(previous * PI) - cos(progress * PI)) * 0.5 * ROLL.distance
         iframe = max(iframe, 0.12)
-        _try_move(dash_v * DASH.speed * K * delta)
+        _try_move(dash_v * distance_step)
         position.y = town.ground_y(position.x, position.z)
         body.animate(delta, 0.0)
+        body.update_roll(progress)
+        if dash_t <= 0.0:
+            body.end_roll()
         return
     hit_combo_t = max(0.0, hit_combo_t - delta)
-    chain_t = max(0.0, chain_t - delta)
     since_hit += delta
     if since_hit > BAL.regen_delay:
         hp = min(float(max_hp), hp + BAL.regen * delta)
@@ -230,18 +248,19 @@ func _process(delta: float) -> void:
         if abs(kx) + abs(kz) < 4.0 * K:
             kx = 0.0
             kz = 0.0
-    # ช่วงดาบฟันโดน (เดิม: 0.2-0.7 ของท่า, ท่าหมุน 0.12-0.88)
+    # ฟันด้านหน้าทุกครั้ง ไม่มีท่าหมุนรอบตัวหรือขั้นคอมโบ
     if at >= 0.0:
         at += delta
         var u := at / atk_dur
-        var spin := cmb == 2
-        if (spin and u > 0.12 and u < 0.88) or (not spin and u > 0.2 and u < 0.7):
-            town.field.melee(self, spin, cur_atk)
+        if u > 0.2 and u < 0.7:
+            town.field.melee(self, false, cur_atk)
         if u >= 1.0:
             at = -1.0
-            chain_t = 0.45
             if queued:
                 attack()
+    var holding := attack_held or Input.is_key_pressed(KEY_J) or Input.is_key_pressed(KEY_SPACE)
+    if holding and at < 0.0 and not town.ui_shop.visible and not town.ui_dialog.visible:
+        attack()
     # คลิกที่สไลม์: เดินเข้าไปแล้วฟันจนกว่าจะแตก
     if target_mob != null:
         if not is_instance_valid(target_mob) or target_mob.dead:
