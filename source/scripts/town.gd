@@ -84,8 +84,9 @@ func _ready() -> void:
     is_mobile = DisplayServer.is_touchscreen_available() or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--mobile")
     if is_mobile:
         quality = 0
-        get_viewport().scaling_3d_scale = 0.85
-        RenderingServer.directional_shadow_atlas_set_size(1024, true)
+        get_viewport().scaling_3d_scale = 0.8
+        get_viewport().msaa_3d = Viewport.MSAA_DISABLED
+        RenderingServer.directional_shadow_atlas_set_size(512, true)
         get_viewport().size_changed.connect(_mobile_scale)
         _mobile_scale()
     font = load("res://fonts/Kanit-Regular.ttf")
@@ -312,6 +313,7 @@ func _setup_env() -> void:
     sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if not is_mobile else DirectionalLight3D.SHADOW_ORTHOGONAL
     if is_mobile:
         sun.directional_shadow_max_distance = 40.0
+        sun.shadow_enabled = false  # มือถือ: ปิดเงา กันจอดำ (WebGL context lost)
     sun.light_angular_distance = 0.7
     sun.light_volumetric_fog_energy = 1.4
     add_child(sun)
