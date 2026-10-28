@@ -1407,6 +1407,8 @@ func _update_cam(delta: float) -> void:
     var target := player.global_position + Vector3(0, 1.4, 0)
     var off := Vector3(0, 0, cam_dist).rotated(Vector3(1, 0, 0), cam_pitch).rotated(Vector3.UP, cam_yaw)
     var want := target + off
+    if room != "":
+        want = rooms.clamp_cam(want)
     cam.global_position = cam.global_position.lerp(want, min(1.0, delta * 8.0)) if delta < 1.0 else want
     cam.look_at(target)
 

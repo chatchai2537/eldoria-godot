@@ -343,6 +343,10 @@ func _run() -> void:
         world._process(0.016)
         check(world.room == rid, "เดินชนประตูแล้วเข้าไปในร้าน " + rid)
         check(world.rooms.IW * world.rooms.TS < 32.0, "ห้องขนาดเท่าเกม 2D (ไม่ใหญ่เกิน) " + rid)
+        world._update_cam(5.0)
+        var ro: Vector3 = world.rooms.origin(rid)
+        var cp: Vector3 = world.cam.global_position
+        check(cp.y < world.rooms.WALL_H and cp.z < ro.z + world.rooms.IH * world.rooms.TS and cp.x > ro.x and cp.x < ro.x + world.rooms.IW * world.rooms.TS, "กล้องอยู่ในห้อง มีเพดาน/ผนังรอบ " + rid)
         check(not world.blocked(p.position.x, p.position.z), "จุดเกิดในร้านเดินได้ " + rid)
         var k: Node3D = world.rooms.keepers[rid]
         p.position = Vector3(k.position.x, 0, k.position.z + 2.2)

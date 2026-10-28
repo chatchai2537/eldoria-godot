@@ -10,6 +10,7 @@ const IH := 15
 const S := 0.55
 const TS0 := 2.0
 const TS := TS0 * S
+const WALL_H := 7.0
 const BASE_X := 700.0
 const ORDER := ["gear", "potion", "inn", "skill", "store", "guild", "fashion", "bank", "ware", "seal113", "hall"]
 
@@ -72,7 +73,7 @@ func enter(id: String) -> void:
     p.set_path(PackedVector3Array())
     p.target_mob = null
     # จุดเกิด: กลางห้องค่อนล่าง · ถ้ามีของตกแต่งขวาง เลื่อนลงไปหาช่องว่าง
-    var row := IH - 4.5
+    var row := 7.5
     while row < IH - 1.6 and blocked(rw(id, IW >> 1, row).x, rw(id, IW >> 1, row).z):
         row += 1.0
     p.position = rw(id, IW >> 1, min(row, IH - 1.6))
@@ -81,8 +82,8 @@ func enter(id: String) -> void:
     # กล้องหันเข้าหาเคาน์เตอร์ · ออกจากร้านแล้วคืนมุมเดิม
     _cam_saved = Vector3(town.cam_yaw, town.cam_dist, town.cam_pitch)
     town.cam_yaw = 0.0
-    town.cam_dist = 12.0
-    town.cam_pitch = -0.62
+    town.cam_dist = 9.0
+    town.cam_pitch = -0.4
     town._update_sky()
     town.talk_target = null
     town.ui_dialog.visible = false
@@ -119,6 +120,14 @@ func leave() -> void:
     town.cam_pitch = _cam_saved.z
     town._update_sky()
     town.field.say_msg("ออกจาก" + town.clean(str(town.shops_by_id.get(id, {}).get("name", ""))) + "แล้ว")
+
+## กล้องอยู่ในห้องเสมอ (ไม่ทะลุผนัง/เพดาน)
+func clamp_cam(pos: Vector3) -> Vector3:
+    var o := origin(cur)
+    pos.x = clamp(pos.x, o.x + 1.0, o.x + IW * TS - 1.0)
+    pos.z = clamp(pos.z, o.z + 4.0 * TS, o.z + IH * TS - 0.7)
+    pos.y = min(pos.y, WALL_H - 0.9)
+    return pos
 
 func near_counter() -> bool:
     if cur == "":
@@ -201,16 +210,50 @@ func _build(id: String) -> void:
     for i in IH:
         if i % 2 == 0:
             town.box(root, Vector3(W - 0.2, 0.02, 0.06), o + Vector3(W / 2, 0.01, i * TS0), town.M(Color(th.floor).darkened(0.25), 0.9))
-    # ผนังหลังสูง · ข้างสูง · หน้าเตี้ย (กล้องมองเห็นข้างใน)
-    town.box(root, Vector3(W, 6.0, 1.0), o + Vector3(W / 2, 3.0, 3.0), wall)
-    town.box(root, Vector3(W, 0.4, 1.1), o + Vector3(W / 2, 6.0, 3.0), trim)
-    town.box(root, Vector3(1.0, 5.0, H), o + Vector3(0.5, 2.5, H / 2), wall)
-    town.box(root, Vector3(1.0, 5.0, H), o + Vector3(W - 0.5, 2.5, H / 2), wall)
-    var gx := (IW >> 1) - 1
-    town.box(root, Vector3(gx * TS0, 1.0, 0.6), o + Vector3(gx * TS0 / 2.0, 0.5, H - 0.3), wall)
-    town.box(root, Vector3(gx * TS0, 1.0, 0.6), o + Vector3(W - gx * TS0 / 2.0, 0.5, H - 0.3), wall)
+    # ห้องปิดทึบแบบ 3D: ผนัง 3 ด้าน + ผนังหน้ามีประตู + เพดานคาน + โคมแขวน
+    # กล้องอยู่ในห้องเสมอ (clamp_cam) จึงไม่เห็นที่ว่างข้างนอก
+    var WH := WALL_H
+    var D := H - 2.5
+    var zc := 2.5 + D / 2.0
+    var lower: Material = town.M(Color(th.wall).darkened(0.25), 0.9)
+    town.box(root, Vector3(W, WH, 1.0), o + Vector3(W / 2, WH / 2, 3.0), wall)
+    town.box(root, Vector3(1.0, WH, D), o + Vector3(0.5, WH / 2, zc), wall)
+    town.box(root, Vector3(1.0, WH, D), o + Vector3(W - 0.5, WH / 2, zc), wall)
+    # ผนังล่างสีเข้ม + บัวพื้น/บัวบน
+    town.box(root, Vector3(W - 2.0, 1.3, 0.15), o + Vector3(W / 2, 0.65, 3.55), lower)
+    town.box(root, Vector3(W - 2.0, 0.15, 0.25), o + Vector3(W / 2, 1.35, 3.6), trim)
+    for sx in [1.08, W - 1.08]:
+        town.box(root, Vector3(0.15, 1.3, D - 1.0), o + Vector3(sx, 0.65, zc), lower)
+        town.box(root, Vector3(0.25, 0.15, D - 1.0), o + Vector3(sx, 1.35, zc), trim)
+    # เสาไม้ตามผนังข้าง
+    for zz in [6.0, 14.0, 22.0]:
+        for sx in [1.2, W - 1.2]:
+            town.box(root, Vector3(0.5, WH, 0.5), o + Vector3(sx, WH / 2, zz), trim)
+    # ผนังหน้า: ซ้าย/ขวาของประตู + คานบนประตู (ประตูกว้าง 2 ช่องกลางห้อง)
+    var dw := 4.0
+    var dh := 3.4
+    var side := (W - dw) / 2.0
+    town.box(root, Vector3(side, WH, 0.8), o + Vector3(side / 2.0, WH / 2, H - 0.4), wall)
+    town.box(root, Vector3(side, WH, 0.8), o + Vector3(W - side / 2.0, WH / 2, H - 0.4), wall)
+    town.box(root, Vector3(dw, WH - dh, 0.8), o + Vector3(W / 2, dh + (WH - dh) / 2.0, H - 0.4), wall)
+    for dx in [-dw / 2.0, dw / 2.0]:
+        town.box(root, Vector3(0.35, dh + 0.3, 0.95), o + Vector3(W / 2 + dx, (dh + 0.3) / 2.0, H - 0.4), trim)
+    town.box(root, Vector3(dw + 0.7, 0.35, 0.95), o + Vector3(W / 2, dh + 0.15, H - 0.4), trim)
+    # แสงข้างนอกที่ช่องประตู
+    town.box(root, Vector3(dw, dh, 0.05), o + Vector3(W / 2, dh / 2.0, H + 0.2), town.M(Color(1.0, 0.93, 0.75), 0.5, 1.6))
     town.box(root, Vector3(4.0, 0.03, 1.6), o + Vector3(W / 2, 0.03, H - 1.4), town.M(Color(0.55, 0.15, 0.15), 0.9))
-    _lab("ทางออก", o + Vector3(W / 2, 1.6, H - 0.4), 30)
+    _lab("ทางออก", o + Vector3(W / 2, dh + 0.9, H - 1.0), 30)
+    # เพดาน + คาน
+    town.box(root, Vector3(W, 0.3, D), o + Vector3(W / 2, WH + 0.15, zc), town.M(Color(0.3, 0.21, 0.14), 0.95))
+    for i in range(3, IH, 3):
+        town.box(root, Vector3(W, 0.5, 0.6), o + Vector3(W / 2, WH - 0.25, i * TS0), town.M(Color(0.36, 0.24, 0.14), 0.9))
+    town.box(root, Vector3(0.6, 0.5, D), o + Vector3(W / 2, WH - 0.3, zc), town.M(Color(0.36, 0.24, 0.14), 0.9))
+    # โคมแขวน
+    for lx in [W * 0.28, W * 0.72]:
+        for lz in [12.0, 22.0]:
+            town.box(root, Vector3(0.06, 1.4, 0.06), o + Vector3(lx, WH - 0.7, lz), town.M(Color(0.2, 0.2, 0.2), 0.5))
+            town.box(root, Vector3(0.7, 0.8, 0.7), o + Vector3(lx, WH - 1.75, lz), town.M(Color(1.0, 0.78, 0.4), 0.3, 2.2))
+            town.box(root, Vector3(0.9, 0.15, 0.9), o + Vector3(lx, WH - 1.3, lz), town.M(Color(0.2, 0.15, 0.1), 0.6))
     # หน้าต่างผนังหลัง
     for x in [4.0, W - 4.0]:
         town.box(root, Vector3(3.0, 2.2, 0.2), o + Vector3(x, 3.6, 3.55), town.M(Color(0.55, 0.75, 0.95), 0.2, 0.6))
@@ -224,7 +267,7 @@ func _build(id: String) -> void:
     l.light_color = Color(1.0, 0.85, 0.65)
     l.omni_range = 24.0
     l.light_energy = 1.4
-    l.position = o + Vector3(W / 2 * S, 7.0, H / 2 * S)
+    l.position = o + Vector3(W / 2 * S, WH - 1.5, H / 2 * S)
     top.add_child(l)
     for x in [6.0, W - 6.0]:
         town.box(root, Vector3(0.4, 0.5, 0.4), o + Vector3(x, 4.4, 3.8), town.M(Color(1.0, 0.75, 0.4), 0.3, 2.5))
@@ -255,7 +298,7 @@ func _build(id: String) -> void:
     nl.position = Vector3(0, 2.9, 0)
     k.add_child(nl)
     keepers[id] = k
-    _lab(town.clean(str(sh.get("name", id))), o + Vector3(W / 2, 6.9, 3.2), 44)
+    _lab(town.clean(str(sh.get("name", id))), o + Vector3(W / 2, 5.4, 3.8), 40)
 
 var _top: Node3D
 var _o := Vector3.ZERO
