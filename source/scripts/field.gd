@@ -32,6 +32,8 @@ var msg: Label
 var msg_t := 0.0
 var atk_btn: Button
 var death_panel: PanelContainer
+var hud_box: VBoxContainer
+var bars: Array = []
 
 func setup(t) -> void:
     town = t
@@ -100,7 +102,7 @@ func _build_decor() -> void:
     var wood: Material = town.M(Color(0.45, 0.3, 0.18), 0.9)
     town.box(self, Vector3(0.2, 2.2, 0.2), sign_p + Vector3(0, 1.1, 0), wood)
     town.box(self, Vector3(0.15, 0.9, 2.4), sign_p + Vector3(0, 2.0, 0), wood)
-    town.label3d("ทุ่งหญ้า\nสไลม์ Lv.1-5 ➜ ยิ่งไกลยิ่งเก่ง", sign_p + Vector3(0, 3.4, 0), 34)
+    town.label3d("ทุ่งหญ้า\nสไลม์ Lv.1-5 (ยิ่งไกลยิ่งเก่ง)", sign_p + Vector3(0, 3.4, 0), 34)
     # ดอกไม้ป่า + ก้อนหินเล็ก (เดินผ่านได้)
     var fx := []
     var fc := []
@@ -258,6 +260,7 @@ func _build_hud() -> void:
     cl = CanvasLayer.new()
     add_child(cl)
     var box := VBoxContainer.new()
+    hud_box = box
     box.anchor_top = 1.0
     box.anchor_bottom = 1.0
     box.offset_left = 16
@@ -273,6 +276,7 @@ func _build_hud() -> void:
         tag.custom_minimum_size = Vector2(40, 0)
         hb.add_child(tag)
         var b := _bar(row[1], 240)
+        bars.append(b)
         hb.add_child(b)
         var tx := _text(15)
         hb.add_child(tx)
@@ -297,7 +301,7 @@ func _build_hud() -> void:
     cl.add_child(msg)
     # ปุ่มดาบ (มือถือ/เมาส์) — เหมือนปุ่ม ⚔️ ในเกมเดิม
     atk_btn = Button.new()
-    atk_btn.text = "⚔\nตี (J)"
+    atk_btn.text = "ตี (J)"
     atk_btn.add_theme_font_override("font", town.font_b)
     atk_btn.add_theme_font_size_override("font_size", 22)
     var sb := StyleBoxFlat.new()

@@ -56,6 +56,8 @@ var talk_idx := 0
 var in_door := ""
 var _last_place := ""
 var _test_auto := false
+var is_mobile := false
+var mobile: CanvasLayer
 const STYLE := {
     "gear": {"roof": Color(0.3, 0.32, 0.36), "wall": Color(0.42, 0.33, 0.26), "kind": "forge"},
     "seal113": {"roof": Color(0.42, 0.2, 0.55), "wall": Color(0.5, 0.46, 0.55), "kind": "gothic"},
@@ -79,6 +81,13 @@ func tw(x: float, y: float) -> Vector3:
 
 func _ready() -> void:
     seed(5)
+    is_mobile = DisplayServer.is_touchscreen_available() or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--mobile")
+    if is_mobile:
+        quality = 0
+        get_viewport().scaling_3d_scale = 0.6
+        RenderingServer.directional_shadow_atlas_set_size(1024, true)
+        get_viewport().size_changed.connect(_mobile_scale)
+        _mobile_scale()
     font = load("res://fonts/Kanit-Regular.ttf")
     font_b = load("res://fonts/Kanit-SemiBold.ttf")
     noise.seed = 11
@@ -113,6 +122,35 @@ func _ready() -> void:
     field.set_script(load("res://scripts/field.gd"))
     add_child(field)
     field.setup(self)
+    if is_mobile:
+        for c in [ui_dialog, ui_shop, prompt, field.msg]:
+            c.anchor_left = 0.0
+            c.anchor_right = 1.0
+            c.offset_left = 8
+            c.offset_right = -8
+        ui_dialog.offset_top = -200
+        ui_dialog.offset_bottom = -110
+        ui_shop.anchor_top = 0.0
+        ui_shop.anchor_bottom = 1.0
+        ui_shop.offset_top = 40
+        ui_shop.offset_bottom = -100
+        field.hud_box.anchor_top = 0.0
+        field.hud_box.anchor_bottom = 0.0
+        field.hud_box.offset_top = 40
+        field.hud_box.offset_left = 10
+        field.hud_box.add_theme_constant_override("separation", 1)
+        for b in field.bars:
+            b.custom_minimum_size = Vector2(130, 12)
+        field.msg.offset_top = 150
+        field.msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        prompt.offset_top = -230
+        cam_dist = 19.0
+        mobile = CanvasLayer.new()
+        mobile.set_script(load("res://scripts/mobile.gd"))
+        add_child(mobile)
+        mobile.setup(self)
+        field.atk_btn.visible = false
     var args := OS.get_cmdline_user_args()
     for a in args:
         if a.begins_with("--shot="):
@@ -127,6 +165,12 @@ func _ready() -> void:
             shot_frames = 45
             if p.size() > 6:
                 call_deferred("_test_ui", p[6])
+
+## มือถือ: ขยาย UI ตามขนาดจอจริง (เดิมย่อจาก 1600×900 จนตัวหนังสือเล็กมาก)
+func _mobile_scale() -> void:
+    var ws := DisplayServer.window_get_size()
+    var f: float = clamp(min(ws.x, ws.y) / 400.0, 1.0, 4.0)
+    get_tree().root.content_scale_size = Vector2i(int(ws.x / f), int(ws.y / f))
 
 # ---------- ช่องเดินได้/เดินไม่ได้ ----------
 func _box(x: int, y: int, w: int, hh: int, v: int = 1) -> void:
@@ -254,13 +298,20 @@ func _setup_env() -> void:
     env.adjustment_enabled = true
     env.adjustment_saturation = 1.12
     env.adjustment_contrast = 1.04
+    if is_mobile:
+        env.glow_enabled = false
+        env.ssao_enabled = false
+        env.volumetric_fog_enabled = false
+        env.fog_enabled = false
     var we := WorldEnvironment.new()
     we.environment = env
     add_child(we)
     sun = DirectionalLight3D.new()
     sun.shadow_enabled = true
     sun.directional_shadow_max_distance = 120.0
-    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if not is_mobile else DirectionalLight3D.SHADOW_ORTHOGONAL
+    if is_mobile:
+        sun.directional_shadow_max_distance = 40.0
     sun.light_angular_distance = 0.7
     sun.light_volumetric_fog_energy = 1.4
     add_child(sun)
@@ -433,7 +484,7 @@ func gable(parent: Node3D, w: float, d: float, hh: float, pos: Vector3, m: Mater
 
 func label3d(text: String, pos: Vector3, size: int = 48, col: Color = Color(1, 0.95, 0.8)) -> Label3D:
     var l := Label3D.new()
-    l.text = text
+    l.text = clean(text)
     l.font = font_b
     l.font_size = size
     l.pixel_size = 0.012
@@ -528,7 +579,7 @@ func _build_walls() -> void:
         var arch := cyl(self, 2.0, 2.0, 2.0, c + Vector3(0, hh - 1.0, 0), dark, 20)
         arch.rotation.z = PI / 2.0
         arch.scale = Vector3(1, 1, 0.6)
-        label3d("⬅ ทุ่งหญ้า" if gx < 1 else "ถนนสู่นครวารี ➡", c + Vector3(0, hh + 1.8, 0), 40)
+        label3d("« ทุ่งหญ้า" if gx < 1 else "ถนนสู่นครวารี »", c + Vector3(0, hh + 1.8, 0), 40)
     for p in [[1, 1], [TW - 2, 1], [1, TH - 2], [TW - 2, TH - 2]]:
         tower(tw(p[0] + 0.5, p[1] + 0.5), 2.6, 9.0, Color(0.68, 0.24, 0.16), true)
     for gx in [1, TW - 2]:
@@ -958,7 +1009,7 @@ func _build_props() -> void:
             add_child(fl)
     for l in TD.lamps:
         lantern(tw(float(l[0]) + 0.5, float(l[1]) + 0.5))
-    label3d("ตลาดกลาง ⬇", tw(22, 32.4) + Vector3(0, 2.6, 0), 40)
+    label3d("ตลาดกลาง", tw(22, 32.4) + Vector3(0, 2.6, 0), 40)
 
 # ---------- นอกกำแพง: ทุ่งหญ้า ป่า ภูเขา ----------
 func _xf(pos: Vector3, scl: Vector3, ry: float, tilt: float = 0.0) -> Transform3D:
@@ -1002,7 +1053,7 @@ func _build_outside() -> void:
     var bc := []
     var tries := 0
     var placed := 0
-    while placed < 1100 and tries < 40000:
+    while placed < (1100 if not is_mobile else 450) and tries < 40000:
         tries += 1
         var x := randf_range(-HALF + 4, HALF - 4)
         var z := randf_range(-HALF + 4, HALF - 4)
@@ -1083,7 +1134,7 @@ func _build_grass() -> void:
     var blade := st.commit()
     var gx := []
     var gc := []
-    var target := 70000
+    var target := 70000 if not is_mobile else 9000
     var tries := 0
     while gx.size() < target and tries < target * 4:
         tries += 1
@@ -1150,6 +1201,13 @@ func _build_player() -> void:
     _update_cam(1.0)
 
 func _update_cam(delta: float) -> void:
+    var vsz := get_viewport().get_visible_rect().size
+    if vsz.x < vsz.y:
+        cam.keep_aspect = Camera3D.KEEP_WIDTH
+        cam.fov = 62.0
+    else:
+        cam.keep_aspect = Camera3D.KEEP_HEIGHT
+        cam.fov = 45.0
     var target := player.global_position + Vector3(0, 1.4, 0)
     var off := Vector3(0, 0, cam_dist).rotated(Vector3(1, 0, 0), cam_pitch).rotated(Vector3.UP, cam_yaw)
     var want := target + off
@@ -1238,9 +1296,22 @@ func _setup_hud() -> void:
     cl.add_child(ui_shop)
 
 # ---------- คุยกับ NPC / หน้าร้าน ----------
+## ตัดอีโมจิออก (บนเว็บไม่มีฟอนต์อีโมจิ จะขึ้นเป็นกล่องสี่เหลี่ยม)
+func clean(t: String) -> String:
+    var out := ""
+    for i in t.length():
+        var c := t.unicode_at(i)
+        if c >= 0x1F000 or (c >= 0x2600 and c <= 0x27BF) or c == 0xFE0F or (c >= 0x2B00 and c <= 0x2BFF) or c == 0x200D:
+            continue
+        if c == 0x2192:
+            out += "->"
+            continue
+        out += String.chr(c)
+    return out.strip_edges()
+
 func _lbl(t: String, size: int, col: Color = Color(0.95, 0.92, 0.85), bold: bool = false) -> Label:
     var l := Label.new()
-    l.text = t
+    l.text = clean(t)
     l.add_theme_font_override("font", font_b if bold else font)
     l.add_theme_font_size_override("font_size", size)
     l.add_theme_color_override("font_color", col)
@@ -1248,8 +1319,8 @@ func _lbl(t: String, size: int, col: Color = Color(0.95, 0.92, 0.85), bold: bool
     return l
 
 func say(name: String, text: String) -> void:
-    ui_dname.text = name
-    ui_dtext.text = text
+    ui_dname.text = clean(name)
+    ui_dtext.text = clean(text)
     ui_dialog.visible = true
 
 func open_shop(id: String) -> void:
@@ -1259,11 +1330,11 @@ func open_shop(id: String) -> void:
     for c in ui_shop_body.get_children():
         c.queue_free()
     var top := HBoxContainer.new()
-    var title := _lbl(str(sh.get("emoji", "")) + " " + str(sh.name), 28, Color(1.0, 0.85, 0.45), true)
+    var title := _lbl(str(sh.name), 28, Color(1.0, 0.85, 0.45), true)
     title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     top.add_child(title)
     var x := Button.new()
-    x.text = "ปิด ✕"
+    x.text = "ปิด X"
     x.add_theme_font_override("font", font_b)
     x.add_theme_font_size_override("font_size", 18)
     x.pressed.connect(func(): ui_shop.visible = false)
@@ -1278,7 +1349,7 @@ func open_shop(id: String) -> void:
         ui_shop_body.add_child(_lbl("สินค้าในร้าน", 22, Color(0.7, 1.0, 0.7), true))
         for it in buy:
             var em = it.get("emoji")
-            var row := _lbl(("• " if em == null else str(em) + " ") + str(it.get("name", "")) + "  ·  " + _num(it.get("price", 0)) + " เหรียญ" + (("  ·  " + str(it.note)) if it.get("note") else ""), 18)
+            var row := _lbl("- " + str(it.get("name", "")) + "  ·  " + _num(it.get("price", 0)) + " เหรียญ" + (("  ·  " + str(it.note)) if it.get("note") else ""), 18)
             ui_shop_body.add_child(row)
     var sell: Array = sh.get("sell", [])
     if sell.size() > 0:
@@ -1355,6 +1426,35 @@ func _ground_at(screen: Vector2) -> Variant:
         return null
     return from + dir * t
 
+## คลิก/แตะที่จอ: ตีสไลม์ · คุย NPC · เดินไปจุดนั้น
+func click_at(pos: Vector2) -> void:
+    var sl = field.slime_at(pos)
+    if sl != null:
+        player.target_mob = sl
+        talk_target = null
+        ui_dialog.visible = false
+        return
+    player.target_mob = null
+    var n = _npc_at(pos)
+    if n != null:
+        if talk_target == n and player.global_position.distance_to(n.global_position) < 2.8:
+            _talk(n)
+            return
+        talk_target = n
+        talk_idx = 0
+        var pth := find_path(player.global_position, n.global_position)
+        player.set_path(pth)
+        return
+    talk_target = null
+    ui_dialog.visible = false
+    var g = _ground_at(pos)
+    if g != null:
+        var path := find_path(player.global_position, g)
+        if path.size() > 0:
+            player.set_path(path)
+            click_marker.position = path[path.size() - 1] + Vector3(0, 0.05, 0)
+            click_marker.visible = true
+
 func _unhandled_input(e: InputEvent) -> void:
     if e is InputEventMouseButton:
         if e.button_index == MOUSE_BUTTON_WHEEL_UP and e.pressed:
@@ -1364,32 +1464,9 @@ func _unhandled_input(e: InputEvent) -> void:
         elif e.button_index == MOUSE_BUTTON_RIGHT or e.button_index == MOUSE_BUTTON_MIDDLE:
             rot_drag = e.pressed
         elif e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
-            var sl = field.slime_at(e.position)
-            if sl != null:
-                player.target_mob = sl
-                talk_target = null
-                ui_dialog.visible = false
+            if is_mobile and e.device == InputEvent.DEVICE_ID_EMULATION:
                 return
-            player.target_mob = null
-            var n = _npc_at(e.position)
-            if n != null:
-                if talk_target == n and player.global_position.distance_to(n.global_position) < 2.8:
-                    _talk(n)
-                    return
-                talk_target = n
-                talk_idx = 0
-                var pth := find_path(player.global_position, n.global_position)
-                player.set_path(pth)
-                return
-            talk_target = null
-            ui_dialog.visible = false
-            var g = _ground_at(e.position)
-            if g != null:
-                var path := find_path(player.global_position, g)
-                if path.size() > 0:
-                    player.set_path(path)
-                    click_marker.position = path[path.size() - 1] + Vector3(0, 0.05, 0)
-                    click_marker.visible = true
+            click_at(e.position)
     elif e is InputEventMouseMotion and rot_drag:
         cam_yaw -= e.relative.x * 0.006
         cam_pitch = clamp(cam_pitch - e.relative.y * 0.004, -1.4, -0.3)
@@ -1402,6 +1479,15 @@ func _unhandled_input(e: InputEvent) -> void:
             KEY_F: time_scale = 20.0 if time_scale < 20.0 else 1.0
             KEY_G: _set_quality(1 if quality == 2 else 2)
             KEY_J, KEY_SPACE: player.attack()
+            KEY_SHIFT: player.dash(_key_dir())
+
+func _key_dir() -> Vector3:
+    var mv := Vector3.ZERO
+    if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): mv.z -= 1
+    if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): mv.z += 1
+    if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): mv.x -= 1
+    if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): mv.x += 1
+    return mv.normalized().rotated(Vector3.UP, cam_yaw) if mv != Vector3.ZERO else Vector3.ZERO
 
 func _set_quality(q: int) -> void:
     quality = q
@@ -1422,7 +1508,11 @@ func _process(delta: float) -> void:
     if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): mv.x -= 1
     if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): mv.x += 1
     if mv != Vector3.ZERO:
-        player.drive(mv.normalized().rotated(Vector3.UP, cam_yaw), delta)
+        mv = mv.normalized()
+    elif is_mobile and mobile != null and mobile.joy != Vector2.ZERO:
+        mv = Vector3(mobile.joy.x, 0, mobile.joy.y)
+    if mv != Vector3.ZERO:
+        player.drive(mv.rotated(Vector3.UP, cam_yaw), delta)
         click_marker.visible = false
     if click_marker.visible:
         click_marker.rotation.y += delta * 2.0
@@ -1448,11 +1538,11 @@ func _process(delta: float) -> void:
     if pp.distance_to(Vector2(22.0, 9.3)) < 1.2:
         msg = "ประตูปราสาท — ทหารยาม: \"พระราชาทรงรอท่านอยู่ ภารกิจจะมาในเร็ว ๆ นี้\""
     elif pp.x < 1.3 and pp.x > -0.5 and pp.y > 15.5 and pp.y < 18.5:
-        msg = "⬅ ทางออกสู่ทุ่งหญ้า"
+        msg = "« ทางออกสู่ทุ่งหญ้า"
     elif pp.x > 42.7 and pp.y > 15.5 and pp.y < 18.5:
-        msg = "ถนนสู่นครวารี ➡ (ขั้นถัดไป)"
+        msg = "ถนนสู่นครวารี » (ขั้นถัดไป)"
     prompt.text = msg
-    if quality == 2 and shot_frames < 0:
+    if quality == 2 and shot_frames < 0 and not is_mobile:
         if Engine.get_frames_per_second() < 28 and Time.get_ticks_msec() > 8000:
             low_fps_t += delta
             if low_fps_t > 4.0:
@@ -1466,7 +1556,10 @@ func _process(delta: float) -> void:
         if _last_place != "":
             field.say_msg("เข้าสู่ทุ่งหญ้า — ระวังสไลม์! (ยิ่งไปทางตะวันตกยิ่งเก่ง)" if place == "ทุ่งหญ้า" else "กลับเข้าเมืองเอลโดเรีย", 3.0)
         _last_place = place
-    hud.text = "%s · %02d:%02d\nคลิกพื้นเพื่อเดิน · WASD เดิน · J/Space หรือคลิกสไลม์ = ตี\nคลิกขวาลากหมุนกล้อง · ล้อเมาส์ซูม · F เร่งเวลา" % [place, hh, mm]
+    if is_mobile:
+        hud.text = "%s · %02d:%02d" % [place, hh, mm]
+    else:
+        hud.text = "%s · %02d:%02d\nคลิกพื้นเพื่อเดิน · WASD เดิน · J/Space หรือคลิกสไลม์ = ตี · Shift พุ่งหลบ\nคลิกขวาลากหมุนกล้อง · ล้อเมาส์ซูม · F เร่งเวลา" % [place, hh, mm]
     if shot_frames > 0:
         shot_frames -= 1
         if shot_frames == 0:

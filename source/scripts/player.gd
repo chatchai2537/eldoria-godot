@@ -40,6 +40,11 @@ var chain_t := 0.0
 var queued := false
 var cur_atk := 0
 var target_mob = null
+# พุ่งหลบ (DASH ในเกม 2D: เวลา .17 วิ · คูลดาวน์ .65 วิ · เร็ว 430px/วิ · อมตะระหว่างพุ่ง)
+const DASH := {"time": 0.17, "cd": 0.65, "speed": 430.0}
+var dash_t := 0.0
+var dash_cd := 0.0
+var dash_v := Vector3.ZERO
 
 func setup(t, pos: Vector3) -> void:
     town = t
@@ -84,7 +89,7 @@ func gain_xp(n: int) -> void:
         sp += 3
         hp = max_hp
         mp = max_mp
-        town.field.say_msg("⭐ เลเวลอัป! Lv.%d ได้แต้มสเตตัส +3" % lv, 3.5)
+        town.field.say_msg("เลเวลอัป! Lv.%d ได้แต้มสเตตัส +3" % lv, 3.5)
         town.field.float_text("LEVEL UP!", position + Vector3(0, 3.2, 0), Color(1.0, 0.85, 0.3), 1.5)
 
 # ---- โดนสไลม์ตี (hurtPlayer เดิม) ----
@@ -110,7 +115,7 @@ func _die() -> void:
     target_mob = null
     at = -1.0
     body.action("Death_A")
-    town.field.say_msg("💀 คุณล้มลงแล้ว... วิญญาณกำลังกลับสู่วิหารแห่งแสง", 3.0)
+    town.field.say_msg("คุณล้มลงแล้ว... วิญญาณกำลังกลับสู่วิหารแห่งแสง", 3.0)
 
 func _revive() -> void:
     dead = false
@@ -144,6 +149,20 @@ func attack() -> void:
     cur_atk = town.field.new_attack()
     body.action(ATK_ANIM[cmb], atk_dur)
 
+func dash(dir: Vector3) -> void:
+    if dead or dash_t > 0.0 or dash_cd > 0.0 or at >= 0.0:
+        return
+    if dir.length() < 0.1:
+        dir = Vector3(sin(heading), 0, cos(heading))
+    dash_v = dir.normalized()
+    heading = atan2(dash_v.x, dash_v.z)
+    body.rotation.y = heading
+    dash_t = DASH.time
+    dash_cd = DASH.cd
+    path = PackedVector3Array()
+    target_mob = null
+    body.action("Dodge_Forward", 0.4)
+
 func set_path(p: PackedVector3Array) -> void:
     path = p
 
@@ -164,13 +183,14 @@ func _try_move(v: Vector3) -> bool:
     return moved
 
 func drive(dir: Vector3, delta: float) -> void:
-    if dead or at >= 0.0 or stun > 0.0:
+    if dead or at >= 0.0 or stun > 0.0 or dash_t > 0.0:
         return
     path = PackedVector3Array()
     target_mob = null
-    _try_move(dir * speed * delta)
+    var amt: float = clamp(dir.length(), 0.0, 1.0)
+    _try_move(dir.normalized() * speed * amt * delta)
     _face(dir, delta)
-    moving_speed = speed
+    moving_speed = speed * amt
 
 func _face(dir: Vector3, delta: float) -> void:
     if dir.length() < 0.01:
@@ -188,6 +208,14 @@ func _process(delta: float) -> void:
         return
     iframe = max(0.0, iframe - delta)
     stun = max(0.0, stun - delta)
+    dash_cd = max(0.0, dash_cd - delta)
+    if dash_t > 0.0:
+        dash_t -= delta
+        iframe = max(iframe, 0.12)
+        _try_move(dash_v * DASH.speed * K * delta)
+        position.y = town.ground_y(position.x, position.z)
+        body.animate(delta, 0.0)
+        return
     hit_combo_t = max(0.0, hit_combo_t - delta)
     chain_t = max(0.0, chain_t - delta)
     since_hit += delta
