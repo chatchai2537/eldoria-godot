@@ -172,6 +172,63 @@ func _run() -> void:
     p.gain_xp(p.need(p.lv) - p.xp)
     check(p.lv == lv0 + 1 and p.sp == sp0 + 3, "EXP เต็มแล้วเลเวลอัป + แต้มสเตตัส 3")
 
+    # ---------- ร้านค้า · กระเป๋า ----------
+    var gear: Dictionary = world.shops_by_id["gear"]
+    var sword_it: Dictionary = {}
+    for it in gear.buy:
+        if it.id == "g_sword0":
+            sword_it = it
+    p.coins = 10
+    check(world.shop_buy(sword_it).find("ไม่พอ") >= 0 and p.weapon == "", "ร้าน: เหรียญไม่พอซื้อไม่ได้")
+    p.coins = 100
+    var atk_before: int = p.atk()
+    world.shop_buy(sword_it)
+    check(p.weapon == "sword0" and p.coins == 75, "ร้าน: ซื้อดาบหิน 25 เหรียญแล้วใส่ทันที")
+    check(p.atk() == atk_before, "ร้าน: ดาบหินธรรมดาโจมตี +0 ตามเกม 2D")
+    p.weapon_tier = 2
+    check(p.atk() == atk_before + 3, "ดาบระดับ 2 โจมตี +3 ตาม SWATK")
+    p.weapon_tier = 0
+    var pot: Dictionary = world.shops_by_id["potion"]
+    var hpp_it: Dictionary = {}
+    for it in pot.buy:
+        if it.id == "buyhpp":
+            hpp_it = it
+    world.shop_buy(hpp_it)
+    check(p.inv_count("hpp") == 1 and p.coins == 45, "ร้านยา: ซื้อยาเลือดเข้ากระเป๋า")
+    p.hp = 10.0
+    p.use_item("hpp")
+    check(p.hp == 70.0 and p.inv_count("hpp") == 0, "กระเป๋า: ใช้ยาเลือด +60")
+    var phx := false
+    for it in pot.buy:
+        if it.id == "phoenix":
+            phx = world.Items.can_buy("phoenix")
+    check(phx, "ร้านยา: ขนนกฟีนิกซ์ขายได้")
+    p.inv_add("phoenix", 1)
+    p.iframe = 0.0
+    p.hp = 1.0
+    p.hurt_by({"lv": 1})
+    check(not p.dead and p.hp == p.max_hp and p.inv_count("phoenix") == 0, "ขนนกฟีนิกซ์: ล้มแล้วฟื้นทันที")
+    p.gel = 3
+    p.wood = 2
+    var c0: int = p.coins
+    world.shop_sell("gel", 2, -1)
+    world.shop_sell("wood", 2, 1)
+    check(p.gel == 0 and p.wood == 1 and p.coins == c0 + 8, "ร้านชำ: ขายเจลหมด + ไม้ 1 ได้เหรียญถูก")
+    check(world.shop_sell("gel", 2, 1) == "", "ขายของที่ไม่มีไม่ได้")
+    world.open_shop("store")
+    check(world.ui_shop.visible and world.cur_shop == "store", "เปิดร้านชำมีปุ่มซื้อขาย")
+    world.ui_shop.visible = false
+    p.inv_add("scroll", 1)
+    p.position = world.tw(10, 20)
+    check(p.use_item("scroll").find("นอกเมือง") >= 0 and p.inv_count("scroll") == 1, "ม้วนวาปใช้ในเมืองไม่ได้")
+    p.position = gpos
+    p.use_item("scroll")
+    check(p.inv_count("scroll") == 0 and not world.in_field_rect(p.position.x, p.position.z, 0.0), "ม้วนวาปจากทุ่งกลับเมือง")
+    world.toggle_bag()
+    check(world.ui_bag.visible, "เปิดกระเป๋าได้")
+    world.toggle_bag()
+    check(not world.ui_bag.visible, "ปิดกระเป๋าได้")
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

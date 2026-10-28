@@ -102,7 +102,7 @@ func _in(p: Panel, pos: Vector2, pad: float = 10.0) -> bool:
     return pos.distance_to(c) <= p.size.x * 0.5 + pad
 
 func _over_ui(pos: Vector2) -> bool:
-    for c in [town.ui_shop, town.ui_dialog]:
+    for c in [town.ui_shop, town.ui_dialog, town.ui_bag, town.bag_btn]:
         if c.visible and c.get_global_rect().has_point(pos):
             return true
     return false

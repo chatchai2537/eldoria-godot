@@ -27,6 +27,10 @@ var coins := 0
 var gel := 0
 var stone := 0
 var wood := 0
+const Items = preload("res://scripts/items.gd")
+var inv := {}          # ไอเท็มอื่นในกระเป๋า id -> จำนวน (เจล/หิน/ไม้ อยู่ในตัวแปรของมันเอง)
+var weapon := ""       # อาวุธที่ใส่ ("" = มือเปล่าแบบเริ่มเกม 2D)
+var weapon_tier := 0
 var iframe := 0.0
 var stun := 0.0
 var kx := 0.0
@@ -73,7 +77,54 @@ func setup(t, pos: Vector3) -> void:
 
 # ---- ค่าพลัง (สูตรเดียวกับ js/030-core.js) ----
 func atk() -> int:
-    return 1 + stats.str + ((lv - 1) >> 1)
+    var w: int = Items.SWATK[weapon_tier] if weapon != "" else 0
+    return 1 + w + stats.str + ((lv - 1) >> 1)
+
+# ---- กระเป๋า ----
+func inv_count(id: String) -> int:
+    match id:
+        "gel": return gel
+        "stone": return stone
+        "wood": return wood
+    return int(inv.get(id, 0))
+
+func inv_add(id: String, n: int) -> void:
+    match id:
+        "gel": gel += n
+        "stone": stone += n
+        "wood": wood += n
+        _:
+            inv[id] = int(inv.get(id, 0)) + n
+            if inv[id] <= 0:
+                inv.erase(id)
+
+func inv_take(id: String, n: int) -> bool:
+    if inv_count(id) < n:
+        return false
+    inv_add(id, -n)
+    return true
+
+## ใช้ไอเท็มในกระเป๋า · คืนข้อความบอกผล
+func use_item(id: String) -> String:
+    var u: Dictionary = Items.ITEM.get(id, {}).get("use", {})
+    if u.is_empty() or inv_count(id) <= 0 or dead:
+        return ""
+    if u.has("warp"):
+        if position.x >= town.OX and abs(position.z) <= 34.0:
+            return "ใช้ม้วนวาปได้เฉพาะนอกเมือง"
+        inv_take(id, 1)
+        path = PackedVector3Array()
+        target_mob = null
+        position = town.tw(town.SPAWN.x, town.SPAWN.y)
+        return "วาปกลับเมืองเอลโดเรียแล้ว"
+    if u.has("hp") and hp >= max_hp and not u.has("mp"):
+        return "เลือดเต็มอยู่แล้ว"
+    if u.has("mp") and mp >= max_mp and not u.has("hp"):
+        return "มานาเต็มอยู่แล้ว"
+    inv_take(id, 1)
+    hp = min(float(max_hp), hp + float(u.get("hp", 0)))
+    mp = min(float(max_mp), mp + float(u.get("mp", 0)))
+    return "ใช้ " + Items.item_name(id) + " แล้ว"
 
 func def() -> int:
     return (stats.vit >> 1) + ((lv - 1) >> 2)
@@ -113,6 +164,11 @@ func hurt_by(sl) -> void:
         body.action("Hit_A", 0.35)
 
 func _die() -> void:
+    if inv_take("phoenix", 1):
+        hp = max_hp
+        iframe = 2.0
+        town.field.say_msg("ขนนกฟีนิกซ์ส่องแสง! ฟื้นทันทีตรงที่ล้ม", 3.0)
+        return
     dead = true
     dead_t = 3.0
     path = PackedVector3Array()
@@ -261,7 +317,7 @@ func _process(delta: float) -> void:
             if queued:
                 attack()
     var holding := attack_held or Input.is_key_pressed(KEY_J) or Input.is_key_pressed(KEY_SPACE)
-    if holding and at < 0.0 and not town.ui_shop.visible and not town.ui_dialog.visible:
+    if holding and at < 0.0 and not town.ui_shop.visible and not town.ui_dialog.visible and not town.ui_bag.visible:
         attack()
     # คลิกที่สไลม์: เดินเข้าไปแล้วฟันจนกว่าจะแตก
     if target_mob != null:

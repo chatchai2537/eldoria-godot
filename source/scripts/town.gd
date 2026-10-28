@@ -178,6 +178,14 @@ func _ready() -> void:
         ui_shop.anchor_bottom = 1.0
         ui_shop.offset_top = 40
         ui_shop.offset_bottom = -100
+        ui_bag.anchor_left = 0.0
+        ui_bag.anchor_right = 1.0
+        ui_bag.offset_left = 8
+        ui_bag.offset_right = -8
+        ui_bag.anchor_top = 0.0
+        ui_bag.anchor_bottom = 1.0
+        ui_bag.offset_top = 40
+        ui_bag.offset_bottom = -100
         field.hud_card.position = Vector2(10, 36)
         field.hud_box.add_theme_constant_override("separation", 3)
         for b in field.bars:
@@ -1446,6 +1454,15 @@ func _setup_hud() -> void:
     sc.add_child(ui_shop_body)
     ui_shop.visible = false
     cl.add_child(ui_shop)
+    _build_bag_ui(cl, ui_shop.get_theme_stylebox("panel"))
+    bag_btn = _btn("กระเป๋า", true, toggle_bag)
+    bag_btn.anchor_left = 1.0
+    bag_btn.anchor_right = 1.0
+    bag_btn.offset_left = -130
+    bag_btn.offset_right = -12
+    bag_btn.offset_top = 12
+    bag_btn.offset_bottom = 52
+    cl.add_child(bag_btn)
 
 # ---------- คุยกับ NPC / หน้าร้าน ----------
 ## ตัดอีโมจิออก (บนเว็บไม่มีฟอนต์อีโมจิ จะขึ้นเป็นกล่องสี่เหลี่ยม)
@@ -1475,44 +1492,200 @@ func say(name: String, text: String) -> void:
     ui_dtext.text = clean(text)
     ui_dialog.visible = true
 
+const Items = preload("res://scripts/items.gd")
+var cur_shop := ""
+var ui_bag: PanelContainer
+var bag_btn: Button
+var ui_bag_body: VBoxContainer
+
+func _nowrap(l: Label) -> Label:
+    l.autowrap_mode = TextServer.AUTOWRAP_OFF
+    return l
+
+func _btn(t: String, enabled: bool, cb: Callable) -> Button:
+    var b := Button.new()
+    b.text = t
+    b.disabled = not enabled
+    b.add_theme_font_override("font", font_b)
+    b.add_theme_font_size_override("font_size", 17)
+    b.custom_minimum_size = Vector2(96, 34)
+    b.focus_mode = Control.FOCUS_NONE
+    b.pressed.connect(cb)
+    return b
+
+func _row(left: String, sub: String, buttons: Array) -> HBoxContainer:
+    var r := HBoxContainer.new()
+    var v := VBoxContainer.new()
+    v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    v.add_child(_lbl(left, 18, Color(0.95, 0.92, 0.85), true))
+    if sub != "":
+        v.add_child(_lbl(sub, 14, Color(0.72, 0.7, 0.64)))
+    r.add_child(v)
+    for b in buttons:
+        r.add_child(b)
+    return r
+
+## ซื้อของ 1 ชิ้นตามข้อมูลร้าน · คืนข้อความผล ("" = ซื้อไม่ได้)
+func shop_buy(it: Dictionary) -> String:
+    var id := str(it.get("id", ""))
+    var price := int(it.get("price", 0))
+    if not Items.can_buy(id):
+        return ""
+    if player.coins < price:
+        return "เหรียญไม่พอ (ต้องใช้ %d)" % price
+    var e: Dictionary = Items.BUY[id]
+    match str(e.type):
+        "equip":
+            if player.weapon == str(e.item):
+                return "ใส่ " + str(it.name) + " อยู่แล้ว"
+            player.weapon = str(e.item)
+            player.weapon_tier = int(e.get("tier", 0))
+        "bag":
+            player.inv_add(str(e.item), 1)
+        "now":
+            if player.hp >= player.max_hp and player.mp >= player.max_mp:
+                return "เลือดและมานาเต็มอยู่แล้ว"
+            player.hp = min(float(player.max_hp), player.hp + float(e.get("hp", 0)))
+            player.mp = min(float(player.max_mp), player.mp + float(e.get("mp", 0)))
+    player.coins -= price
+    return "ซื้อ " + str(it.name) + " แล้ว (-%d เหรียญ)" % price
+
+## ขายของให้ร้าน · n = จำนวน (-1 = ทั้งหมด)
+func shop_sell(item_id: String, price: int, n: int) -> String:
+    var have: int = player.inv_count(item_id)
+    if n < 0:
+        n = have
+    if have <= 0 or n <= 0:
+        return ""
+    n = min(n, have)
+    player.inv_take(item_id, n)
+    player.coins += price * n
+    return "ขาย %s ×%d ได้ %d เหรียญ" % [Items.item_name(item_id), n, price * n]
+
+func _shop_msg(t: String) -> void:
+    if t != "":
+        field.say_msg(t)
+    open_shop(cur_shop)
+
 func open_shop(id: String) -> void:
     var sh: Dictionary = shops_by_id.get(id, {})
     if sh.is_empty():
         return
+    cur_shop = id
+    if ui_bag != null:
+        ui_bag.visible = false
     for c in ui_shop_body.get_children():
         c.queue_free()
     var top := HBoxContainer.new()
-    var title := _lbl(str(sh.name), 28, Color(1.0, 0.85, 0.45), true)
+    var title := _nowrap(_lbl(str(sh.name), 24, Color(1.0, 0.85, 0.45), true))
     title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     top.add_child(title)
-    var x := Button.new()
-    x.text = "ปิด X"
-    x.add_theme_font_override("font", font_b)
-    x.add_theme_font_size_override("font_size", 18)
-    x.pressed.connect(func(): ui_shop.visible = false)
-    top.add_child(x)
+    top.add_child(_nowrap(_lbl("เหรียญ %d" % player.coins, 18, Color(1.0, 0.85, 0.4), true)))
+    top.add_child(_btn("ปิด X", true, func(): ui_shop.visible = false))
     ui_shop_body.add_child(top)
     var ow = sh.get("owner")
     if ow is Dictionary:
         var g: Array = ow.get("greet", [])
-        ui_shop_body.add_child(_lbl(str(ow.name) + ": \"" + (str(g[randi() % g.size()]) if g.size() > 0 else "") + "\"", 19, Color(0.9, 0.95, 1.0)))
+        ui_shop_body.add_child(_lbl(str(ow.name) + ": \"" + (str(g[randi() % g.size()]) if g.size() > 0 else "") + "\"", 17, Color(0.9, 0.95, 1.0)))
     var buy: Array = sh.get("buy", [])
     if buy.size() > 0:
-        ui_shop_body.add_child(_lbl("สินค้าในร้าน", 22, Color(0.7, 1.0, 0.7), true))
+        ui_shop_body.add_child(_lbl("สินค้าในร้าน", 21, Color(0.7, 1.0, 0.7), true))
         for it in buy:
-            var em = it.get("emoji")
-            var row := _lbl("- " + str(it.get("name", "")) + "  ·  " + _num(it.get("price", 0)) + " เหรียญ" + (("  ·  " + str(it.note)) if it.get("note") else ""), 18)
-            ui_shop_body.add_child(row)
+            var ok: bool = Items.can_buy(str(it.id))
+            var price := int(it.get("price", 0))
+            var label := ("ซื้อ %d" % price) if ok else "เร็ว ๆ นี้"
+            var item: Dictionary = it
+            var b := _btn(label, ok and player.coins >= price, func(): _shop_msg(shop_buy(item)))
+            var sub := str(it.get("note", "")) if it.get("note") else ""
+            if ok and Items.BUY[str(it.id)].type == "equip" and player.weapon == str(Items.BUY[str(it.id)].item):
+                sub = "[ใส่อยู่] " + sub
+            ui_shop_body.add_child(_row(str(it.get("name", "")), sub, [b]))
     var sell: Array = sh.get("sell", [])
     if sell.size() > 0:
-        ui_shop_body.add_child(_lbl("ร้านรับซื้อ", 22, Color(1.0, 0.85, 0.6), true))
-        var names := []
+        ui_shop_body.add_child(_lbl("ร้านรับซื้อ", 21, Color(1.0, 0.85, 0.6), true))
+        var shown := 0
         for it in sell:
-            if it is Array and it.size() >= 3:
-                names.append(str(it[1]) + " " + _num(it[2]))
-        ui_shop_body.add_child(_lbl(" · ".join(names), 17))
-    ui_shop_body.add_child(_lbl("ซื้อ-ขายจริงจะใช้ได้เมื่อต่อเซิร์ฟเวอร์เกม (ขั้นถัดไป) ตอนนี้แสดงรายการตามเกมจริง", 15, Color(0.75, 0.72, 0.65)))
+            if not (it is Array and it.size() >= 3):
+                continue
+            var iid := str(it[0])
+            var pr := int(it[2])
+            var have: int = player.inv_count(iid)
+            if have <= 0:
+                continue
+            shown += 1
+            ui_shop_body.add_child(_row("%s  (มี %d)" % [str(it[1]), have], "ร้านให้ชิ้นละ %d เหรียญ" % pr, [
+                _btn("ขาย 1", true, func(): _shop_msg(shop_sell(iid, pr, 1))),
+                _btn("ขายหมด", true, func(): _shop_msg(shop_sell(iid, pr, -1)))]))
+        if shown == 0:
+            var names := []
+            for it in sell:
+                if it is Array and it.size() >= 3:
+                    names.append(str(it[1]) + " " + _num(it[2]))
+            ui_shop_body.add_child(_lbl("ยังไม่มีของที่ร้านนี้รับซื้อ · รับ: " + " · ".join(names), 15, Color(0.75, 0.72, 0.65)))
     ui_shop.visible = true
+
+## กระเป๋า: ของทั้งหมด + ปุ่มใช้ยา/ม้วนวาป · เปิดด้วยปุ่ม "กระเป๋า" หรือคีย์ B
+func toggle_bag() -> void:
+    if ui_bag.visible:
+        ui_bag.visible = false
+        return
+    ui_shop.visible = false
+    refresh_bag()
+    ui_bag.visible = true
+
+func refresh_bag() -> void:
+    for c in ui_bag_body.get_children():
+        c.queue_free()
+    var top := HBoxContainer.new()
+    var title := _nowrap(_lbl("กระเป๋า", 24, Color(1.0, 0.85, 0.45), true))
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    top.add_child(title)
+    top.add_child(_nowrap(_lbl("เหรียญ %d" % player.coins, 18, Color(1.0, 0.85, 0.4), true)))
+    top.add_child(_btn("ปิด X", true, func(): ui_bag.visible = false))
+    ui_bag_body.add_child(top)
+    ui_bag_body.add_child(_lbl("อาวุธ: " + (Items.item_name(player.weapon) if player.weapon != "" else "มือเปล่า (ซื้อดาบที่ร้านอาวุธลุงเหล็ก)") + "  ·  ATK %d" % player.atk(), 17, Color(0.85, 0.92, 1.0)))
+    var ids := ["gel", "stone", "wood"]
+    for k in player.inv.keys():
+        ids.append(str(k))
+    var any := false
+    for iid in ids:
+        var n: int = player.inv_count(iid)
+        if n <= 0:
+            continue
+        any = true
+        var info: Dictionary = Items.ITEM.get(iid, {})
+        var btns := []
+        if info.has("use"):
+            var use_id: String = iid
+            btns.append(_btn("ใช้", true, func():
+                var m: String = player.use_item(use_id)
+                if m != "":
+                    field.say_msg(m)
+                refresh_bag()))
+        ui_bag_body.add_child(_row("%s ×%d" % [Items.item_name(iid), n], str(info.get("note", "")), btns))
+    if not any:
+        ui_bag_body.add_child(_lbl("กระเป๋าว่าง — ตีสไลม์ เก็บหิน/กิ่งไม้ในทุ่งหญ้า", 16, Color(0.75, 0.72, 0.65)))
+
+func _build_bag_ui(cl: CanvasLayer, sb: StyleBox) -> void:
+    ui_bag = PanelContainer.new()
+    ui_bag.add_theme_stylebox_override("panel", sb)
+    ui_bag.anchor_left = 0.5
+    ui_bag.anchor_right = 0.5
+    ui_bag.anchor_top = 0.5
+    ui_bag.anchor_bottom = 0.5
+    ui_bag.offset_left = -330
+    ui_bag.offset_right = 330
+    ui_bag.offset_top = -280
+    ui_bag.offset_bottom = 280
+    var sc := ScrollContainer.new()
+    sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    ui_bag.add_child(sc)
+    ui_bag_body = VBoxContainer.new()
+    ui_bag_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    ui_bag_body.add_theme_constant_override("separation", 6)
+    sc.add_child(ui_bag_body)
+    ui_bag.visible = false
+    cl.add_child(ui_bag)
 
 func _num(v) -> String:
     if v is float and v == floor(v):
@@ -1632,6 +1805,13 @@ func _unhandled_input(e: InputEvent) -> void:
             KEY_G: _set_quality(1 if quality == 2 else 2)
             KEY_J, KEY_SPACE: player.attack()
             KEY_SHIFT: player.dash(_key_dir())
+            KEY_B, KEY_I: toggle_bag()
+            KEY_H:
+                var mh: String = player.use_item("hpp")
+                if mh != "": field.say_msg(mh)
+            KEY_N:
+                var mn: String = player.use_item("mpp")
+                if mn != "": field.say_msg(mn)
 
 func _key_dir() -> Vector3:
     var mv := Vector3.ZERO

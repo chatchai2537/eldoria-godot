@@ -11,7 +11,9 @@
 | คลิก/แตะ | town.gd `click_at` `_npc_at` `_ground_at` · field.gd `slime_at` | แตะสไลม์ = เดินไปตี | — |
 | เมือง (ผัง) | town.gd `_layout` `_build_*` · data/town.json | ร้าน 15 · NPC 19 · ประตู · ผังจาก `js/031-core.js` buildTown | "ร้านค้า" "NPC" |
 | ภาพ/วัสดุ | visual_style.gd · town.gd `M` `box` `gable` · shaders/ | normal map เฉพาะคอม | visual_smoke |
-| ร้านค้า (ดูอย่างเดียว) | town.gd `open_shop` `_num` | ยังซื้อไม่ได้ | "เปิดหน้าร้าน" |
+| ร้านค้า | town.gd `open_shop` `shop_buy` `shop_sell` `_row` `_btn` · items.gd `BUY` | ซื้อได้เฉพาะของที่มีใน `Items.BUY` (equip/bag/now) · อื่น ๆ ปุ่ม "เร็ว ๆ นี้" · ขายตาม sell ของร้าน | "ร้าน:" "ร้านยา" "ร้านชำ" |
+| กระเป๋า/ไอเท็ม | player.gd `inv` `inv_count` `inv_add` `inv_take` `use_item` · town.gd `toggle_bag` `refresh_bag` · items.gd `ITEM` | เจล/หิน/ไม้เก็บในตัวแปรของมัน · ยา H/N · ม้วนวาปใช้นอกเมือง · ฟีนิกซ์ใช้เองตอนล้ม (`_die`) · ยังไม่มีจำกัดช่อง/น้ำหนัก | "กระเป๋า" "ม้วนวาป" "ฟีนิกซ์" |
+| อาวุธ/ATK | player.gd `weapon` `weapon_tier` `atk` · items.gd `SWATK` | ATK = 1 + SWATK[ระดับ] (ถ้าถือ) + str + (lv-1)>>1 | "ดาบ" |
 | คุย NPC | town.gd `_talk` `say` · npc.gd | บทพูดจาก NL ของเกม 2D | "คุยกับ NPC" |
 | เดิน/หาทาง | town.gd `blocked` `find_path` `_grid_path` `_field_path` · player.gd `_try_move` `drive` | เมือง A* 44×34 · ทุ่ง A* 60×44 · ต่อกันที่ประตูตะวันตก | "หาทาง" "เดินจากเมือง" |
 | พื้น/ความสูง | town.gd `h` `ground_y` `fh` `in_field_rect` | ในเขตทุ่ง h() = -4 (ใช้พื้นทุ่งแทน) | "บ่อน้ำ" "พื้นหญ้า" |
