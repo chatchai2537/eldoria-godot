@@ -2,6 +2,7 @@ extends SceneTree
 ## เทสทุกระบบแบบผู้เล่น (เมือง · ร้าน · คุย · เดิน/หาทาง · ทุ่งหญ้า · เก็บของ · สไลม์ · ตี · ดรอป · EXP · เลเวล · ตาย/ฟื้น · มือถือ)
 ## รัน: godot --headless --path source --script res://tests/all_systems.gd -- --mobile
 ## ผ่าน = บรรทัดสุดท้าย "ALL failures=0" · พัง = บรรทัด "FAIL: ..." บอกว่าระบบไหน
+const Mob = preload("res://scripts/mob.gd")
 var failures := 0
 var checks := 0
 
@@ -456,6 +457,124 @@ func _run() -> void:
     check(int(p.bank.get("gel", 0)) == 4 and p.skills.size() == 3, "เซฟจำของในธนาคารและสกิลที่เรียน")
     DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save2.json"))
     p.save_enabled = false
+
+    # ---------- ประตูมิติ · เหมือง 5 แห่ง ----------
+    var mn: Node = world.mine
+    p.dead = false
+    p.stun = 0.0
+    p.dash_t = 0.0
+    p.at = -1.0
+    p.hp = p.max_hp
+    p.position = world.field.portal_pos + Vector3(0, 0, 2.0)
+    world.ui_shop.visible = false
+    p.attack()
+    check(world.ui_shop.visible and world.cur_shop == "portal", "ประตูมิติ: กดตีแล้วขึ้นเมนูเลือกเหมือง 5 แห่ง")
+    world.close_shop()
+    for zi in 5:
+        var zd: Dictionary = mn.gen(zi)
+        var reach := true
+        for o in zd.ores:
+            if zd.m[o.ty * mn.ZW + o.tx] != mn.FL:
+                reach = false
+        check(zd.ores.size() > 40 and reach and zd.floor.size() > 400, "เหมือง %d: แผนที่มีพื้น/แร่ครบ" % zi)
+        check(zd.m[zd.arena.y * mn.ZW + zd.arena.x] == mn.FL, "เหมือง %d: ลานบอสเดินถึงได้" % zi)
+    mn.enter(0)
+    check(mn.cur == 0 and not world.blocked(p.position.x, p.position.z), "เข้าเหมืองเหล็ก: ยืนบนพื้นได้")
+    check(mn.mobs.size() >= 8, "เหมือง: มีมอนเกิด")
+    var stb := Mob.stats(5, "beetle", false, false)
+    check(stb.x == 124 and stb.y == 31, "มอนเหมือง: เลือด/ตีตามสูตรเกม 2D (ด้วง Lv5 = 124/31)")
+    mn._process(0.2)
+    check(mn.boss != null and mn.boss.boss, "เหมือง: บอสเกิดที่ลานบอส")
+    # ขุดแร่
+    var zd0: Dictionary = mn.data[0]
+    var ore: Dictionary = {}
+    for o in zd0.ores:
+        if o.kind == "stone" or o.kind == "iron":
+            ore = o
+            break
+    var ow: Vector3 = mn.tile_w(0, ore.tx, ore.ty)
+    p.position = ow + Vector3(0, 0, 1.6)
+    p.heading = PI
+    p.inv.erase("pick0")
+    check(mn.ore_in_front(p) == ore, "ขุดแร่: หันหน้าเข้าก้อนแร่")
+    mn.try_mine(p)
+    check(ore.hp == ore.max, "ขุดแร่: ไม่มีที่ขุดแร่ ขุดไม่ได้")
+    p.inv_add("pick0", 1)
+    var tries := 0
+    while ore.alive and tries < 20:
+        mn.try_mine(p)
+        tries += 1
+    check(not ore.alive and tries == ore.max, "ขุดแร่: ตี %d ครั้งแร่แตก" % ore.max)
+    check(not world.blocked(ow.x, ow.z), "ขุดแร่: แร่แตกแล้วเดินผ่านได้")
+    var have0: int = p.inv_count(str(mn.OREK[ore.kind].drop))
+    tick(world, 60)
+    check(p.inv_count(str(mn.OREK[ore.kind].drop)) > have0, "ขุดแร่: เก็บแร่เข้ากระเป๋า")
+    ore.regen = 0.01
+    p.position = ow + Vector3(0, 0, 6.0)
+    mn._process(0.05)
+    check(ore.alive and ore.hp == ore.max, "ขุดแร่: แร่งอกใหม่")
+    # แร่ทองแดงต้องใช้ที่ขุดระดับสูงกว่า
+    mn.leave(false)
+    mn.enter(1)
+    var cu: Dictionary = {}
+    for o in mn.data[1].ores:
+        if o.kind == "copper":
+            cu = o
+            break
+    p.position = mn.tile_w(1, cu.tx, cu.ty) + Vector3(0, 0, 1.6)
+    p.heading = PI
+    mn.try_mine(p)
+    check(cu.hp == cu.max and world.field.msg.text.find("ต้องใช้") >= 0, "ขุดแร่: ทองแดงต้องใช้ที่ขุดแร่เหล็กขึ้นไป")
+    mn.leave(false)
+    mn.enter(0)
+    mn._process(0.2)
+    # ตีมอน (ฟันธรรมดาใช้ระบบเดียวกับสไลม์) · มอนตาย = เหรียญ + EXP
+    var mb = null
+    for m in mn.mobs:
+        if not m.boss:
+            mb = m
+            break
+    mb.hp = 1
+    p.position = mb.position + Vector3(0, 0, 1.0)
+    p.heading = PI
+    var cbefore: int = p.coins
+    var xbefore: int = p.xp + p.lv * 100000
+    world.field.hit_slime(mb, p, 1.0)
+    check(mb.dead and p.coins > cbefore and p.xp + p.lv * 100000 > xbefore, "มอนเหมือง: ตีตายได้เหรียญ + EXP")
+    # มอนตีผู้เล่น (ลดด้วยป้องกัน · ไม่กระเด็น) · กลิ้งหลบได้
+    var hp0: float = p.hp
+    var mpos0: Vector3 = p.position
+    p.iframe = 0.0
+    p.hurt_mob(20, "ทดสอบ")
+    check(p.hp < hp0 and p.position == mpos0, "มอนเหมือง: โดนตีเลือดลด ไม่กระเด็น")
+    var hp1: float = p.hp
+    p.iframe = 0.5
+    p.hurt_mob(20, "ทดสอบ")
+    check(p.hp == hp1, "มอนเหมือง: ช่วงอมตะ (กลิ้ง) ไม่โดน")
+    p.hp = p.max_hp
+    # บอสทุบพื้น: วงเตือนก่อนโดน
+    var bs = mn.boss
+    bs.st = "slamWU"
+    bs.stt = 0.5
+    bs.tg = bs.position
+    bs.aggro = true
+    p.position = bs.position + Vector3(0, 0, 20.0)
+    bs._process(0.1)
+    check(bs.ring.visible, "บอส: มีวงเตือนก่อนทุบพื้น")
+    # ออกทางวงเวท
+    p.position = mn.exit_pos(0)
+    mn._process(0.05)
+    check(mn.cur == -1 and p.position.distance_to(world.field.portal_pos) < 4.0, "ออกจากเหมืองทางวงเวท กลับมาหน้าประตูมิติ")
+    check(world.field.extra.is_empty() and mn.mobs.is_empty(), "ออกจากเหมืองแล้วมอนหายหมด")
+    # ตายในเหมือง → ฟื้นที่วิหาร
+    mn.enter(0)
+    p.hp = 1
+    p.iframe = 0.0
+    p.inv.erase("phoenix")
+    p.hurt_mob(999, "ทดสอบ")
+    check(p.dead, "ตายในเหมือง")
+    p._revive()
+    check(mn.cur == -1 and p.position.distance_to(world.tw(7.5, 23.5)) < 0.1, "ตายในเหมืองแล้วฟื้นที่วิหารในเมือง")
 
     # ---------- มือถือ ----------
     if world.mobile != null:

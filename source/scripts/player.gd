@@ -315,6 +315,21 @@ func hurt_by(sl) -> void:
     elif at < 0.0:
         body.action("Hit_A", 0.35)
 
+## โดนมอนในเหมืองตี (zHurt): ลดด้วยป้องกัน×0.8 · ไม่กระเด็น ไม่ชะงัก (เจ้าของสั่ง) · กลิ้งหลบได้ (อมตะ)
+func hurt_mob(dmg: int, msg: String) -> void:
+    if dead or iframe > 0.0:
+        return
+    var d: int = max(1, int(round(dmg - def() * 0.8)))
+    hp = max(0.0, hp - d)
+    iframe = BAL.iframe
+    since_hit = 0.0
+    town.field.float_text("-%d" % d, position + Vector3(0, 2.4, 0), Color(1.0, 0.35, 0.3), 1.1)
+    town.field.say_msg(msg + " เลือด -%d" % d)
+    if hp <= 0.0:
+        _die()
+    elif at < 0.0:
+        body.action("Hit_A", 0.35)
+
 func _die() -> void:
     if inv_take("phoenix", 1):
         hp = max_hp
@@ -342,6 +357,8 @@ func _revive() -> void:
     iframe = 2.0
     stun = 0.3
     hit_combo = 0
+    if town.mine.cur >= 0:
+        town.mine.leave(false)
     position = town.tw(7.5, 23.5)
     body.revive()
     town.field.say_msg("ฟื้นที่วิหารแห่งแสง — เลือดเต็มแล้ว", 3.0)
@@ -358,6 +375,10 @@ func attack() -> void:
     # ในร้าน: ปุ่มตี = คุยกับเจ้าของร้านเมื่อยืนหน้าเคาน์เตอร์ (เหมือน E/⚔️ ในเกม 2D) · ไม่ฟันในร้าน
     if town.room != "":
         town.rooms.interact_if_near()
+        return
+    # หน้าประตูมิติ: ปุ่มตี = เลือกแผนที่ขุดแร่ (กด E/⚔️ ในเกม 2D)
+    if town.mine.cur < 0 and town.field.near_portal(self):
+        town.mine.open_menu()
         return
     if at >= 0.0:
         queued = true
@@ -377,7 +398,9 @@ func attack() -> void:
         return
     body.action(ATTACK_ANIMATION, atk_dur)
     # ไม่มีสไลม์ใกล้ ๆ และหันหน้าเข้าต้นไม้ = ฟันต้นไม้ (ต้องมีขวาน)
-    if s == null and town.field.has_method("try_chop"):
+    if s == null and town.mine.cur >= 0:
+        town.mine.try_mine(self)
+    elif s == null and town.field.has_method("try_chop"):
         town.field.try_chop(self)
 
 func dash(dir: Vector3) -> void:

@@ -23,7 +23,7 @@
 | ทุ่งหญ้า (ภาพ) | field.gd `_build_ground_mesh` `_build_water` `_build_trees` `_build_grass_flowers` `_build_portal` `_build_dungeon_gate` `_build_warp` | กอหญ้า มือถือ 2,600 / คอม 22,000 | — |
 | เก็บหิน/กิ่งไม้ | field.gd `_add_pickup` `_update_world` · player.gd `stone` `wood` | 34 ชิ้น · เกิดใหม่ 8 วิ · เดินทับเก็บ (`js/031-core.js` ~849) | "เก็บหิน" |
 | ตัดไม้ | field.gd `trees` `tree_at` `_build_trees` `_mm_one` `_tree_show` `tree_in_front` `try_chop` `_update_trees` · player.gd `attack` (เรียก try_chop เมื่อไม่มีสไลม์ใกล้) `axe_dmg` · town.gd `f_cut` | hp [2,3,5,8] ไม้ [1,2,3,5] ตามขนาด · แอปเปิ้ล 30%+ไม้×5% · งอก 100-140 วิ (fix149) · ต้องมี axe0 | "ตัดไม้" "ต้นไม้" "ตอไม้" |
-| ประตูมิติ/ดันเจี้ยน/วาร์ป | field.gd `_update_world` (ข้อความ) | ยังเข้าไม่ได้ (เร็ว ๆ นี้) | "ประตูมิติ" |
+| ประตูมิติ | field.gd `near_portal` · player.gd `attack` (ใกล้ประตู = เปิดเมนู) · mine.gd `open_menu` | กดตีหน้าประตู → เลือกเหมือง 5 แห่ง · ดันเจี้ยน/หินวาร์ป ยังเร็ว ๆ นี้ | "ประตูมิติ" |
 | สไลม์ | slime.gd `setup` `_process` `take_hit` `_mv` · field.gd `spawn` `lv_at` | เลือด 2+lv · ตี 4+(lv-1)×2 · 16 ตัว เกิดใหม่ 6 วิ · lv=ceil((60-x)/12) · **ไม่กระเด็น** | "สไลม์" |
 | ตี | player.gd `set_attack_held` `attack` `_process` · field.gd `melee` `new_attack` | ท่าเดียว ทุก 0.45 วิ · กดค้างฟันซ้ำ · ยืนกับที่ · คริ 8%+agi×0.4% ×1.8 | "กดค้างตี" combat_smoke |
 | กลิ้งหลบ | player.gd `dash` · model.gd `begin_roll` `update_roll` `end_roll` | 0.5 วิ · 2.3 หน่วย · คูลดาวน์ .65 · อมตะ · ขัดการตีได้ | combat_smoke |
@@ -38,3 +38,6 @@
 | อาวุธยิงไกล | items.gd `RANGED` · player.gd `is_ranged` `atk` `attack` · field.gd `projectiles` `shoot` `_update_projectiles` `hit_slime` | คทาใช้ INT ระยะ 17.5 · ธนูใช้ AGI ระยะ 22.5 | "คทา" |
 | อาหาร/บัฟ | items.gd `ITEM[].use` (hpp/mpp/buff/sec) · player.gd `use_item` `buffs` `stat_total` | อิ่ม/แรง ยังไม่มี (รอเจ้าของ) · ของฟาร์มซ่อน `Items.HIDE` | "อาหาร" |
 | ธนาคาร | town.gd `open_bank` `bank_move` · player.gd `bank` (เซฟด้วย) | ฝาก/ถอนของในกระเป๋า | "ธนาคาร" |
+| เหมือง (แผนที่) | mine.gd `ZONES` `gen` `_carve` `_walk` `_build` `enter` `leave` `blocked` `exit_pos` · town.gd `blocked` `find_path` `_update_sky` (มืด) | js/031-core.js ZONES/genZone · 62×44 · x=3000+ลำดับ×200 · ทางออกวงเวทแถว ent.y+2 | "เหมือง" |
+| ขุดแร่ | mine.gd `OREK` `ore_in_front` `try_mine` `pick_tier` `_ore_show` `_drop_item` · player.gd `attack` | ดาเมจ 1+(ระดับ>>1) · req ตามแร่ · งอก 60 วิ · ต้องมี pick0-5 ในกระเป๋า | "ขุดแร่" |
+| มอนเหมือง/บอส | mob.gd `FAM` `stats` `_process` `_boss_skill` `take_hit` `killed_by` · mine.gd `_spawn` `_spawn_boss` `summon` `shoot` `mob_killed` · field.gd `extra` `_targets` · player.gd `hurt_mob` | สูตร mobStats + fix (×1.7×1.25 / ×1.35×1.2) · ไม่กระเด็น · บอสเกิดใหม่ 180 วิ | "มอนเหมือง" "บอส" |

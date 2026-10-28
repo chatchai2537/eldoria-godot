@@ -74,6 +74,7 @@ var _test_auto := false
 var is_mobile := false
 var test_lv := 0  # ทดสอบหาต้นเหตุจอดำ: ?t=1 ไม่มีหญ้า/ป่า · ?t=2 +ไม่มีคน · ?t=3 +ไม่มีฟ้าจำลอง
 var mobile: CanvasLayer
+var mine: Node3D
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -173,6 +174,10 @@ func _ready() -> void:
     rooms.set_script(load("res://scripts/rooms.gd"))
     add_child(rooms)
     rooms.setup(self)
+    mine = Node3D.new()
+    mine.set_script(load("res://scripts/mine.gd"))
+    add_child(mine)
+    mine.setup(self)
     if is_mobile:
         for c in [ui_dialog, ui_shop, prompt, field.msg]:
             c.anchor_left = 0.0
@@ -323,6 +328,8 @@ func ftile_at(wx: float, wz: float) -> Vector2i:
 func blocked(wx: float, wz: float) -> bool:
     if room != "":
         return rooms.blocked(wx, wz)
+    if mine != null and mine.cur >= 0:
+        return mine.blocked(wx, wz)
     var tx := int(floor((wx - OX) / TS))
     var ty := int(floor((wz - OZ) / TS))
     if tx < 0 or ty < 0 or tx >= TW or ty >= TH:
@@ -335,7 +342,7 @@ func blocked(wx: float, wz: float) -> bool:
     return grid[ty][tx] != 0
 
 func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
-    if room != "":
+    if room != "" or (mine != null and mine.cur >= 0):
         return PackedVector3Array() if blocked(to.x, to.z) else PackedVector3Array([Vector3(to.x, 0, to.z)])
     var fa := from.x < OX
     var fb := to.x < OX
@@ -472,7 +479,8 @@ func _setup_env() -> void:
 
 func _update_sky() -> void:
     # ในร้าน: แสงกลางวันคงที่ (ห้องไม่มืดตอนกลางคืน)
-    var tod: float = 0.42 if room != "" else time_of_day
+    var in_mine: bool = mine != null and mine.cur >= 0
+    var tod: float = 0.42 if (room != "" or in_mine) else time_of_day
     var ang := (tod - 0.25) * TAU
     var elev := sin(ang)
     sun.rotation = Vector3(-ang, deg_to_rad(-30.0), 0.0)
@@ -496,6 +504,12 @@ func _update_sky() -> void:
     env.fog_light_color = hor.lerp(Color(0.5, 0.6, 0.75), 0.3)
     env.ambient_light_energy = lerp(0.22, 0.52, day) if not is_mobile else lerp(0.3, 0.85, day)
     env.volumetric_fog_albedo = Color(1, 1, 1).lerp(Color(1.0, 0.8, 0.65), low)
+    if in_mine and mine.ZONES[mine.cur].dark:
+        # เหมืองมืด: แดดอ่อน ฟ้าดำ
+        sun.light_energy *= 0.55
+        env.ambient_light_energy *= 0.75
+        if sky_mat == null:
+            env.background_color = Color.html(str(mine.ZONES[mine.cur].pal.vd))
     var night := 1.0 - day
     for l in lights:
         l.light_energy = night * 2.6
@@ -2053,6 +2067,15 @@ func _test_ui(what: String) -> void:
         _test_auto = true
         time_scale = 0.0
         return
+    if what.begins_with("mine:") or what.begins_with("mineboss:"):
+        # ทดสอบภาพ: เข้าเหมือง (mineboss = ยืนหน้าลานบอส)
+        var zi := int(what.split(":")[1])
+        mine.enter(zi)
+        mine._process(0.2)
+        if what.begins_with("mineboss:"):
+            var d: Dictionary = mine.data[zi]
+            player.position = mine.tile_w(zi, d.arena.x, d.arena.y + 7)
+        return
     if what.begins_with("roomshop:"):
         # ทดสอบภาพ: เข้าร้าน ยืนหน้าเคาน์เตอร์ แล้วคุยเปิดหน้าร้าน (มีของในกระเป๋าให้เห็นช่องขาย)
         rooms.enter(what.substr(9))
@@ -2216,6 +2239,9 @@ func _process(delta: float) -> void:
         var hh2 := int(time_of_day * 24.0)
         var mm2 := int(fmod(time_of_day * 24.0 * 60.0, 60.0))
         hud.text = "%s · %02d:%02d" % [clean(str(shops_by_id.get(room, {}).get("name", ""))), hh2, mm2]
+        _shot_tick()
+        return
+    if mine.cur >= 0:
         _shot_tick()
         return
     var pp := Vector2((player.position.x - OX) / TS, (player.position.z - OZ) / TS)

@@ -241,3 +241,10 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - เจ้าของ: "การคุยซื้อของที่ร้านไม่ใช่แบบนี้" → ทำตามเกม 2D: js/022-core.js shopNear/shopAct (เจ้าของ wave + bub ลอยเหนือหัว + openShop) · js/031-core.js renderShop v2.5 (ซ้ายของในร้าน ขวากระเป๋า · sellSel แตะซ้ำ +1 · sellBar −10 − + +10 ทั้งหมด · sellOK "ขอบคุณที่อุดหนุนนะ!") · buyItem → "ขอบคุณจ้า!"
 - rooms.gd `bubble` (Label3D เหนือหัว 3.55 · ชิดล่าง · no_depth_test) · `line_i` วนประโยค · ไม่ใช้ ui_dialog ในร้านแล้ว
 - town.gd หน้าร้านย้ายไปล่างจอ (anchor_top 0.34-0.36) · ซ่อน mobile CanvasLayer ตอนเปิดหน้าร้าน/กระเป๋า/ตัวละคร · ทดสอบภาพ `roomshop:<id>`
+
+## 0.10-mines (Claude 2026-10-28)
+- เจ้าของ: "ทำเหมืองก็ได้ ไล่ไปตามใบงาน" → ประตูมิติ → เหมือง 5 แห่ง ตาม js/031-core.js (ZONES ~905 · genZone · mobStats + wrapper 3194/fix8/fix31 · updMob · bossSkill · zMine · mobKill · enterZone) ขนาดตาม fix (62×44)
+- mine.gd: สุ่มผังด้วย seed 9137×(zi+1) + value noise ของตัวเอง (ผังไม่ตรงพิกเซลกับ 2D แต่โครงเดียวกัน: ทางเข้าล่าง ลานบอสบน ทางเดินสุ่ม ตัดส่วนที่เดินไม่ถึง) · พื้น/ผนัง/แร่ = MultiMesh (ผนังขอบหมุน/ขยายสุ่มให้ดูเป็นหิน)
+- mob.gd: โมเดลจากรูปทรง (ไม่มีโมเดลสำเร็จ) · AI idle/chase/wu/strike/lunge/shoot + บอส slamWU(วงแดงเตือน)/charge/volley/summon · ไม่กระเด็น · มอนใช้ระบบตีเดียวกับสไลม์ผ่าน field.extra
+- จำนวนมอน: มือถือ 12 (เริ่ม 10) · คอม 20 (เริ่ม 16) — 2D ใช้ 28
+- ทดสอบภาพ `--shot=...,mine:<0-4>` / `mineboss:<0-4>`

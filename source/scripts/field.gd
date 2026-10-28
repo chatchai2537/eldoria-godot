@@ -6,6 +6,7 @@ const MAX_SLIMES := 16
 
 var town
 var slimes: Array = []
+var extra: Array = []   # มอนในเหมือง (mine.gd) ใช้ระบบตี/สกิล/ยิงร่วมกับสไลม์
 var resp_t := 5.0
 var shadow_tex: Texture2D
 var drops: Array = []
@@ -626,7 +627,7 @@ func _update_world(delta: float) -> void:
         portal_disc.rotation.y = tt * 0.8
     var near := ""
     if p.position.distance_to(portal_pos) < 3.4:
-        near = "ประตูมิติ — ไปเหมือง 5 แห่ง (เหล็ก ทองแดง เงิน ทอง เพชร) · เร็ว ๆ นี้"
+        near = "ประตูมิติ — กดตีเพื่อเลือกแผนที่ขุดแร่ (เหมือง 5 แห่ง)"
     elif p.position.distance_to(dungeon_pos) < 4.0:
         near = "ประตูดันเจี้ยนร้อยชั้น · เร็ว ๆ นี้"
     elif p.position.distance_to(warp_pos) < 2.2:
@@ -634,16 +635,22 @@ func _update_world(delta: float) -> void:
     if near != "":
         town.prompt.text = near
 
+func near_portal(p) -> bool:
+    return p.position.distance_to(portal_pos) < 3.4
+
 # ---------- การโจมตีของผู้เล่น (เรียกทุกเฟรมในช่วงดาบฟัน) ----------
 func new_attack() -> int:
     atk_id += 1
     return atk_id
 
+func _targets() -> Array:
+    return slimes + extra if not extra.is_empty() else slimes
+
 func melee(p, spin: bool, id: int) -> void:
     var fwd := Vector3(sin(p.heading), 0, cos(p.heading))
     var c: Vector3 = p.position if spin else p.position + fwd * 1.4
     var r := 2.3 if spin else 1.45
-    for s in slimes:
+    for s in _targets():
         if not is_instance_valid(s) or s.dead or s.last_atk == id:
             continue
         var d := Vector2(s.position.x - c.x, s.position.z - c.z).length()
@@ -658,12 +665,15 @@ func hit_slime(s, p, mult: float) -> void:
     s.take_hit(dm, p.position)
     float_text(("คริ! " if cr else "") + str(dm), s.position + Vector3(0, s.radius * 2.0 + 0.4, 0), Color(1.0, 0.85, 0.3) if cr else Color(1, 1, 1), 1.4 if cr else 1.0)
     if s.dead:
-        _killed(s)
+        if s.has_method("killed_by"):
+            s.killed_by()
+        else:
+            _killed(s)
 
 ## สกิลฟันรอบตัว
 func aoe(p, radius: float, mult: float) -> int:
     var n := 0
-    for s in slimes:
+    for s in _targets():
         if not is_instance_valid(s) or s.dead:
             continue
         if Vector2(s.position.x - p.position.x, s.position.z - p.position.z).length() < radius + s.radius * 0.6:
@@ -720,7 +730,7 @@ func _update_projectiles(delta: float) -> void:
         n.position += q.dir * step
         q.left -= step
         var hit = null
-        for s in slimes:
+        for s in _targets():
             if is_instance_valid(s) and not s.dead and Vector2(s.position.x - n.position.x, s.position.z - n.position.z).length() < s.radius + 0.35:
                 hit = s
                 break
@@ -743,7 +753,7 @@ func _killed(s) -> void:
 func nearest_slime(pos: Vector3, maxd: float):
     var best = null
     var bd := maxd
-    for s in slimes:
+    for s in _targets():
         if not is_instance_valid(s) or s.dead:
             continue
         var d := Vector2(s.position.x - pos.x, s.position.z - pos.z).length()
@@ -755,7 +765,7 @@ func nearest_slime(pos: Vector3, maxd: float):
 func slime_at(screen: Vector2):
     var best = null
     var bd := 55.0
-    for s in slimes:
+    for s in _targets():
         if not is_instance_valid(s) or s.dead or not town.cam.is_position_in_frustum(s.global_position):
             continue
         var sp: Vector2 = town.cam.unproject_position(s.global_position + Vector3(0, s.radius, 0))
