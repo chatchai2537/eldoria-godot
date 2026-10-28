@@ -127,6 +127,14 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - สุ่มออปชั่นซ้ำ / ตัวล็อคออปชั่น (สเปกบอกว่าไม่มี)
 - warp จากเมนูในที่ที่มีทางเข้าจริง
 
+### แอป Android (APK) — 2026-10-28
+- เจ้าของใช้มือถือเป็นหลัก และมือถือเจ้าของเปิด Godot บนเว็บไม่ได้เลย (หน้า /test/ กล่องเปล่าก็จอดำ) → ทำเป็นแอป APK
+- หน้าโหลด: https://chatchai2537.github.io/eldoria-godot/apk.html (ไฟล์ `Eldoria.apk` ที่ root)
+- วิธี build ในคลาวด์ (ไม่มี Android SDK): export preset "Android" แบบ `package/signed=false` (ชี้ SDK ปลอมที่มีไฟล์ adb/apksigner เปล่า ๆ ให้ Godot ผ่านการตรวจ) → เซ็น v2 ด้วย `source/tools/apksign_v2.py in.apk out.apk keystore.p12 รหัส`
+- template Android ดึงเฉพาะ android_release.apk จากไฟล์ templates ของ Godot 4.7.2 บน GitHub
+- **กุญแจเซ็นแอป** (eldoria.p12) ยังอยู่แค่ในเครื่องคลาวด์ของ Claude → ต้องเก็บลงคอมเจ้าของเมื่อเชื่อมคอม (Documents\EldoriaGodot\keys) · ถ้ากุญแจหาย แอปเวอร์ชันใหม่จะติดตั้งทับไม่ได้ ต้องลบแอปเก่าก่อน
+- ทุกครั้งที่อัปเดตเกม: เพิ่ม `version/code` ใน export_presets.cfg แล้ว build APK ใหม่ด้วย
+
 ### กำลังหาต้นเหตุจอดำบนมือถือเจ้าของ (WebGL context lost) — 2026-10-28
 - รอบ 1 (hidpi) และรอบ 2 (MSAA/เงา) แก้แล้ว แต่มือถือเจ้าของยังจอดำ
 - ลิงก์ทดสอบ: `/test/` = Godot กล่องหมุนเปล่าๆ (ถ้าจอดำ = มือถือ/เบราว์เซอร์รัน Godot 4 เว็บไม่ได้เลย) · `/?t=1` ไม่มีหญ้า/ป่า · `/?t=2` +ไม่มี NPC · `/?t=3` +ไม่มีท้องฟ้าจำลอง (โค้ด `town.gd` test_lv)
