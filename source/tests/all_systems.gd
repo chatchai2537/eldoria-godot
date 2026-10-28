@@ -274,6 +274,58 @@ func _run() -> void:
     world.toggle_bag()
     check(not world.ui_bag.visible, "ปิดกระเป๋าได้")
 
+    # ---------- ตัดไม้ ----------
+    var small = null
+    var edge = null
+    for tr in f.trees:
+        if tr.border and edge == null:
+            edge = tr
+        if not tr.border and tr.sz == 0 and small == null:
+            var ok_spot := false
+            for o in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+                if not world.ftile_solid(world.ftile(tr.tx + o.x, tr.ty + o.y)):
+                    ok_spot = true
+            if ok_spot:
+                small = tr
+    check(small != null and edge != null, "มีต้นไม้เล็กและต้นไม้ขอบทุ่งให้ทดสอบ")
+    if small != null:
+        var stand_t := Vector2i(-1, -1)
+        for o in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+            if stand_t.x < 0 and not world.ftile_solid(world.ftile(small.tx + o.x, small.ty + o.y)):
+                stand_t = Vector2i(small.tx + o.x, small.ty + o.y)
+        p.position = world.fw(stand_t.x + 0.5, stand_t.y + 0.5)
+        p.heading = atan2(small.pos.x - p.position.x, small.pos.z - p.position.z)
+        p.inv.erase("axe0")
+        var hp_t: int = small.hp
+        check(f.try_chop(p) and small.hp == hp_t, "ตัดไม้: ไม่มีขวานฟันต้นไม้ไม่ได้")
+        p.inv_add("axe0", 1)
+        f.try_chop(p)
+        check(small.hp == hp_t - 1, "ตัดไม้: มีขวานฟันได้ทีละ 1")
+        f.try_chop(p)
+        check(not small.alive, "ต้นไม้เล็ก (2 ที) ล้ม")
+        var tp: Vector3 = world.fw(small.tx + 0.5, small.ty + 0.5)
+        check(not world.blocked(tp.x, tp.z), "ตอไม้เดินผ่านได้")
+        var wood0: int = p.wood
+        for i in 45:
+            f._update_trees(1.0 / 30.0)
+        check(f.drops.size() > 0, "ต้นไม้ล้มแล้วไม้หล่น")
+        for d in f.drops:
+            d.n.position = p.position
+            d.t = 1.0
+        for i in 30:
+            f._process(1.0 / 30.0)
+        check(p.wood >= wood0 + 1, "เก็บไม้จากต้นที่ล้มได้")
+        p.position = world.tw(10, 20)
+        small.regrow = 0.01
+        f._update_trees(0.05)
+        check(small.alive and world.blocked(tp.x, tp.z), "ต้นไม้งอกใหม่และกลับมาขวางทาง")
+    if edge != null:
+        p.position = world.fw(clampi(edge.tx, 1, 58) + 0.5, clampi(edge.ty, 1, 42) + 0.5)
+        p.heading = atan2(edge.pos.x - p.position.x, edge.pos.z - p.position.z)
+        var eh: int = edge.hp
+        f.try_chop(p)
+        check(edge.hp == eh, "ต้นไม้ขอบทุ่งตัดไม่ได้")
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

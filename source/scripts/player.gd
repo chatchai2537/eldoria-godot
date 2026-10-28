@@ -207,6 +207,10 @@ func use_item(id: String) -> String:
     mp = min(float(max_mp), mp + float(u.get("mp", 0)))
     return "ใช้ " + Items.item_name(id) + " แล้ว"
 
+## แรงขวาน AXEDMG = 1 + (ระดับขวาน >> 1)  (js/015-core.js)
+func axe_dmg() -> int:
+    return 1
+
 func def() -> int:
     return (stats.vit >> 1) + ((lv - 1) >> 2)
 
@@ -298,6 +302,9 @@ func attack() -> void:
         body.rotation.y = heading
     cur_atk = town.field.new_attack()
     body.action(ATTACK_ANIMATION, atk_dur)
+    # ไม่มีสไลม์ใกล้ ๆ และหันหน้าเข้าต้นไม้ = ฟันต้นไม้ (ต้องมีขวาน)
+    if s == null and town.field.has_method("try_chop"):
+        town.field.try_chop(self)
 
 func dash(dir: Vector3) -> void:
     if dead or dash_t > 0.0 or dash_cd > 0.0:

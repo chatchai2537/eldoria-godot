@@ -196,24 +196,21 @@ func _build_water() -> void:
     w.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     add_child(w)
 
+# ---------- ต้นไม้ + ตัดไม้ (js/016-core.js hitTree · fix149 งอกใหม่ 100-140 วิ) ----------
+const TREE_HP := [2, 3, 5, 8]
+const TREE_WOOD := [1, 2, 3, 5]
+const TREE_SC := [0.5, 0.7, 0.9, 1.1]
+var trees: Array = []          # {tx,ty,sz,hp,max,wood,alive,border,regrow,parts:[[mm,idx,xf],...],pos,shadow}
+var tree_at := {}              # ty*FW+tx -> tree
+var falling: Array = []
+var stump_mesh: Mesh
+var stump_mat: StandardMaterial3D
+var apple_mesh: Mesh
+var apple_mat: StandardMaterial3D
+var wood_mesh: Mesh
+var wood_mat: StandardMaterial3D
+
 func _build_trees() -> void:
-    var tx := []
-    var tc := []
-    var bx := []
-    var bc := []
-    for t in town.FD.trees:
-        var sc: float = [0.5, 0.7, 0.9, 1.1][int(t[2])] * 1.25
-        var p: Vector3 = town.fw(float(t[0]) + 0.5 + randf_range(-0.15, 0.15), float(t[1]) + 0.5 + randf_range(-0.15, 0.15))
-        p.y = town.ground_y(p.x, p.z)
-        tx.append(town._xf(p + Vector3(0, 1.2 * sc, 0), Vector3(0.28 * sc, 2.4 * sc, 0.28 * sc), randf() * TAU))
-        tc.append(Color(0.36, 0.25, 0.15))
-        var hue := randf_range(0.27, 0.33)
-        var g := Color.from_hsv(hue, randf_range(0.55, 0.7), randf_range(0.42, 0.55))
-        for k in (4 if not town.is_mobile else 3):
-            var off := Vector3(randf_range(-0.7, 0.7), randf_range(0.0, 0.9) + (0.6 if k == 2 else 0.0), randf_range(-0.7, 0.7)) * sc
-            var r := randf_range(1.0, 1.35) * sc
-            bx.append(town._xf(p + Vector3(0, 3.0 * sc, 0) + off, Vector3(r, r * 0.88, r), randf() * TAU))
-            bc.append(g.lightened(randf_range(-0.06, 0.1)))
     var cm := CylinderMesh.new()
     cm.top_radius = 0.6
     cm.bottom_radius = 1.0
@@ -227,16 +224,7 @@ func _build_trees() -> void:
     var bark := StandardMaterial3D.new()
     bark.vertex_color_use_as_albedo = true
     bark.roughness = 0.95
-    town._mm_chunks(cm, tx, tc, bark)
-    town._mm_chunks(blob, bx, bc, town._foliage(0.25))
-    # ร่มเงาใต้ต้นไม้ (มือถือไม่มีเงาจริง)
-    var sx := []
-    var sc2 := []
-    for t in town.FD.trees:
-        var s3: float = [0.5, 0.7, 0.9, 1.1][int(t[2])] * 1.25
-        var p2: Vector3 = town.fw(float(t[0]) + 0.5, float(t[1]) + 0.5)
-        sx.append(town._xf(Vector3(p2.x + 0.5, town.ground_y(p2.x, p2.z) + 0.04, p2.z + 0.4), Vector3(2.6 * s3, 1, 2.6 * s3), 0.0))
-        sc2.append(Color(0, 0, 0, 0.32))
+    var leaf: Material = town._foliage(0.25)
     var q := QuadMesh.new()
     q.size = Vector2(1, 1)
     q.orientation = PlaneMesh.FACE_Y
@@ -245,7 +233,202 @@ func _build_trees() -> void:
     shm.vertex_color_use_as_albedo = true
     shm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     shm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    town._mm_chunks(q, sx, sc2, shm, false)
+    # รวบรวมชิ้นส่วนต่อก้อนพื้นที่ (32 หน่วย) เหมือน town._mm_chunks แต่จำตำแหน่งไว้ซ่อนตอนต้นไม้ล้ม
+    var chunks := {}
+    var n_blobs := 4 if not town.is_mobile else 3
+    for t in town.FD.trees:
+        var tx := int(t[0])
+        var ty := int(t[1])
+        var sz := int(t[2])
+        var sc: float = TREE_SC[sz] * 1.25
+        var p: Vector3 = town.fw(tx + 0.5 + randf_range(-0.15, 0.15), ty + 0.5 + randf_range(-0.15, 0.15))
+        p.y = town.ground_y(p.x, p.z)
+        var tr := {"tx": tx, "ty": ty, "sz": sz, "hp": TREE_HP[sz], "max": TREE_HP[sz], "wood": TREE_WOOD[sz], "alive": true,
+            "border": tx == 0 or ty == 0 or tx == town.FW - 1 or ty == town.FH - 1, "regrow": -1.0, "parts": [], "pos": p, "sc": sc}
+        var key := Vector2i(floori(p.x / 32.0), floori(p.z / 32.0))
+        if not chunks.has(key):
+            chunks[key] = {"t": [[], []], "b": [[], []], "s": [[], []], "refs": []}
+        var ch: Dictionary = chunks[key]
+        var hue := randf_range(0.27, 0.33)
+        var g := Color.from_hsv(hue, randf_range(0.55, 0.7), randf_range(0.42, 0.55))
+        ch.t[0].append(town._xf(p + Vector3(0, 1.2 * sc, 0), Vector3(0.28 * sc, 2.4 * sc, 0.28 * sc), randf() * TAU))
+        ch.t[1].append(Color(0.36, 0.25, 0.15))
+        ch.refs.append([tr, "t", ch.t[0].size() - 1])
+        for k in n_blobs:
+            var off := Vector3(randf_range(-0.7, 0.7), randf_range(0.0, 0.9) + (0.6 if k == 2 else 0.0), randf_range(-0.7, 0.7)) * sc
+            var r := randf_range(1.0, 1.35) * sc
+            ch.b[0].append(town._xf(p + Vector3(0, 3.0 * sc, 0) + off, Vector3(r, r * 0.88, r), randf() * TAU))
+            ch.b[1].append(g.lightened(randf_range(-0.06, 0.1)))
+            ch.refs.append([tr, "b", ch.b[0].size() - 1])
+        ch.s[0].append(town._xf(Vector3(p.x + 0.5, p.y + 0.04, p.z + 0.4), Vector3(2.6 * sc, 1, 2.6 * sc), 0.0))
+        ch.s[1].append(Color(0, 0, 0, 0.32))
+        ch.refs.append([tr, "s", ch.s[0].size() - 1])
+        trees.append(tr)
+        tree_at[ty * town.FW + tx] = tr
+    for ch in chunks.values():
+        var mms := {"t": _mm_one(cm, ch.t[0], ch.t[1], bark, true), "b": _mm_one(blob, ch.b[0], ch.b[1], leaf, true), "s": _mm_one(q, ch.s[0], ch.s[1], shm, false)}
+        for ref in ch.refs:
+            var mm: MultiMesh = mms[ref[1]]
+            ref[0].parts.append([mm, ref[2], mm.get_instance_transform(ref[2])])
+    var sm := CylinderMesh.new()
+    sm.top_radius = 0.32
+    sm.bottom_radius = 0.42
+    sm.height = 0.35
+    sm.radial_segments = 8
+    stump_mesh = sm
+    stump_mat = StandardMaterial3D.new()
+    stump_mat.albedo_color = Color(0.45, 0.32, 0.2)
+    var am := SphereMesh.new()
+    am.radius = 0.16
+    am.height = 0.3
+    apple_mesh = am
+    apple_mat = StandardMaterial3D.new()
+    apple_mat.albedo_color = Color(0.85, 0.12, 0.12)
+    apple_mat.roughness = 0.35
+    var wm := CylinderMesh.new()
+    wm.top_radius = 0.1
+    wm.bottom_radius = 0.1
+    wm.height = 0.55
+    wm.radial_segments = 7
+    wood_mesh = wm
+    wood_mat = StandardMaterial3D.new()
+    wood_mat.albedo_color = Color(0.62, 0.42, 0.22)
+
+func _mm_one(mesh: Mesh, xs: Array, cs: Array, mat: Material, shadows: bool) -> MultiMesh:
+    var mm := MultiMesh.new()
+    mm.transform_format = MultiMesh.TRANSFORM_3D
+    mm.use_colors = true
+    mm.mesh = mesh
+    mm.instance_count = xs.size()
+    for i in xs.size():
+        mm.set_instance_transform(i, xs[i])
+        mm.set_instance_color(i, cs[i])
+    var mi := MultiMeshInstance3D.new()
+    mi.multimesh = mm
+    mi.material_override = mat
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
+    return mm
+
+func _tree_show(tr: Dictionary, on: bool) -> void:
+    for part in tr.parts:
+        var mm: MultiMesh = part[0]
+        mm.set_instance_transform(int(part[1]), part[2] if on else Transform3D().scaled(Vector3.ZERO))
+
+## ต้นไม้ที่อยู่ข้างหน้าผู้เล่น (ใช้ขวานฟัน)
+func tree_in_front(p) -> Variant:
+    var fwd := Vector3(sin(p.heading), 0, cos(p.heading))
+    var best = null
+    var bd := 2.7
+    for c in [p.position + fwd * 1.2, p.position]:
+        var t: Vector2i = town.ftile_at(c.x, c.z)
+        for dy in range(-1, 2):
+            for dx in range(-1, 2):
+                var tr = tree_at.get((t.y + dy) * town.FW + t.x + dx)
+                if tr == null or not tr.alive:
+                    continue
+                var d := Vector2(tr.pos.x - p.position.x, tr.pos.z - p.position.z).length()
+                var dirv := Vector2(tr.pos.x - p.position.x, tr.pos.z - p.position.z).normalized()
+                if d < bd and dirv.dot(Vector2(fwd.x, fwd.z)) > 0.2:
+                    bd = d
+                    best = tr
+    return best
+
+## ฟันต้นไม้ 1 ครั้ง (เรียกตอนกดตีแล้วไม่มีสไลม์ใกล้ ๆ) · คืน true ถ้าเป็นการฟันต้นไม้
+func try_chop(p) -> bool:
+    var tr = tree_in_front(p)
+    if tr == null:
+        return false
+    if tr.border:
+        say_msg("ต้นไม้ขอบทุ่งตัดไม่ได้")
+        return true
+    if p.inv_count("axe0") <= 0:
+        say_msg("ต้นไม้ต้องใช้ขวาน — ซื้อขวานหินที่ร้านอาวุธลุงเหล็ก")
+        return true
+    var dm: int = p.axe_dmg()
+    tr.hp -= dm
+    float_text("-%d" % dm, tr.pos + Vector3(0, 2.2, 0), Color(0.75, 1.0, 0.6), 0.9)
+    if tr.hp <= 0:
+        tr.alive = false
+        tr.regrow = randf_range(100.0, 140.0)
+        _tree_show(tr, false)
+        town.fastar.set_point_solid(Vector2i(tr.tx, tr.ty), false)
+        town.f_cut[tr.ty * town.FW + tr.tx] = true
+        var dirx := 1.0 if p.position.x < tr.pos.x else -1.0
+        falling.append({"tr": tr, "t": 0.0, "dir": dirx, "node": _falling_tree(tr), "landed": false})
+        var st := MeshInstance3D.new()
+        st.mesh = stump_mesh
+        st.material_override = stump_mat
+        st.position = tr.pos + Vector3(0, 0.17, 0)
+        st.scale = Vector3.ONE * tr.sc
+        add_child(st)
+        tr["stump"] = st
+        say_msg("ต้นไม้กำลังล้ม!")
+    else:
+        say_msg("ฟันต้นไม้ เหลืออีก %d ที" % int(ceil(float(tr.hp) / dm)))
+    return true
+
+func _falling_tree(tr: Dictionary) -> Node3D:
+    var root := Node3D.new()
+    root.position = tr.pos
+    add_child(root)
+    var sc: float = tr.sc
+    var trunk := MeshInstance3D.new()
+    var cm := CylinderMesh.new()
+    cm.top_radius = 0.17 * sc
+    cm.bottom_radius = 0.28 * sc
+    cm.height = 2.4 * sc
+    trunk.mesh = cm
+    trunk.material_override = town.M(Color(0.36, 0.25, 0.15), 0.95)
+    trunk.position.y = 1.2 * sc
+    root.add_child(trunk)
+    var leaf := MeshInstance3D.new()
+    var sp := SphereMesh.new()
+    sp.radius = 1.3 * sc
+    sp.height = 2.3 * sc
+    leaf.mesh = sp
+    leaf.material_override = town.M(Color(0.3, 0.5, 0.2), 0.9)
+    leaf.position.y = 3.2 * sc
+    root.add_child(leaf)
+    return root
+
+func _update_trees(delta: float) -> void:
+    var p = town.player
+    for i in range(falling.size() - 1, -1, -1):
+        var f: Dictionary = falling[i]
+        f.t += delta
+        var node: Node3D = f.node
+        var u: float = min(f.t / 1.1, 1.0)
+        node.rotation.z = -f.dir * u * u * PI * 0.5
+        if not f.landed and f.t >= 1.1:
+            f.landed = true
+            var tr: Dictionary = f.tr
+            var ex: Vector3 = tr.pos + Vector3(f.dir * 3.8 * tr.sc, 0, 0)
+            for k in int(tr.wood):
+                _drop("wood", ex + Vector3(randf_range(-0.7, 0.7), 0, randf_range(-0.4, 0.4)))
+            if randf() < 0.3 + tr.wood * 0.05:
+                _drop("apple", ex)
+            say_msg("ต้นไม้ล้มแล้ว! ได้ไม้ +%d" % int(tr.wood))
+        if f.t > 2.3:
+            node.queue_free()
+            falling.remove_at(i)
+    for tr in trees:
+        if tr.alive or tr.border:
+            continue
+        tr.regrow -= delta
+        if tr.regrow > 0.0:
+            continue
+        if Vector2(p.position.x - tr.pos.x, p.position.z - tr.pos.z).length() < 3.0:
+            tr.regrow = 3.0
+            continue
+        tr.alive = true
+        tr.hp = tr.max
+        _tree_show(tr, true)
+        town.fastar.set_point_solid(Vector2i(tr.tx, tr.ty), true)
+        town.f_cut.erase(tr.ty * town.FW + tr.tx)
+        if tr.has("stump"):
+            (tr.stump as Node).queue_free()
+            tr.erase("stump")
 
 func _grass_tiles() -> Array:
     var out := []
@@ -415,6 +598,7 @@ func _add_pickup() -> void:
         return
 
 func _update_world(delta: float) -> void:
+    _update_trees(delta)
     var p = town.player
     for i in range(pickups.size() - 1, -1, -1):
         var q: Dictionary = pickups[i]
@@ -509,8 +693,20 @@ func slime_at(screen: Vector2):
 # ---------- ของดรอป ----------
 func _drop(kind: String, at: Vector3) -> void:
     var m := MeshInstance3D.new()
-    m.mesh = coin_mesh if kind == "coin" else gel_mesh
-    m.material_override = coin_mat if kind == "coin" else gel_mat
+    match kind:
+        "coin":
+            m.mesh = coin_mesh
+            m.material_override = coin_mat
+        "wood":
+            m.mesh = wood_mesh
+            m.material_override = wood_mat
+            m.rotation.x = PI / 2.0
+        "apple":
+            m.mesh = apple_mesh
+            m.material_override = apple_mat
+        _:
+            m.mesh = gel_mesh
+            m.material_override = gel_mat
     m.position = at + Vector3(0, 0.6, 0)
     add_child(m)
     var a := randf() * TAU
@@ -694,7 +890,7 @@ func _process(delta: float) -> void:
                     if d.k == "coin":
                         p.coins += 1
                     else:
-                        p.gel += 1
+                        p.inv_add(str(d.k), 1)
                     n.queue_free()
                     drops.remove_at(i)
                     continue

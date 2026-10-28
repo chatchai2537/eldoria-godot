@@ -19,9 +19,10 @@
 | คุย NPC | town.gd `_talk` `say` · npc.gd | บทพูดจาก NL ของเกม 2D | "คุยกับ NPC" |
 | เดิน/หาทาง | town.gd `blocked` `find_path` `_grid_path` `_field_path` · player.gd `_try_move` `drive` | เมือง A* 44×34 · ทุ่ง A* 60×44 · ต่อกันที่ประตูตะวันตก | "หาทาง" "เดินจากเมือง" |
 | พื้น/ความสูง | town.gd `h` `ground_y` `fh` `in_field_rect` | ในเขตทุ่ง h() = -4 (ใช้พื้นทุ่งแทน) | "บ่อน้ำ" "พื้นหญ้า" |
-| ทุ่งหญ้า (ผัง) | town.gd `ftile` `ftile_solid` `fw` `ftile_at` · data/field.json | ผังจริง `js/013-core.js` 60×44 · น้ำ/ต้นไม้/ประตูดันเดินไม่ได้ · ช่อง (x,y) → โลก (-164+2x, -45+2y) | "แผนที่ทุ่ง" "น้ำ" "ต้นไม้" |
+| ทุ่งหญ้า (ผัง) | town.gd `ftile` `ftile_solid` `fw` `ftile_at` · data/field.json | ผังจริง `js/013-core.js` 60×44 · น้ำ/ต้นไม้/ประตูดัน/หินวาร์ปเดินไม่ได้ · ตอไม้ (f_cut) เดินได้ · ช่อง (x,y) → โลก (-164+2x, -45+2y) | "แผนที่ทุ่ง" "น้ำ" "ต้นไม้" |
 | ทุ่งหญ้า (ภาพ) | field.gd `_build_ground_mesh` `_build_water` `_build_trees` `_build_grass_flowers` `_build_portal` `_build_dungeon_gate` `_build_warp` | กอหญ้า มือถือ 2,600 / คอม 22,000 | — |
 | เก็บหิน/กิ่งไม้ | field.gd `_add_pickup` `_update_world` · player.gd `stone` `wood` | 34 ชิ้น · เกิดใหม่ 8 วิ · เดินทับเก็บ (`js/031-core.js` ~849) | "เก็บหิน" |
+| ตัดไม้ | field.gd `trees` `tree_at` `_build_trees` `_mm_one` `_tree_show` `tree_in_front` `try_chop` `_update_trees` · player.gd `attack` (เรียก try_chop เมื่อไม่มีสไลม์ใกล้) `axe_dmg` · town.gd `f_cut` | hp [2,3,5,8] ไม้ [1,2,3,5] ตามขนาด · แอปเปิ้ล 30%+ไม้×5% · งอก 100-140 วิ (fix149) · ต้องมี axe0 | "ตัดไม้" "ต้นไม้" "ตอไม้" |
 | ประตูมิติ/ดันเจี้ยน/วาร์ป | field.gd `_update_world` (ข้อความ) | ยังเข้าไม่ได้ (เร็ว ๆ นี้) | "ประตูมิติ" |
 | สไลม์ | slime.gd `setup` `_process` `take_hit` `_mv` · field.gd `spawn` `lv_at` | เลือด 2+lv · ตี 4+(lv-1)×2 · 16 ตัว เกิดใหม่ 6 วิ · lv=ceil((60-x)/12) · **ไม่กระเด็น** | "สไลม์" |
 | ตี | player.gd `set_attack_held` `attack` `_process` · field.gd `melee` `new_attack` | ท่าเดียว ทุก 0.45 วิ · กดค้างฟันซ้ำ · ยืนกับที่ · คริ 8%+agi×0.4% ×1.8 | "กดค้างตี" combat_smoke |

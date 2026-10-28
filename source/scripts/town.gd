@@ -81,6 +81,7 @@ var FD: Dictionary = {}
 var frows: Array = []
 var fpath := {}
 var fastar := AStarGrid2D.new()
+var f_cut := {}   # ช่องต้นไม้ที่ถูกตัดเหลือตอ (เดินได้)
 var sky_dome_mat: ShaderMaterial
 const STYLE := {
     "gear": {"roof": Color(0.312, 0.323, 0.344), "wall": Color(0.617, 0.556, 0.480), "kind": "forge"},
@@ -304,7 +305,7 @@ func ftile(x: int, y: int) -> int:
     return int((frows[y] as String).substr(x, 1))
 
 func ftile_solid(t: int) -> bool:
-    return t == -1 or t == F_WATER or t == F_TREE or t == F_DOOR
+    return t == -1 or t == F_WATER or t == F_TREE or t == F_DOOR or t == F_WARP
 
 func fw(x: float, y: float) -> Vector3:
     return Vector3(FX0 + x * TS, 0.0, FZ0 + y * TS)
@@ -318,6 +319,8 @@ func blocked(wx: float, wz: float) -> bool:
     if tx < 0 or ty < 0 or tx >= TW or ty >= TH:
         if wx < OX:
             var ft := ftile_at(wx, wz)
+            if f_cut.has(ft.y * FW + ft.x):
+                return false
             return ftile_solid(ftile(ft.x, ft.y))
         return true
     return grid[ty][tx] != 0
