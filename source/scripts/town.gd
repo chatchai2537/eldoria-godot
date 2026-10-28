@@ -1,0 +1,1477 @@
+extends Node3D
+## ตำนานเอลโดเรีย (Godot) · ขั้นที่ 1: เมืองเอลโดเรีย เดินได้
+## ผังเมืองยกมาจากเกมเว็บ (js/031-core.js buildTown): 44 x 34 ช่อง · 1 ช่อง = 2 เมตร
+
+const TW := 44
+const TH := 34
+const TS := 2.0
+const OX := -44.0
+const OZ := -34.0
+const HALF := 220.0
+
+var noise := FastNoiseLite.new()
+var noise_tex: NoiseTexture2D
+var font: FontFile
+var font_b: FontFile
+var env: Environment
+var sky_mat: ProceduralSkyMaterial
+var sun: DirectionalLight3D
+var moon: DirectionalLight3D
+var time_of_day := 0.33
+var day_len := 600.0
+var time_scale := 1.0
+var grid := []
+var roadset := {}
+var astar := AStarGrid2D.new()
+var lights: Array = []
+var glow_mats: Array = []
+var doors: Array = []
+var player: Node3D
+var field: Node3D
+var cam: Camera3D
+var cam_yaw := 0.0
+var cam_pitch := -0.78
+var cam_dist := 22.0
+var rot_drag := false
+var hud: Label
+var prompt: Label
+var click_marker: MeshInstance3D
+var shot_frames := -1
+var shot_name := ""
+var quality := 2
+var low_fps_t := 0.0
+
+# ---------- ข้อมูลผังเมือง (จากเกมเดิม) ----------
+# ข้อมูลเมืองจริง (ดึงจากเกมเว็บที่รันอยู่: SHOP_DATA, NPC_DATA, dm, D.road, D.doors, LAMP_DATA, STALL_DATA)
+var TD: Dictionary = {}
+var shops_by_id := {}
+var npcs: Array = []
+var ui_dialog: PanelContainer
+var ui_dname: Label
+var ui_dtext: Label
+var ui_shop: PanelContainer
+var ui_shop_body: VBoxContainer
+var talk_target = null
+var talk_idx := 0
+var in_door := ""
+var _last_place := ""
+var _test_auto := false
+const STYLE := {
+    "gear": {"roof": Color(0.3, 0.32, 0.36), "wall": Color(0.42, 0.33, 0.26), "kind": "forge"},
+    "seal113": {"roof": Color(0.42, 0.2, 0.55), "wall": Color(0.5, 0.46, 0.55), "kind": "gothic"},
+    "skill": {"roof": Color(0.2, 0.33, 0.66), "wall": Color(0.74, 0.68, 0.56), "kind": "gothic"},
+    "store": {"roof": Color(0.24, 0.5, 0.3), "wall": Color(0.76, 0.68, 0.54), "kind": "shop"},
+    "inn": {"roof": Color(0.66, 0.18, 0.15), "wall": Color(0.78, 0.7, 0.56), "kind": "inn"},
+    "potion": {"roof": Color(0.26, 0.5, 0.28), "wall": Color(0.76, 0.7, 0.58), "kind": "potion"},
+    "guild": {"roof": Color(0.16, 0.38, 0.44), "wall": Color(0.62, 0.56, 0.46), "kind": "guild"},
+    "bank": {"roof": Color(0.18, 0.3, 0.6), "wall": Color(0.8, 0.76, 0.66), "kind": "bank"},
+    "fashion": {"roof": Color(0.74, 0.26, 0.36), "wall": Color(0.82, 0.74, 0.66), "kind": "shop"},
+    "ware": {"roof": Color(0.8, 0.42, 0.18), "wall": Color(0.76, 0.68, 0.54), "kind": "house"},
+}
+const TREES := [[2, 9], [14, 3], [29, 9], [42, 9], [2, 14], [2, 27], [3, 31], [8, 31], [12, 31], [31, 31], [38, 31], [29, 3], [13, 8]]
+const LAMPS := [[14, 15], [34, 15], [13, 18], [29, 18], [15, 10], [28, 10], [12, 23], [31, 23], [14, 30], [20, 30], [23, 30], [34, 30]]
+const STALLS := [[16, 20], [18, 20], [25, 20], [27, 20]]
+const FLOWERS := [[16, 11, 2, 1], [26, 11, 2, 1], [4, 30, 3, 2], [35, 30, 2, 2], [30, 9, 4, 1], [10, 9, 4, 1]]
+const SPAWN := Vector2(7.0, 21.5)
+
+func tw(x: float, y: float) -> Vector3:
+    return Vector3(OX + x * TS, 0.0, OZ + y * TS)
+
+func _ready() -> void:
+    seed(5)
+    font = load("res://fonts/Kanit-Regular.ttf")
+    font_b = load("res://fonts/Kanit-SemiBold.ttf")
+    noise.seed = 11
+    noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+    noise.frequency = 0.01
+    noise.fractal_octaves = 4
+    noise_tex = NoiseTexture2D.new()
+    noise_tex.width = 512
+    noise_tex.height = 512
+    noise_tex.seamless = true
+    var tn := FastNoiseLite.new()
+    tn.frequency = 0.02
+    tn.fractal_octaves = 3
+    noise_tex.noise = tn
+    _layout()
+    _setup_env()
+    _build_terrain()
+    _build_ground()
+    _build_walls()
+    _build_castle()
+    _build_shops()
+    _build_temple()
+    _build_plaza()
+    _build_training()
+    _build_props()
+    _build_outside()
+    _build_grass()
+    _build_npcs()
+    _build_player()
+    _setup_hud()
+    field = Node3D.new()
+    field.set_script(load("res://scripts/field.gd"))
+    add_child(field)
+    field.setup(self)
+    var args := OS.get_cmdline_user_args()
+    for a in args:
+        if a.begins_with("--shot="):
+            var p := a.substr(7).split(",")
+            shot_name = p[0]
+            time_of_day = float(p[1])
+            cam_yaw = float(p[2])
+            cam_dist = float(p[3])
+            if p.size() > 5:
+                player.position = tw(float(p[4]), float(p[5]))
+            time_scale = 0.0
+            shot_frames = 45
+            if p.size() > 6:
+                call_deferred("_test_ui", p[6])
+
+# ---------- ช่องเดินได้/เดินไม่ได้ ----------
+func _box(x: int, y: int, w: int, hh: int, v: int = 1) -> void:
+    for j in range(y, y + hh):
+        for i in range(x, x + w):
+            if j >= 0 and j < TH and i >= 0 and i < TW:
+                grid[j][i] = v
+
+func _road(x: int, y: int, w: int, hh: int) -> void:
+    for j in range(y, y + hh):
+        for i in range(x, x + w):
+            roadset[j * TW + i] = true
+
+func _layout() -> void:
+    var f := FileAccess.open("res://data/town.json", FileAccess.READ)
+    TD = JSON.parse_string(f.get_as_text())
+    for sh in TD.shops:
+        shops_by_id[sh.id] = sh
+    grid = []
+    var dmr: Array = TD.dm
+    for y in TH:
+        var row := []
+        var line: String = dmr[y]
+        for x in TW:
+            var v := int(line.substr(x, 1))
+            row.append(0 if v == 5 else v)
+        grid.append(row)
+    for k in TD.road:
+        roadset[int(k)] = true
+    for d in TD.doors:
+        var sh: Dictionary = shops_by_id.get(d.id, {})
+        doors.append({"n": sh.get("name", d.id), "p": Vector2(float(d.cx) / 32.0, float(d.cy) / 32.0), "id": d.id})
+    astar.region = Rect2i(0, 0, TW, TH)
+    astar.cell_size = Vector2(1, 1)
+    astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+    astar.update()
+    for y in TH:
+        for x in TW:
+            if grid[y][x] != 0:
+                astar.set_point_solid(Vector2i(x, y), true)
+
+func blocked(wx: float, wz: float) -> bool:
+    var tx := int(floor((wx - OX) / TS))
+    var ty := int(floor((wz - OZ) / TS))
+    if tx < 0 or ty < 0 or tx >= TW or ty >= TH:
+        return not (wx < OX and wx > -150.0 and abs(wz) < 52.0)
+    return grid[ty][tx] != 0
+
+func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
+    var fa := from.x < OX
+    var fb := to.x < OX
+    if fb and blocked(to.x, to.z):
+        return PackedVector3Array()
+    var gate_in := tw(0.5, 17.0)
+    var gate_out := tw(-1.0, 17.0)
+    if fa and fb:
+        return PackedVector3Array([Vector3(to.x, 0, to.z)])
+    if fa and not fb:
+        var rest := _grid_path(gate_in, to)
+        var out := PackedVector3Array([gate_out, gate_in])
+        out.append_array(rest)
+        return out
+    if fb and not fa:
+        var out2 := _grid_path(from, gate_in)
+        out2.append(gate_out)
+        out2.append(Vector3(to.x, 0, to.z))
+        return out2
+    return _grid_path(from, to)
+
+func _grid_path(from: Vector3, to: Vector3) -> PackedVector3Array:
+    var a := Vector2i(int((from.x - OX) / TS), int((from.z - OZ) / TS))
+    var b := Vector2i(int((to.x - OX) / TS), int((to.z - OZ) / TS))
+    var out := PackedVector3Array()
+    if not astar.region.has_point(a) or not astar.region.has_point(b):
+        return out
+    if astar.is_point_solid(b):
+        var best := b
+        var bd := 1e9
+        for dy in range(-3, 4):
+            for dx in range(-3, 4):
+                var c := b + Vector2i(dx, dy)
+                if astar.region.has_point(c) and not astar.is_point_solid(c):
+                    var dd := Vector2(c - a).length() * 0.05 + Vector2(dx, dy).length()
+                    if dd < bd:
+                        bd = dd
+                        best = c
+        b = best
+        to = tw(b.x + 0.5, b.y + 0.5)
+    var pts := astar.get_id_path(a, b)
+    for i in range(1, pts.size()):
+        var p: Vector2i = pts[i]
+        out.append(tw(p.x + 0.5, p.y + 0.5))
+    if out.size() > 0:
+        out[out.size() - 1] = Vector3(to.x, 0, to.z)
+    return out
+
+# ---------- ฟ้า แสง ----------
+func _setup_env() -> void:
+    env = Environment.new()
+    env.background_mode = Environment.BG_SKY
+    var sky := Sky.new()
+    sky_mat = ProceduralSkyMaterial.new()
+    sky.sky_material = sky_mat
+    env.sky = sky
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+    env.tonemap_mode = Environment.TONE_MAPPER_ACES
+    env.tonemap_white = 6.0
+    env.tonemap_exposure = 0.88
+    env.ssao_enabled = true
+    env.ssao_radius = 1.0
+    env.ssao_intensity = 2.0
+    env.glow_enabled = true
+    env.glow_intensity = 0.45
+    env.glow_bloom = 0.05
+    env.glow_hdr_threshold = 1.3
+    env.fog_enabled = true
+    env.fog_density = 0.0008
+    env.fog_aerial_perspective = 0.15
+    env.fog_sky_affect = 0.2
+    env.volumetric_fog_enabled = true
+    env.volumetric_fog_density = 0.005
+    env.volumetric_fog_anisotropy = 0.6
+    env.volumetric_fog_length = 100.0
+    env.adjustment_enabled = true
+    env.adjustment_saturation = 1.12
+    env.adjustment_contrast = 1.04
+    var we := WorldEnvironment.new()
+    we.environment = env
+    add_child(we)
+    sun = DirectionalLight3D.new()
+    sun.shadow_enabled = true
+    sun.directional_shadow_max_distance = 120.0
+    sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+    sun.light_angular_distance = 0.7
+    sun.light_volumetric_fog_energy = 1.4
+    add_child(sun)
+    moon = DirectionalLight3D.new()
+    moon.light_color = Color(0.55, 0.65, 1.0)
+    moon.shadow_enabled = false
+    add_child(moon)
+    _update_sky()
+
+func _update_sky() -> void:
+    var ang := (time_of_day - 0.25) * TAU
+    var elev := sin(ang)
+    sun.rotation = Vector3(-ang, deg_to_rad(-30.0), 0.0)
+    var day: float = clamp(elev * 3.0 + 0.15, 0.0, 1.0)
+    var low: float = clamp(1.0 - elev * 2.6, 0.0, 1.0) * day
+    sun.light_color = Color(1.0, 0.96, 0.88).lerp(Color(1.0, 0.58, 0.32), low)
+    sun.light_energy = 1.25 * day
+    sun.visible = day > 0.01
+    moon.rotation = Vector3(deg_to_rad(-55.0), deg_to_rad(150.0), 0.0)
+    moon.light_energy = 0.35 * (1.0 - day)
+    var top := Color(0.02, 0.03, 0.09).lerp(Color(0.3, 0.52, 0.85).lerp(Color(0.3, 0.32, 0.55), low), day)
+    var hor := Color(0.06, 0.08, 0.16).lerp(Color(0.72, 0.82, 0.92).lerp(Color(1.0, 0.62, 0.38), low), day)
+    sky_mat.sky_top_color = top
+    sky_mat.sky_horizon_color = hor
+    sky_mat.ground_horizon_color = hor.darkened(0.15)
+    sky_mat.ground_bottom_color = hor.darkened(0.6)
+    sky_mat.sun_angle_max = 18.0 + low * 25.0
+    env.fog_light_color = hor.lerp(Color(0.5, 0.6, 0.75), 0.3)
+    env.ambient_light_energy = lerp(0.3, 0.5, day)
+    env.volumetric_fog_albedo = Color(1, 1, 1).lerp(Color(1.0, 0.8, 0.65), low)
+    var night := 1.0 - day
+    for l in lights:
+        l.light_energy = night * 2.6
+    for m in glow_mats:
+        m.emission_energy_multiplier = 0.3 + night * 3.0
+
+# ---------- พื้นที่ ----------
+func h(x: float, z: float) -> float:
+    var dx: float = max(abs(x) - 46.0, 0.0)
+    var dz: float = max(abs(z) - 36.0, 0.0)
+    var dt := sqrt(dx * dx + dz * dz)
+    var ex: float = max(max(-150.0 - x, x + 46.0), 0.0)
+    var ez: float = max(abs(z) - 52.0, 0.0)
+    var df := sqrt(ex * ex + ez * ez)
+    var d: float = min(dt, df)
+    var n := noise.get_noise_2d(x, z) * 7.0 + noise.get_noise_2d(x * 3.1, z * 3.1) * 1.0
+    var f := smoothstep(4.0, 40.0, d)
+    var rim := pow(smoothstep(70.0, 125.0, d), 1.4) * 30.0
+    # ทุ่งหญ้า: เนินเตี้ย ๆ เดินได้
+    var roll := 0.0
+    if df < 6.0:
+        roll = (noise.get_noise_2d(x * 0.6 + 50.0, z * 0.6) * 1.4 + 0.5) * clamp((-48.0 - x) / 12.0, 0.0, 1.0) * (1.0 - smoothstep(0.0, 6.0, df))
+    return n * f + rim + roll - 0.06
+
+func ground_y(x: float, z: float) -> float:
+    if abs(x) <= 44.0 and abs(z) <= 34.0:
+        return 0.0
+    return h(x, z)
+
+func in_field_rect(x: float, z: float, pad: float) -> bool:
+    return x > -150.0 - pad and x < -44.0 and abs(z) < 52.0 + pad
+
+func _build_terrain() -> void:
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    var n := 230
+    var step := HALF * 2.0 / n
+    var verts := []
+    for zi in n + 1:
+        for xi in n + 1:
+            var x := -HALF + xi * step
+            var z := -HALF + zi * step
+            var pm := 0.0
+            if abs(z - 1.0) < 3.0 and ((x > 44.0 and x < 120.0) or (x < -44.0 and x > -150.0)):
+                pm = 1.0 - smoothstep(1.5, 3.0, abs(z - 1.0))
+            verts.append([Vector3(x, h(x, z), z), Color(pm, 0.0, 0.0)])
+    for zi in n:
+        for xi in n:
+            var i0 := zi * (n + 1) + xi
+            for qi in [i0, i0 + 1, i0 + n + 1, i0 + 1, i0 + n + 2, i0 + n + 1]:
+                st.set_color(verts[qi][1])
+                st.add_vertex(verts[qi][0])
+    st.index()
+    st.generate_normals()
+    var mi := MeshInstance3D.new()
+    mi.mesh = st.commit()
+    var mat := ShaderMaterial.new()
+    mat.shader = load("res://shaders/terrain.gdshader")
+    mat.set_shader_parameter("noise_tex", noise_tex)
+    mi.material_override = mat
+    add_child(mi)
+
+func _build_ground() -> void:
+    var img := Image.create(TW, TH, false, Image.FORMAT_RGBA8)
+    for y in TH:
+        for x in TW:
+            var c := Color(0, 0, 0, 1)
+            if roadset.has(y * TW + x):
+                c.r = 1.0
+            if x >= 3 and x < 12 and y >= 18 and y < 27:
+                c = Color(0, 1, 0, 1)
+            if x >= 30 and x < 41 and y >= 19 and y < 24:
+                c = Color(0, 0, 1, 1)
+            img.set_pixel(x, y, c)
+    var tex := ImageTexture.create_from_image(img)
+    var pm := PlaneMesh.new()
+    pm.size = Vector2(TW * TS, TH * TS)
+    var mi := MeshInstance3D.new()
+    mi.mesh = pm
+    mi.position = Vector3(0, 0.0, 0)
+    var mat := ShaderMaterial.new()
+    mat.shader = load("res://shaders/town_ground.gdshader")
+    mat.set_shader_parameter("tilemap", tex)
+    mat.set_shader_parameter("noise_tex", noise_tex)
+    mi.material_override = mat
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
+
+# ---------- ตัวช่วยสร้างชิ้นส่วน ----------
+var _mats := {}
+func M(c: Color, rough: float = 0.85, emit: float = 0.0) -> StandardMaterial3D:
+    var key := str(c) + str(rough) + str(emit)
+    if _mats.has(key):
+        return _mats[key]
+    var m := StandardMaterial3D.new()
+    m.albedo_color = c
+    m.roughness = rough
+    if emit > 0.0:
+        m.emission_enabled = true
+        m.emission = c
+        m.emission_energy_multiplier = emit
+    _mats[key] = m
+    return m
+
+func box(parent: Node3D, size: Vector3, pos: Vector3, m: Material, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+    var bm := BoxMesh.new()
+    bm.size = size
+    var mi := MeshInstance3D.new()
+    mi.mesh = bm
+    mi.material_override = m
+    mi.position = pos
+    mi.rotation = rot
+    parent.add_child(mi)
+    return mi
+
+func cyl(parent: Node3D, rt: float, rb: float, hh: float, pos: Vector3, m: Material, seg: int = 16) -> MeshInstance3D:
+    var cm := CylinderMesh.new()
+    cm.top_radius = rt
+    cm.bottom_radius = rb
+    cm.height = hh
+    cm.radial_segments = seg
+    var mi := MeshInstance3D.new()
+    mi.mesh = cm
+    mi.material_override = m
+    mi.position = pos
+    parent.add_child(mi)
+    return mi
+
+func gable(parent: Node3D, w: float, d: float, hh: float, pos: Vector3, m: Material) -> MeshInstance3D:
+    # หลังคาจั่ว (สันหลังคาตามแกน X)
+    var pm := PrismMesh.new()
+    pm.size = Vector3(d, hh, w)
+    var mi := MeshInstance3D.new()
+    mi.mesh = pm
+    mi.material_override = m
+    mi.position = pos + Vector3(0, hh * 0.5, 0)
+    mi.rotation.y = PI / 2.0
+    parent.add_child(mi)
+    return mi
+
+func label3d(text: String, pos: Vector3, size: int = 48, col: Color = Color(1, 0.95, 0.8)) -> Label3D:
+    var l := Label3D.new()
+    l.text = text
+    l.font = font_b
+    l.font_size = size
+    l.pixel_size = 0.012
+    l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    l.modulate = col
+    l.outline_size = 14
+    l.outline_modulate = Color(0.1, 0.07, 0.04, 0.9)
+    l.position = pos
+    l.no_depth_test = false
+    add_child(l)
+    return l
+
+func lantern(p: Vector3, hh: float = 3.2) -> void:
+    var iron := M(Color(0.16, 0.16, 0.18), 0.5)
+    cyl(self, 0.07, 0.1, hh, p + Vector3(0, hh * 0.5, 0), iron, 8)
+    box(self, Vector3(0.5, 0.12, 0.5), p + Vector3(0, hh + 0.05, 0), iron)
+    var gm := StandardMaterial3D.new()
+    gm.albedo_color = Color(1.0, 0.8, 0.45)
+    gm.emission_enabled = true
+    gm.emission = Color(1.0, 0.7, 0.35)
+    gm.emission_energy_multiplier = 0.3
+    glow_mats.append(gm)
+    var g := box(self, Vector3(0.36, 0.45, 0.36), p + Vector3(0, hh - 0.25, 0), gm)
+    g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    box(self, Vector3(0.5, 0.1, 0.5), p + Vector3(0, hh - 0.52, 0), iron)
+    var ol := OmniLight3D.new()
+    ol.light_color = Color(1.0, 0.7, 0.4)
+    ol.omni_range = 10.0
+    ol.omni_attenuation = 1.4
+    ol.light_energy = 0.0
+    ol.position = p + Vector3(0, hh - 0.3, 0)
+    add_child(ol)
+    lights.append(ol)
+
+func window(parent: Node3D, pos: Vector3, size: Vector2, rot: float = 0.0) -> void:
+    var gm := StandardMaterial3D.new()
+    gm.albedo_color = Color(0.35, 0.42, 0.5)
+    gm.roughness = 0.2
+    gm.emission_enabled = true
+    gm.emission = Color(1.0, 0.72, 0.38)
+    gm.emission_energy_multiplier = 0.3
+    glow_mats.append(gm)
+    var w := box(parent, Vector3(size.x, size.y, 0.08), pos, gm, Vector3(0, rot, 0))
+    w.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    box(parent, Vector3(size.x + 0.18, 0.1, 0.18), pos - Vector3(0, size.y * 0.5 + 0.05, 0).rotated(Vector3.UP, rot), M(Color(0.35, 0.22, 0.12)), Vector3(0, rot, 0))
+
+# ---------- กำแพงเมือง ----------
+func tower(p: Vector3, r: float, hh: float, roof: Color, flag: bool) -> void:
+    var stone := M(Color(0.6, 0.57, 0.52), 0.95)
+    cyl(self, r, r * 1.08, hh, p + Vector3(0, hh * 0.5, 0), stone, 18)
+    cyl(self, r * 1.15, r * 1.15, 0.6, p + Vector3(0, hh, 0), M(Color(0.52, 0.5, 0.46), 0.95), 18)
+    for i in 10:
+        var a := i * TAU / 10.0
+        box(self, Vector3(0.6, 0.8, 0.5), p + Vector3(cos(a) * r * 1.05, hh + 0.7, sin(a) * r * 1.05), stone, Vector3(0, -a, 0))
+    cyl(self, 0.0, r * 1.2, r * 1.9, p + Vector3(0, hh + 0.35 + r * 0.95, 0), M(roof, 0.65), 18)
+    for i in 3:
+        var a2 := i * TAU / 3.0 + 0.4
+        window(self, p + Vector3(cos(a2) * (r + 0.02), hh * 0.65, sin(a2) * (r + 0.02)), Vector2(0.45, 0.9), -a2 + PI / 2.0)
+    if flag:
+        cyl(self, 0.05, 0.05, 2.6, p + Vector3(0, hh + r * 1.9 + 1.4, 0), M(Color(0.3, 0.2, 0.12)), 6)
+        var fl := box(self, Vector3(1.4, 0.8, 0.04), p + Vector3(0.72, hh + r * 1.9 + 2.3, 0), M(Color(0.2, 0.3, 0.7), 0.8))
+        fl.set_meta("flag", true)
+
+func _build_walls() -> void:
+    var stone := M(Color(0.55, 0.52, 0.48), 0.95)
+    var dark := M(Color(0.44, 0.42, 0.39), 0.95)
+    var hh := 5.5
+    # แนวกำแพง: เหนือ ใต้ ตะวันตก (เว้นประตู) ตะวันออก (เว้นประตู)
+    var segs := [
+        [tw(0, 0.5), tw(44, 0.5)], [tw(0, 33.5), tw(44, 33.5)],
+        [tw(0.5, 0), tw(0.5, 16)], [tw(0.5, 18), tw(0.5, 34)],
+        [tw(43.5, 0), tw(43.5, 16)], [tw(43.5, 18), tw(43.5, 34)],
+    ]
+    for s in segs:
+        var a: Vector3 = s[0]
+        var b: Vector3 = s[1]
+        var mid := (a + b) * 0.5
+        var horiz: bool = abs(a.z - b.z) < 0.01
+        var len := a.distance_to(b)
+        var size := Vector3(len, hh, 1.8) if horiz else Vector3(1.8, hh, len)
+        box(self, size, mid + Vector3(0, hh * 0.5, 0), stone)
+        var cnt := int(len / 1.4)
+        for i in cnt:
+            var t := (i + 0.5) / cnt
+            var q := a.lerp(b, t)
+            if i % 2 == 0:
+                box(self, Vector3(0.8, 0.9, 1.9) if horiz else Vector3(1.9, 0.9, 0.8), q + Vector3(0, hh + 0.45, 0), dark)
+    # ประตูเมืองตะวันตก/ตะวันออก (ซุ้มโค้งด้านบน)
+    for gx in [0.5, 43.5]:
+        var c := tw(gx, 17)
+        box(self, Vector3(2.2, 1.6, 4.4), c + Vector3(0, hh - 0.2, 0), stone)
+        var arch := cyl(self, 2.0, 2.0, 2.0, c + Vector3(0, hh - 1.0, 0), dark, 20)
+        arch.rotation.z = PI / 2.0
+        arch.scale = Vector3(1, 1, 0.6)
+        label3d("⬅ ทุ่งหญ้า" if gx < 1 else "ถนนสู่นครวารี ➡", c + Vector3(0, hh + 1.8, 0), 40)
+    for p in [[1, 1], [TW - 2, 1], [1, TH - 2], [TW - 2, TH - 2]]:
+        tower(tw(p[0] + 0.5, p[1] + 0.5), 2.6, 9.0, Color(0.68, 0.24, 0.16), true)
+    for gx in [1, TW - 2]:
+        for gy in [14, 19]:
+            tower(tw(gx + 0.5, gy + 0.5), 1.9, 7.5, Color(0.68, 0.24, 0.16), false)
+
+# ---------- ปราสาท ----------
+func _build_castle() -> void:
+    var c := tw(22, 4.8)
+    var stone := M(Color(0.7, 0.68, 0.63), 0.9)
+    var stone2 := M(Color(0.58, 0.56, 0.52), 0.9)
+    var blue := M(Color(0.2, 0.32, 0.66), 0.55)
+    var gold := M(Color(0.9, 0.72, 0.3), 0.35)
+    # ฐานและกำแพงปราสาท
+    box(self, Vector3(27, 1.2, 15), c + Vector3(0, 0.6, 0), stone2)
+    box(self, Vector3(24, 9, 10), c + Vector3(0, 5.2, -1.5), stone)
+    for i in 16:
+        var x := -11.6 + i * 1.55
+        box(self, Vector3(0.8, 1.0, 10.2), c + Vector3(x, 10.2, -1.5), stone2)
+    # ตึกกลางสูง
+    box(self, Vector3(9, 15, 7), c + Vector3(0, 8.7, -2.5), stone)
+    gable(self, 9.8, 7.8, 4.2, c + Vector3(0, 16.2, -2.5), M(Color(0.72, 0.2, 0.18), 0.6))
+    for k in 5:
+        var cpt := cyl(self, 0.0, 0.35, 1.2, c + Vector3(-1.2 + k * 0.6, 21.4, -0.6), gold, 6)
+    box(self, Vector3(3.2, 0.5, 0.5), c + Vector3(0, 20.6, -0.6), gold)
+    cyl(self, 1.7, 1.9, 21, c + Vector3(0, 10.5, -2.5), stone2, 18)
+    cyl(self, 0.0, 2.4, 5.2, c + Vector3(0, 23.6, -2.5), blue, 18)
+    cyl(self, 0.05, 0.05, 2.5, c + Vector3(0, 27.4, -2.5), gold, 6)
+    var fl := box(self, Vector3(1.8, 1.0, 0.05), c + Vector3(0.95, 28.1, -2.5), M(Color(0.85, 0.15, 0.15), 0.8))
+    fl.set_meta("flag", true)
+    # หอคอยสี่มุม
+    for p in [Vector3(-12, 0, -6), Vector3(12, 0, -6), Vector3(-12, 0, 3.5), Vector3(12, 0, 3.5)]:
+        tower(c + p, 2.4, 13.0, Color(0.2, 0.32, 0.66), true)
+    # ซุ้มประตูหน้า (ช่อง 21-22 แถว 8)
+    var g := tw(22, 8.6)
+    box(self, Vector3(7, 7, 3), g + Vector3(0, 3.5, -0.8), stone)
+    box(self, Vector3(3.2, 4.2, 0.4), g + Vector3(0, 2.1, 0.75), M(Color(0.25, 0.15, 0.08), 0.8))
+    var arch := cyl(self, 1.6, 1.6, 0.42, g + Vector3(0, 4.2, 0.76), M(Color(0.25, 0.15, 0.08), 0.8), 20)
+    arch.rotation.x = PI / 2.0
+    for i in 5:
+        box(self, Vector3(0.8, 0.8, 3.1), g + Vector3(-3.0 + i * 1.5, 7.4, -0.8), stone2)
+    gable(self, 7.6, 3.6, 2.0, g + Vector3(0, 7.0, -0.8), blue)
+    for s in [-1, 1]:
+        var bn := box(self, Vector3(1.2, 3.0, 0.08), g + Vector3(s * 2.6, 4.5, 0.75), M(Color(0.2, 0.3, 0.7), 0.8))
+        box(self, Vector3(0.5, 0.5, 0.1), g + Vector3(s * 2.6, 5.0, 0.8), gold)
+    for i in 6:
+        window(self, c + Vector3(-9.5 + i * 3.8, 6.5, 3.52), Vector2(0.9, 1.6))
+    for i in 3:
+        window(self, c + Vector3(-2.6 + i * 2.6, 11.5, 1.02), Vector2(0.8, 1.8))
+    label3d("ปราสาทเอลโดเรีย", g + Vector3(0, 9.6, 0.5), 56, Color(1.0, 0.9, 0.55))
+
+# ---------- ร้านค้าและบ้าน (ตำแหน่ง/ชื่อจากเกมจริง สีหลังคาตามภาพเมืองเดิม) ----------
+func _spire(parent: Node3D, pos: Vector3, r: float, hh: float, m: Material) -> void:
+    cyl(parent, 0.0, r, hh, pos + Vector3(0, hh * 0.5, 0), m, 8)
+
+func _building(b: Array, st: Dictionary, title: String, sid: String) -> void:
+    var beam := M(Color(0.3, 0.19, 0.11), 0.85)
+    var stone := M(Color(0.5, 0.48, 0.45), 0.95)
+    var wall := M(st.wall, 0.9)
+    var roof := M(st.roof, 0.65)
+    var gold := M(Color(0.9, 0.72, 0.3), 0.3)
+    var w: float = b[2] * TS
+    var d: float = b[3] * TS
+    var root := Node3D.new()
+    root.position = tw(b[0] + b[2] * 0.5, b[1] + b[3] * 0.5)
+    add_child(root)
+    var big: bool = b[3] >= 6
+    var wh := 4.6 if big else 3.6
+    box(root, Vector3(w - 0.1, 0.6, d - 0.1), Vector3(0, 0.3, 0), stone)
+    box(root, Vector3(w - 0.6, wh, d - 0.9), Vector3(0, 0.6 + wh * 0.5, -0.1), wall)
+    for cx in [-1, 1]:
+        for cz in [-1, 1]:
+            box(root, Vector3(0.3, wh, 0.3), Vector3(cx * (w * 0.5 - 0.35), 0.6 + wh * 0.5, cz * (d * 0.5 - 0.5) - 0.1), beam)
+    var fz := d * 0.5 - 0.53
+    box(root, Vector3(w - 0.4, 0.26, 0.3), Vector3(0, 0.6 + wh, fz), beam)
+    box(root, Vector3(w - 0.4, 0.2, 0.3), Vector3(0, 0.6 + wh * 0.52, fz), beam)
+    for i in 4:
+        box(root, Vector3(0.16, wh, 0.12), Vector3(-w * 0.36 + i * w * 0.24, 0.6 + wh * 0.5, fz + 0.03), beam)
+    var rh := 2.4 + d * 0.14
+    gable(root, w + 0.7, d + 0.5, rh, Vector3(0, 0.6 + wh + 0.05, -0.1), roof)
+    if st.kind == "gothic":
+        for sx in [-1, 1]:
+            box(root, Vector3(1.4, wh + 2.0, 1.4), Vector3(sx * (w * 0.5 - 0.7), 0.6 + (wh + 2.0) * 0.5, fz - 0.4), wall)
+            _spire(root, Vector3(sx * (w * 0.5 - 0.7), 0.6 + wh + 2.0, fz - 0.4), 1.0, 3.4, roof)
+        _spire(root, Vector3(0, 0.6 + wh + rh - 0.2, -0.1), 0.7, 3.0, roof)
+    if st.kind == "inn" or st.kind == "house" or big:
+        box(root, Vector3(w - 1.2, 0.2, 1.0), Vector3(0, 0.6 + wh * 0.55, fz + 0.5), beam)
+    box(root, Vector3(1.0, 2.6, 0.9), Vector3(w * 0.3, 0.6 + wh + rh * 0.65, -d * 0.15), stone)
+    # ประตูโค้ง + หน้าต่าง
+    box(root, Vector3(1.5, 2.3, 0.14), Vector3(0, 0.6 + 1.15, fz + 0.05), M(Color(0.34, 0.2, 0.1), 0.8))
+    var ar := cyl(root, 0.75, 0.75, 0.15, Vector3(0, 0.6 + 2.3, fz + 0.05), M(Color(0.34, 0.2, 0.1), 0.8), 16)
+    ar.rotation.x = PI / 2.0
+    box(root, Vector3(2.4, 0.3, 1.0), Vector3(0, 0.15, fz + 0.75), stone)
+    for sx in [-1, 1]:
+        window(root, Vector3(sx * w * 0.3, 0.6 + wh * 0.68, fz + 0.05), Vector2(0.9, 1.0))
+        if big or st.kind == "inn":
+            window(root, Vector3(sx * w * 0.3, 0.6 + wh * 0.3, fz + 0.05), Vector2(0.9, 0.9))
+    # ของประจำร้าน
+    match st.kind:
+        "forge":
+            var fire := box(root, Vector3(1.2, 0.8, 0.8), Vector3(-w * 0.33, 0.6 + 0.4, fz + 1.0), M(Color(1.0, 0.45, 0.1), 0.5, 3.0))
+            fire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            var fl := OmniLight3D.new()
+            fl.light_color = Color(1.0, 0.5, 0.2)
+            fl.omni_range = 6.0
+            fl.light_energy = 1.4
+            fl.position = Vector3(-w * 0.33, 1.6, fz + 1.2)
+            root.add_child(fl)
+            box(root, Vector3(0.7, 0.5, 0.4), Vector3(w * 0.3, 0.85, fz + 1.1), M(Color(0.2, 0.2, 0.22), 0.4))
+            box(root, Vector3(0.4, 0.5, 0.3), Vector3(w * 0.3, 0.45, fz + 1.1), M(Color(0.3, 0.2, 0.12)))
+        "gothic":
+            if sid == "seal113":
+                var orb := MeshInstance3D.new()
+                var sm := SphereMesh.new()
+                sm.radius = 0.6
+                sm.height = 1.2
+                orb.mesh = sm
+                orb.material_override = M(Color(0.75, 0.4, 1.0), 0.2, 2.5)
+                orb.position = Vector3(0, 0.6 + wh + rh + 3.4, -0.1)
+                root.add_child(orb)
+                var ol := OmniLight3D.new()
+                ol.light_color = Color(0.7, 0.4, 1.0)
+                ol.omni_range = 8.0
+                ol.light_energy = 1.3
+                ol.position = orb.position
+                root.add_child(ol)
+            else:
+                var em := cyl(root, 0.6, 0.6, 0.1, Vector3(0, 0.6 + wh * 0.85, fz + 0.12), gold, 20)
+                em.rotation.x = PI / 2.0
+        "inn":
+            for k in 3:
+                cyl(root, 0.32, 0.3, 0.8, Vector3(w * 0.38 - k * 0.7, 0.4, fz + 1.2), M(Color(0.5, 0.32, 0.16)), 10)
+            cyl(root, 0.55, 0.55, 0.08, Vector3(-w * 0.32, 0.8, fz + 1.4), M(Color(0.5, 0.32, 0.16)), 12)
+        "potion":
+            for k in 4:
+                var bt := cyl(root, 0.12, 0.18, 0.45, Vector3(-w * 0.35 + k * 0.4, 0.85, fz + 0.8), M([Color(0.3, 0.8, 0.4), Color(0.7, 0.3, 0.9), Color(0.9, 0.3, 0.3), Color(0.3, 0.5, 0.95)][k], 0.15, 0.8), 8)
+                bt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            box(root, Vector3(w - 1.0, 0.4, 0.6), Vector3(0, 0.4, fz + 1.4), M(Color(0.35, 0.25, 0.15)))
+            for k in 10:
+                var fl2 := MeshInstance3D.new()
+                var fsm := SphereMesh.new()
+                fsm.radius = 0.14
+                fsm.height = 0.22
+                fl2.mesh = fsm
+                fl2.material_override = M(Color(0.65, 0.4, 0.9), 0.7)
+                fl2.position = Vector3(-w * 0.4 + k * (w * 0.8 / 9.0), 0.7, fz + 1.45)
+                root.add_child(fl2)
+        "guild":
+            var sh := box(root, Vector3(1.1, 1.3, 0.12), Vector3(0, 0.6 + wh * 0.85, fz + 0.12), M(Color(0.65, 0.18, 0.15), 0.6))
+            var sw := box(root, Vector3(0.12, 1.6, 0.06), Vector3(0, 0.6 + wh * 0.85, fz + 0.2), M(Color(0.85, 0.86, 0.9), 0.3))
+            sw.rotation.z = 0.6
+        "bank":
+            for sx in [-1, 1]:
+                cyl(root, 0.25, 0.28, wh, Vector3(sx * 1.2, 0.6 + wh * 0.5, fz + 0.6), M(Color(0.86, 0.84, 0.78), 0.5), 12)
+            var coin := cyl(root, 0.55, 0.55, 0.12, Vector3(0, 0.6 + wh + 0.4, fz + 0.3), gold, 20)
+            coin.rotation.x = PI / 2.0
+        "shop":
+            for k in 6:
+                var cc: Color = st.roof if k % 2 == 0 else Color(0.95, 0.92, 0.86)
+                box(root, Vector3(w * 0.8 / 6.0, 0.06, 1.3), Vector3(-w * 0.4 + (k + 0.5) * w * 0.8 / 6.0, 0.6 + wh * 0.5, fz + 0.6), M(cc, 0.8), Vector3(0.35, 0, 0))
+    # ป้ายแขวน
+    if sid != "ware":
+        box(root, Vector3(0.12, 0.12, 1.0), Vector3(-w * 0.5 + 0.5, 0.6 + wh * 0.82, fz + 0.5), beam)
+        box(root, Vector3(1.2, 0.75, 0.08), Vector3(-w * 0.5 + 0.5, 0.6 + wh * 0.82 - 0.45, fz + 0.95), M(st.roof.lightened(0.2), 0.7))
+    label3d(title, root.position + Vector3(0, 0.6 + wh + rh + (4.4 if st.kind == "gothic" else 1.4), 0), 42)
+
+func _build_shops() -> void:
+    for sid in STYLE.keys():
+        var sh: Dictionary = shops_by_id.get(sid, {})
+        if sh.is_empty() or sh.b == null:
+            continue
+        _building(sh.b, STYLE[sid], sh.name, sid)
+    # บ้านมุมซ้ายบน (3,3) และที่ดินแปลงหญ้าขวาบน (ตามภาพเมืองเดิม)
+    _building([3, 3, 5, 4], {"roof": Color(0.72, 0.28, 0.16), "wall": Color(0.78, 0.7, 0.56), "kind": "house"}, "บ้านชาวเมือง", "ware")
+    var plot := tw(38.5, 4.5)
+    box(self, Vector3(10.6, 0.5, 8.2), plot + Vector3(0, 0.25, 0), M(Color(0.33, 0.55, 0.22), 0.95))
+    box(self, Vector3(10.8, 1.2, 0.8), plot + Vector3(0, 0.6, 3.9), M(Color(0.5, 0.5, 0.5), 0.95))
+    for i in 12:
+        cyl(self, 0.07, 0.08, 1.0, plot + Vector3(-5.2 + i * 0.95, 0.9, -3.9), M(Color(0.45, 0.3, 0.16)), 5)
+
+# ---------- วิหารแห่งแสง (จุดเกิด) ----------
+func _build_temple() -> void:
+    # ตามภาพเมืองเดิม: ลานหินอ่อน วงเวทสีฟ้ากลางลาน ศาลเล็กหลังคาฟ้าด้านบน คริสตัลสี่มุม
+    var marble := M(Color(0.7, 0.68, 0.64), 0.45)
+    var blue := M(Color(0.22, 0.4, 0.75), 0.5)
+    var glow := M(Color(0.35, 0.7, 1.0), 0.2, 2.2)
+    box(self, Vector3(18, 0.12, 18), tw(7.5, 22.5) + Vector3(0, 0.06, 0), marble)
+    for p in [[3, 19], [11, 19], [3, 24], [11, 24]]:
+        var q := tw(p[0] + 0.5, p[1] + 0.5)
+        box(self, Vector3(1.2, 1.4, 1.2), q + Vector3(0, 0.7, 0), marble)
+        var cr := cyl(self, 0.0, 0.38, 1.2, q + Vector3(0, 2.0, 0), glow, 6)
+        cr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        var cr2 := cyl(self, 0.38, 0.0, 0.5, q + Vector3(0, 1.15, 0), glow, 6)
+        cr2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    # วงเวทกลางลาน (จุดเกิด)
+    var mc := tw(7.5, 22.0)
+    for rr in [2.6, 3.0]:
+        var ring := MeshInstance3D.new()
+        var tm := TorusMesh.new()
+        tm.inner_radius = rr
+        tm.outer_radius = rr + 0.18
+        ring.mesh = tm
+        ring.material_override = glow
+        ring.position = mc + Vector3(0, 0.14, 0)
+        ring.scale = Vector3(1, 0.04, 1)
+        add_child(ring)
+    var disc := cyl(self, 2.6, 2.6, 0.03, mc + Vector3(0, 0.13, 0), M(Color(0.12, 0.2, 0.42), 0.4), 40)
+    disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    for k in 5:
+        var a1 := -PI / 2.0 + k * TAU / 5.0
+        var a2 := -PI / 2.0 + (k + 2) * TAU / 5.0
+        var p1 := Vector3(cos(a1), 0, sin(a1)) * 2.5
+        var p2 := Vector3(cos(a2), 0, sin(a2)) * 2.5
+        var ln := box(self, Vector3(p1.distance_to(p2), 0.03, 0.12), mc + (p1 + p2) * 0.5 + Vector3(0, 0.16, 0), glow, Vector3(0, -atan2(p2.z - p1.z, p2.x - p1.x), 0))
+        ln.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    var ol := OmniLight3D.new()
+    ol.light_color = Color(0.5, 0.75, 1.0)
+    ol.omni_range = 9.0
+    ol.light_energy = 1.0
+    ol.position = mc + Vector3(0, 1.5, 0)
+    add_child(ol)
+    # ศาลเล็กด้านบน
+    var sh := tw(7.5, 18.9)
+    box(self, Vector3(5.4, 0.4, 2.6), sh + Vector3(0, 0.2, 0), marble)
+    for sx in [-1, 1]:
+        cyl(self, 0.22, 0.25, 2.6, sh + Vector3(sx * 2.2, 1.7, 0.7), marble, 10)
+    box(self, Vector3(4.8, 2.6, 0.5), sh + Vector3(0, 1.7, -0.7), marble)
+    gable(self, 6.0, 3.0, 1.4, sh + Vector3(0, 3.0, 0), blue)
+    var stg := cyl(self, 0.35, 0.35, 0.9, sh + Vector3(0, 0.85, -0.2), glow, 8)
+    # รูปปั้น/ป้ายด้านล่าง
+    var st := tw(7, 26)
+    box(self, Vector3(3.0, 0.8, 2.6), st + Vector3(0, 0.4, 0), marble)
+    cyl(self, 0.3, 0.7, 2.2, st + Vector3(0, 1.9, 0), marble, 14)
+    var hd := MeshInstance3D.new()
+    var hs := SphereMesh.new()
+    hs.radius = 0.32
+    hs.height = 0.64
+    hd.mesh = hs
+    hd.material_override = marble
+    hd.position = st + Vector3(0, 3.3, 0)
+    add_child(hd)
+    for s2 in [-1, 1]:
+        box(self, Vector3(1.6, 1.8, 0.14), st + Vector3(s2 * 0.9, 2.7, -0.25), marble, Vector3(0, s2 * 0.35, s2 * -0.45))
+    label3d("วิหารแห่งแสง", sh + Vector3(0, 6.0, 0), 50, Color(1.0, 0.95, 0.7))
+
+# ---------- จัตุรัสกลาง: น้ำพุ แผงตลาด ----------
+func _water_mat() -> ShaderMaterial:
+    var m := ShaderMaterial.new()
+    m.shader = load("res://shaders/water.gdshader")
+    m.set_shader_parameter("noise_tex", noise_tex)
+    m.set_shader_parameter("deep", Color(0.08, 0.32, 0.45))
+    m.set_shader_parameter("shallow", Color(0.35, 0.7, 0.75))
+    m.set_shader_parameter("alpha", 0.85)
+    m.set_shader_parameter("wave", 0.02)
+    return m
+
+func _build_plaza() -> void:
+    var c := tw(22, 13)
+    var stone := M(Color(0.72, 0.7, 0.66), 0.6)
+    cyl(self, 3.3, 3.5, 0.9, c + Vector3(0, 0.45, 0), stone, 32)
+    var w := MeshInstance3D.new()
+    var wm := CylinderMesh.new()
+    wm.top_radius = 2.95
+    wm.bottom_radius = 2.95
+    wm.height = 0.05
+    wm.radial_segments = 32
+    w.mesh = wm
+    w.material_override = _water_mat()
+    w.position = c + Vector3(0, 0.8, 0)
+    add_child(w)
+    cyl(self, 0.35, 0.45, 2.4, c + Vector3(0, 1.6, 0), stone, 12)
+    cyl(self, 1.3, 1.1, 0.35, c + Vector3(0, 2.7, 0), stone, 24)
+    cyl(self, 0.18, 0.25, 1.4, c + Vector3(0, 3.5, 0), stone, 12)
+    cyl(self, 0.65, 0.5, 0.25, c + Vector3(0, 4.2, 0), stone, 20)
+    var ps := GPUParticles3D.new()
+    ps.amount = 140
+    ps.lifetime = 1.4
+    ps.position = c + Vector3(0, 4.4, 0)
+    var pm := ParticleProcessMaterial.new()
+    pm.direction = Vector3(0, 1, 0)
+    pm.spread = 28.0
+    pm.initial_velocity_min = 2.6
+    pm.initial_velocity_max = 3.4
+    pm.gravity = Vector3(0, -9.0, 0)
+    pm.scale_min = 0.5
+    pm.scale_max = 1.0
+    ps.process_material = pm
+    var q := QuadMesh.new()
+    q.size = Vector2(0.12, 0.12)
+    var qm := StandardMaterial3D.new()
+    qm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    qm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    qm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    qm.albedo_color = Color(0.8, 0.92, 1.0, 0.75)
+    q.material = qm
+    ps.draw_pass_1 = q
+    ps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(ps)
+    # ลายเข็มทิศกลางจัตุรัส
+    var cr := tw(22, 17)
+    for rr in [3.2, 3.6]:
+        var ring := MeshInstance3D.new()
+        var tmr := TorusMesh.new()
+        tmr.inner_radius = rr
+        tmr.outer_radius = rr + 0.16
+        ring.mesh = tmr
+        ring.material_override = M(Color(0.86, 0.82, 0.72), 0.6)
+        ring.position = cr + Vector3(0, 0.01, 0)
+        ring.scale = Vector3(1, 0.05, 1)
+        add_child(ring)
+    for k in 8:
+        var arm := box(self, Vector3(0.22, 0.02, 2.6 if k % 2 == 0 else 1.6), cr + Vector3(0, 0.02, 0), M(Color(0.86, 0.82, 0.72), 0.6), Vector3(0, k * PI / 4.0, 0))
+        arm.position += Vector3(sin(k * PI / 4.0), 0, cos(k * PI / 4.0)) * (1.3 if k % 2 == 0 else 0.8)
+    # แผงตลาด ผ้าใบลายทาง
+    var cols := [Color(0.75, 0.2, 0.18), Color(0.2, 0.42, 0.7), Color(0.85, 0.65, 0.2), Color(0.3, 0.55, 0.3)]
+    var stl: Array = TD.stalls
+    for i in stl.size():
+        var s := [int(stl[i].x), int(stl[i].y)]
+        var p := tw(s[0] + 1.0, s[1] + 0.5)
+        var wood := M(Color(0.45, 0.3, 0.16))
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                cyl(self, 0.07, 0.07, 2.6, p + Vector3(sx * 1.8, 1.3, sz * 0.8), wood, 6)
+        box(self, Vector3(3.8, 0.9, 1.7), p + Vector3(0, 0.45, 0), wood)
+        for k in 6:
+            var cc: Color = cols[i % cols.size()] if k % 2 == 0 else Color(0.95, 0.93, 0.86)
+            box(self, Vector3(0.68, 0.06, 2.1), p + Vector3(-1.7 + k * 0.68, 2.7 - 0.0, 0.1), M(cc, 0.8), Vector3(0.25, 0, 0))
+        for k in 5:
+            var goods: Color = [Color(0.9, 0.3, 0.2), Color(0.95, 0.75, 0.2), Color(0.4, 0.7, 0.3), Color(0.7, 0.45, 0.25), Color(0.85, 0.85, 0.9)][k]
+            var g := MeshInstance3D.new()
+            var gs := SphereMesh.new()
+            gs.radius = 0.22
+            gs.height = 0.44
+            g.mesh = gs
+            g.material_override = M(goods, 0.6)
+            g.position = p + Vector3(-1.4 + k * 0.7, 1.05, 0.2)
+            add_child(g)
+
+# ---------- ลานฝึก ----------
+func _build_training() -> void:
+    var wood := M(Color(0.45, 0.3, 0.16))
+    var straw := M(Color(0.8, 0.66, 0.38), 1.0)
+    for x in range(30, 41):
+        for yy in [19.05, 23.95]:
+            cyl(self, 0.09, 0.1, 1.2, tw(x + 0.5, yy) + Vector3(0, 0.6, 0), wood, 6)
+    for yy in [19.05, 23.95]:
+        box(self, Vector3(22, 0.12, 0.1), tw(35.5, yy) + Vector3(0, 0.95, 0), wood)
+        box(self, Vector3(22, 0.12, 0.1), tw(35.5, yy) + Vector3(0, 0.55, 0), wood)
+    for x in [32, 35, 38]:
+        var p := tw(x + 0.5, 21.5)
+        cyl(self, 0.09, 0.09, 2.4, p + Vector3(0, 1.2, 0), wood, 6)
+        box(self, Vector3(1.6, 0.14, 0.14), p + Vector3(0, 1.75, 0), wood)
+        cyl(self, 0.32, 0.3, 1.0, p + Vector3(0, 1.45, 0), straw, 10)
+        var hd := MeshInstance3D.new()
+        var hs := SphereMesh.new()
+        hs.radius = 0.25
+        hs.height = 0.5
+        hd.mesh = hs
+        hd.material_override = straw
+        hd.position = p + Vector3(0, 2.2, 0)
+        add_child(hd)
+        var tgt := cyl(self, 0.18, 0.18, 0.05, p + Vector3(0, 1.5, 0.32), M(Color(0.8, 0.15, 0.12)), 16)
+        tgt.rotation.x = PI / 2.0
+    for p in [[31, 23], [40, 20]]:
+        cyl(self, 0.45, 0.4, 1.0, tw(p[0] + 0.5, p[1] + 0.5) + Vector3(0, 0.5, 0), M(Color(0.5, 0.32, 0.16)), 12)
+    label3d("ลานฝึก", tw(35.5, 19) + Vector3(0, 3.2, 0), 40)
+
+# ---------- ของตกแต่ง: บ่อน้ำ ม้านั่ง ต้นไม้ ดอกไม้ โคมไฟ ----------
+func _build_props() -> void:
+    var wood := M(Color(0.45, 0.3, 0.16))
+    var stone := M(Color(0.6, 0.58, 0.54), 0.95)
+    var wp := tw(22, 31.5)
+    var ring := MeshInstance3D.new()
+    var tm := TorusMesh.new()
+    tm.inner_radius = 0.9
+    tm.outer_radius = 1.35
+    ring.mesh = tm
+    ring.material_override = stone
+    ring.position = wp + Vector3(0, 0.45, 0)
+    ring.scale = Vector3(1, 1.8, 1)
+    add_child(ring)
+    for s in [-1, 1]:
+        cyl(self, 0.09, 0.09, 2.6, wp + Vector3(s * 1.25, 1.3, 0), wood, 6)
+    gable(self, 3.2, 2.2, 1.0, wp + Vector3(0, 2.55, 0), M(Color(0.55, 0.25, 0.16), 0.7))
+    for x in [17, 26]:
+        var bp := tw(x + 0.5, 30.5)
+        box(self, Vector3(1.8, 0.12, 0.55), bp + Vector3(0, 0.5, 0), wood)
+        box(self, Vector3(1.8, 0.5, 0.1), bp + Vector3(0, 0.8, -0.25), wood)
+        for s in [-1, 1]:
+            box(self, Vector3(0.12, 0.5, 0.5), bp + Vector3(s * 0.75, 0.25, 0), M(Color(0.2, 0.2, 0.22), 0.5))
+    var trunk := M(Color(0.36, 0.24, 0.14), 0.95)
+    for t in TREES:
+        if grid[t[1]][t[0]] == 0:
+            continue
+        var p := tw(t[0] + 0.5, t[1] + 0.5)
+        cyl(self, 0.22, 0.32, 3.0, p + Vector3(0, 1.5, 0), trunk, 8)
+        var g := Color(0.24, 0.46, 0.16).lerp(Color(0.38, 0.56, 0.2), randf())
+        for k in 4:
+            var b := MeshInstance3D.new()
+            var sm := SphereMesh.new()
+            sm.radius = 1.0
+            sm.height = 1.8
+            sm.radial_segments = 12
+            sm.rings = 7
+            b.mesh = sm
+            var r := randf_range(1.2, 1.7)
+            b.scale = Vector3(r, r * 0.9, r)
+            b.position = p + Vector3(randf_range(-0.8, 0.8), 3.6 + randf_range(0, 1.2), randf_range(-0.8, 0.8))
+            add_child(b)
+            var std := M(g.lightened(randf_range(-0.04, 0.08)), 0.8)
+            b.material_override = std
+    for f in FLOWERS:
+        var p0 := tw(f[0], f[1])
+        var size := Vector2(f[2] * TS, f[3] * TS)
+        box(self, Vector3(size.x, 0.35, size.y), p0 + Vector3(size.x * 0.5, 0.17, size.y * 0.5), M(Color(0.42, 0.3, 0.2)))
+        var cols := [Color(1, 0.42, 0.55), Color(1, 0.82, 0.25), Color(0.75, 0.55, 1.0), Color(1, 1, 1), Color(1, 0.6, 0.25)]
+        for i in int(size.x * size.y * 4):
+            var fl := MeshInstance3D.new()
+            var sm2 := SphereMesh.new()
+            sm2.radius = 0.12
+            sm2.height = 0.2
+            sm2.radial_segments = 6
+            sm2.rings = 3
+            fl.mesh = sm2
+            fl.material_override = M(cols[i % 5], 0.7)
+            fl.position = p0 + Vector3(randf_range(0.2, size.x - 0.2), 0.5, randf_range(0.2, size.y - 0.2))
+            add_child(fl)
+    for l in TD.lamps:
+        lantern(tw(float(l[0]) + 0.5, float(l[1]) + 0.5))
+    label3d("ตลาดกลาง ⬇", tw(22, 32.4) + Vector3(0, 2.6, 0), 40)
+
+# ---------- นอกกำแพง: ทุ่งหญ้า ป่า ภูเขา ----------
+func _xf(pos: Vector3, scl: Vector3, ry: float, tilt: float = 0.0) -> Transform3D:
+    var b := Basis().rotated(Vector3.UP, ry)
+    if tilt != 0.0:
+        b = b.rotated(Vector3(1, 0, 0), tilt)
+    b = b.scaled(scl)
+    return Transform3D(b, pos)
+
+func _mm(mesh: Mesh, xforms: Array, cols: Array, mat: Material, shadows: bool = true) -> void:
+    var mm := MultiMesh.new()
+    mm.transform_format = MultiMesh.TRANSFORM_3D
+    mm.use_colors = true
+    mm.mesh = mesh
+    mm.instance_count = xforms.size()
+    for i in xforms.size():
+        mm.set_instance_transform(i, xforms[i])
+        mm.set_instance_color(i, cols[i])
+    var mi := MultiMeshInstance3D.new()
+    mi.multimesh = mm
+    mi.material_override = mat
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mi)
+
+func _foliage(sway: float) -> ShaderMaterial:
+    var fm := ShaderMaterial.new()
+    fm.shader = load("res://shaders/foliage.gdshader")
+    fm.set_shader_parameter("noise_tex", noise_tex)
+    fm.set_shader_parameter("sway", sway)
+    return fm
+
+func _outside(x: float, z: float, pad: float) -> bool:
+    return abs(x) > 46.0 + pad or abs(z) > 36.0 + pad
+
+func _build_outside() -> void:
+    var tx := []
+    var tc := []
+    var px := []
+    var pc := []
+    var bx := []
+    var bc := []
+    var tries := 0
+    var placed := 0
+    while placed < 1100 and tries < 40000:
+        tries += 1
+        var x := randf_range(-HALF + 4, HALF - 4)
+        var z := randf_range(-HALF + 4, HALF - 4)
+        if not _outside(x, z, 8.0) or in_field_rect(x, z, 6.0):
+            continue
+        if abs(z - 1.0) < 6.0 and abs(x) < 125.0:
+            continue
+        var dens := noise.get_noise_2d(x * 2.0 + 200, z * 2.0) * 0.5 + 0.5
+        if randf() > dens * 1.25 + 0.1:
+            continue
+        var y := h(x, z)
+        var s := randf_range(0.9, 1.5)
+        tx.append(_xf(Vector3(x, y + 1.6 * s, z), Vector3(0.35 * s, 3.2 * s, 0.35 * s), randf() * TAU))
+        tc.append(Color(0.36, 0.24, 0.14))
+        if randf() < 0.5:
+            var g := Color(0.13, 0.32, 0.17).lerp(Color(0.2, 0.42, 0.2), randf())
+            for k in 4:
+                var r := (2.6 - k * 0.55) * s
+                px.append(_xf(Vector3(x, y + (2.4 + k * 1.55) * s, z), Vector3(r, 2.6 * s, r), randf() * TAU))
+                pc.append(g.lightened(k * 0.03))
+        else:
+            var g2 := Color(0.25, 0.45, 0.14).lerp(Color(0.42, 0.56, 0.18), randf())
+            for k in 5:
+                var off := Vector3(randf_range(-1.2, 1.2), randf_range(0.0, 1.4), randf_range(-1.2, 1.2)) * s
+                var r2 := randf_range(1.5, 2.2) * s
+                bx.append(_xf(Vector3(x, y + 4.0 * s, z) + off, Vector3(r2, r2 * 0.85, r2), randf() * TAU))
+                bc.append(g2.lightened(randf_range(-0.05, 0.08)))
+        placed += 1
+    var cm := CylinderMesh.new()
+    cm.top_radius = 0.6
+    cm.bottom_radius = 1.0
+    cm.height = 1.0
+    cm.radial_segments = 7
+    var cone := CylinderMesh.new()
+    cone.top_radius = 0.0
+    cone.bottom_radius = 1.0
+    cone.height = 1.0
+    cone.radial_segments = 9
+    var blob := SphereMesh.new()
+    blob.radius = 1.0
+    blob.height = 2.0
+    blob.radial_segments = 10
+    blob.rings = 6
+    var bark := StandardMaterial3D.new()
+    bark.vertex_color_use_as_albedo = true
+    bark.roughness = 0.95
+    _mm(cm, tx, tc, bark)
+    _mm(cone, px, pc, _foliage(0.15))
+    _mm(blob, bx, bc, _foliage(0.3))
+    var rx := []
+    var rc := []
+    for i in 180:
+        var x2 := randf_range(-HALF + 3, HALF - 3)
+        var z2 := randf_range(-HALF + 3, HALF - 3)
+        if not _outside(x2, z2, 5.0) or in_field_rect(x2, z2, 3.0) or (abs(z2 - 1.0) < 5.0 and abs(x2) < 125.0):
+            continue
+        var s2 := randf_range(0.5, 2.0)
+        rx.append(_xf(Vector3(x2, h(x2, z2) + s2 * 0.15, z2), Vector3(s2 * 1.3, s2 * 0.8, s2), randf() * TAU, randf_range(-0.3, 0.3)))
+        rc.append(Color(0.5, 0.49, 0.46).lerp(Color(0.38, 0.4, 0.36), randf()))
+    var rm := SphereMesh.new()
+    rm.radius = 1.0
+    rm.height = 1.6
+    rm.radial_segments = 7
+    rm.rings = 4
+    var rmat := StandardMaterial3D.new()
+    rmat.vertex_color_use_as_albedo = true
+    rmat.roughness = 0.95
+    _mm(rm, rx, rc, rmat)
+
+func _build_grass() -> void:
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    var pts := [Vector3(-0.05, 0, 0), Vector3(0.05, 0, 0), Vector3(-0.03, 0.45, 0.03), Vector3(0.03, 0.45, 0.03), Vector3(0.0, 0.9, 0.08)]
+    for tri in [[0, 1, 2], [1, 3, 2], [2, 3, 4]]:
+        for idx in tri:
+            st.set_normal(Vector3.UP)
+            st.add_vertex(pts[idx])
+    var blade := st.commit()
+    var gx := []
+    var gc := []
+    var target := 70000
+    var tries := 0
+    while gx.size() < target and tries < target * 4:
+        tries += 1
+        var x := randf_range(-165, 110)
+        var z := randf_range(-95, 95)
+        var inside := not _outside(x, z, 0.0)
+        if inside:
+            var tx := int(floor((x - OX) / TS))
+            var tz := int(floor((z - OZ) / TS))
+            if tx < 1 or tz < 1 or tx >= TW - 1 or tz >= TH - 1:
+                continue
+            if roadset.has(tz * TW + tx) or grid[tz][tx] != 0:
+                continue
+            if tx >= 3 and tx < 12 and tz >= 18 and tz < 27:
+                continue
+            if tx >= 30 and tx < 41 and tz >= 19 and tz < 24:
+                continue
+            if randf() < 0.55:
+                continue
+        else:
+            if abs(x) < 47.5 and abs(z) < 37.5:
+                continue
+            if abs(z - 1.0) < 2.6 and abs(x) < 150.0:
+                continue
+        var n := noise.get_noise_2d(x * 4.0, z * 4.0)
+        var s := randf_range(0.5, 1.0) * (1.0 + n * 0.4)
+        gx.append(_xf(Vector3(x, h(x, z) if not inside else 0.0, z), Vector3(s * randf_range(0.8, 1.4), s, s), randf() * TAU))
+        gc.append(Color(1, 1, 1).lerp(Color(1.15, 1.05, 0.7), randf() * 0.6))
+    var gm := ShaderMaterial.new()
+    gm.shader = load("res://shaders/grass.gdshader")
+    gm.set_shader_parameter("noise_tex", noise_tex)
+    _mm(blade, gx, gc, gm, false)
+
+# ---------- ชาวเมือง ----------
+func _build_npcs() -> void:
+    var ns := load("res://scripts/npc.gd")
+    var nl: Dictionary = TD.npcLines if TD.npcLines is Dictionary else {}
+    for d in TD.npcs:
+        var v := Node3D.new()
+        v.set_script(ns)
+        add_child(v)
+        var lines: Array = nl.get(d.name, d.lines if d.lines else [])
+        v.setup(self, d, lines)
+        npcs.append(v)
+
+# ---------- ผู้เล่น ----------
+func _build_player() -> void:
+    player = Node3D.new()
+    player.set_script(load("res://scripts/player.gd"))
+    add_child(player)
+    player.setup(self, tw(SPAWN.x, SPAWN.y))
+    cam = Camera3D.new()
+    cam.fov = 45.0
+    cam.far = 800.0
+    add_child(cam)
+    click_marker = MeshInstance3D.new()
+    var tm := TorusMesh.new()
+    tm.inner_radius = 0.35
+    tm.outer_radius = 0.5
+    click_marker.mesh = tm
+    click_marker.material_override = M(Color(0.5, 1.0, 0.6), 0.3, 2.0)
+    click_marker.visible = false
+    add_child(click_marker)
+    _update_cam(1.0)
+
+func _update_cam(delta: float) -> void:
+    var target := player.global_position + Vector3(0, 1.4, 0)
+    var off := Vector3(0, 0, cam_dist).rotated(Vector3(1, 0, 0), cam_pitch).rotated(Vector3.UP, cam_yaw)
+    var want := target + off
+    cam.global_position = cam.global_position.lerp(want, min(1.0, delta * 8.0)) if delta < 1.0 else want
+    cam.look_at(target)
+
+func _setup_hud() -> void:
+    var cl := CanvasLayer.new()
+    add_child(cl)
+    hud = Label.new()
+    hud.position = Vector2(16, 12)
+    hud.add_theme_font_override("font", font_b)
+    hud.add_theme_font_size_override("font_size", 20)
+    hud.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+    hud.add_theme_constant_override("outline_size", 6)
+    cl.add_child(hud)
+    prompt = Label.new()
+    prompt.add_theme_font_override("font", font_b)
+    prompt.add_theme_font_size_override("font_size", 24)
+    prompt.add_theme_color_override("font_color", Color(1.0, 0.92, 0.6))
+    prompt.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+    prompt.add_theme_constant_override("outline_size", 8)
+    prompt.anchor_left = 0.5
+    prompt.anchor_right = 0.5
+    prompt.anchor_top = 1.0
+    prompt.anchor_bottom = 1.0
+    prompt.offset_left = -400
+    prompt.offset_right = 400
+    prompt.offset_top = -90
+    prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    cl.add_child(prompt)
+    var sb := StyleBoxFlat.new()
+    sb.bg_color = Color(0.1, 0.08, 0.06, 0.88)
+    sb.border_color = Color(0.85, 0.7, 0.4)
+    sb.set_border_width_all(3)
+    sb.set_corner_radius_all(10)
+    sb.set_content_margin_all(16)
+    ui_dialog = PanelContainer.new()
+    ui_dialog.add_theme_stylebox_override("panel", sb)
+    ui_dialog.anchor_left = 0.5
+    ui_dialog.anchor_right = 0.5
+    ui_dialog.anchor_top = 1.0
+    ui_dialog.anchor_bottom = 1.0
+    ui_dialog.offset_left = -430
+    ui_dialog.offset_right = 430
+    ui_dialog.offset_top = -190
+    ui_dialog.offset_bottom = -24
+    var vb := VBoxContainer.new()
+    ui_dialog.add_child(vb)
+    ui_dname = Label.new()
+    ui_dname.add_theme_font_override("font", font_b)
+    ui_dname.add_theme_font_size_override("font_size", 24)
+    ui_dname.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
+    vb.add_child(ui_dname)
+    ui_dtext = Label.new()
+    ui_dtext.add_theme_font_override("font", font)
+    ui_dtext.add_theme_font_size_override("font_size", 22)
+    ui_dtext.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    vb.add_child(ui_dtext)
+    var hint := Label.new()
+    hint.text = "คลิกที่คนนี้อีกครั้งเพื่อคุยต่อ · คลิกพื้นเพื่อปิด"
+    hint.add_theme_font_override("font", font)
+    hint.add_theme_font_size_override("font_size", 15)
+    hint.add_theme_color_override("font_color", Color(0.8, 0.78, 0.7))
+    vb.add_child(hint)
+    ui_dialog.visible = false
+    cl.add_child(ui_dialog)
+    ui_shop = PanelContainer.new()
+    ui_shop.add_theme_stylebox_override("panel", sb)
+    ui_shop.anchor_left = 0.5
+    ui_shop.anchor_right = 0.5
+    ui_shop.anchor_top = 0.5
+    ui_shop.anchor_bottom = 0.5
+    ui_shop.offset_left = -330
+    ui_shop.offset_right = 330
+    ui_shop.offset_top = -300
+    ui_shop.offset_bottom = 300
+    var sc := ScrollContainer.new()
+    sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    ui_shop.add_child(sc)
+    ui_shop_body = VBoxContainer.new()
+    ui_shop_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    ui_shop_body.add_theme_constant_override("separation", 6)
+    sc.add_child(ui_shop_body)
+    ui_shop.visible = false
+    cl.add_child(ui_shop)
+
+# ---------- คุยกับ NPC / หน้าร้าน ----------
+func _lbl(t: String, size: int, col: Color = Color(0.95, 0.92, 0.85), bold: bool = false) -> Label:
+    var l := Label.new()
+    l.text = t
+    l.add_theme_font_override("font", font_b if bold else font)
+    l.add_theme_font_size_override("font_size", size)
+    l.add_theme_color_override("font_color", col)
+    l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    return l
+
+func say(name: String, text: String) -> void:
+    ui_dname.text = name
+    ui_dtext.text = text
+    ui_dialog.visible = true
+
+func open_shop(id: String) -> void:
+    var sh: Dictionary = shops_by_id.get(id, {})
+    if sh.is_empty():
+        return
+    for c in ui_shop_body.get_children():
+        c.queue_free()
+    var top := HBoxContainer.new()
+    var title := _lbl(str(sh.get("emoji", "")) + " " + str(sh.name), 28, Color(1.0, 0.85, 0.45), true)
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    top.add_child(title)
+    var x := Button.new()
+    x.text = "ปิด ✕"
+    x.add_theme_font_override("font", font_b)
+    x.add_theme_font_size_override("font_size", 18)
+    x.pressed.connect(func(): ui_shop.visible = false)
+    top.add_child(x)
+    ui_shop_body.add_child(top)
+    var ow = sh.get("owner")
+    if ow is Dictionary:
+        var g: Array = ow.get("greet", [])
+        ui_shop_body.add_child(_lbl(str(ow.name) + ": \"" + (str(g[randi() % g.size()]) if g.size() > 0 else "") + "\"", 19, Color(0.9, 0.95, 1.0)))
+    var buy: Array = sh.get("buy", [])
+    if buy.size() > 0:
+        ui_shop_body.add_child(_lbl("สินค้าในร้าน", 22, Color(0.7, 1.0, 0.7), true))
+        for it in buy:
+            var em = it.get("emoji")
+            var row := _lbl(("• " if em == null else str(em) + " ") + str(it.get("name", "")) + "  ·  " + _num(it.get("price", 0)) + " เหรียญ" + (("  ·  " + str(it.note)) if it.get("note") else ""), 18)
+            ui_shop_body.add_child(row)
+    var sell: Array = sh.get("sell", [])
+    if sell.size() > 0:
+        ui_shop_body.add_child(_lbl("ร้านรับซื้อ", 22, Color(1.0, 0.85, 0.6), true))
+        var names := []
+        for it in sell:
+            if it is Array and it.size() >= 3:
+                names.append(str(it[1]) + " " + _num(it[2]))
+        ui_shop_body.add_child(_lbl(" · ".join(names), 17))
+    ui_shop_body.add_child(_lbl("ซื้อ-ขายจริงจะใช้ได้เมื่อต่อเซิร์ฟเวอร์เกม (ขั้นถัดไป) ตอนนี้แสดงรายการตามเกมจริง", 15, Color(0.75, 0.72, 0.65)))
+    ui_shop.visible = true
+
+func _num(v) -> String:
+    if v is float and v == floor(v):
+        return str(int(v))
+    return str(v)
+
+const STALL_SHOP := {"แม่ค้าผัก": "st_veg", "แม่ค้าผลไม้": "st_fruit", "คนขายขนมปัง": "st_bread", "ลุงขายผัก": "st_farm"}
+
+func _talk(n) -> void:
+    var lines: Array = n.lines
+    if lines.size() == 0:
+        say(n.npc_name, "...")
+    else:
+        say(n.npc_name, str(lines[talk_idx % lines.size()]))
+    talk_idx += 1
+    n.face_to(player.global_position)
+    if STALL_SHOP.has(n.npc_name):
+        open_shop(STALL_SHOP[n.npc_name])
+
+func _npc_at(screen: Vector2):
+    var best = null
+    var bd := 60.0
+    for n in npcs:
+        if not cam.is_position_in_frustum(n.global_position):
+            continue
+        var sp := cam.unproject_position(n.global_position + Vector3(0, 1.2, 0))
+        var d := sp.distance_to(screen)
+        if d < bd:
+            bd = d
+            best = n
+    return best
+
+func _test_ui(what: String) -> void:
+    if what.begins_with("fight"):
+        # ทดสอบ: วางสไลม์รอบตัวแล้วสั่งตี
+        for i in 3:
+            var a := i * 2.1
+            var pos := player.position + Vector3(cos(a) * 2.2, 0, sin(a) * 2.2)
+            var sl := Node3D.new()
+            sl.set_script(load("res://scripts/slime.gd"))
+            field.add_child(sl)
+            sl.setup(field, 1 + i, pos)
+            field.slimes.append(sl)
+        player.target_mob = field.slimes[field.slimes.size() - 3]
+        shot_frames = int(what.substr(6)) if what.length() > 6 else 70
+        _test_auto = true
+        time_scale = 0.0
+        return
+    if what.begins_with("shop:"):
+        open_shop(what.substr(5))
+    elif what.begins_with("talk:"):
+        var n = npcs[int(what.substr(5))]
+        _talk(n)
+
+# ---------- การควบคุม ----------
+func _ground_at(screen: Vector2) -> Variant:
+    var from := cam.project_ray_origin(screen)
+    var dir := cam.project_ray_normal(screen)
+    if abs(dir.y) < 0.0001:
+        return null
+    var t := -from.y / dir.y
+    if t < 0:
+        return null
+    return from + dir * t
+
+func _unhandled_input(e: InputEvent) -> void:
+    if e is InputEventMouseButton:
+        if e.button_index == MOUSE_BUTTON_WHEEL_UP and e.pressed:
+            cam_dist = max(8.0, cam_dist * 0.9)
+        elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and e.pressed:
+            cam_dist = min(70.0, cam_dist * 1.1)
+        elif e.button_index == MOUSE_BUTTON_RIGHT or e.button_index == MOUSE_BUTTON_MIDDLE:
+            rot_drag = e.pressed
+        elif e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
+            var sl = field.slime_at(e.position)
+            if sl != null:
+                player.target_mob = sl
+                talk_target = null
+                ui_dialog.visible = false
+                return
+            player.target_mob = null
+            var n = _npc_at(e.position)
+            if n != null:
+                if talk_target == n and player.global_position.distance_to(n.global_position) < 2.8:
+                    _talk(n)
+                    return
+                talk_target = n
+                talk_idx = 0
+                var pth := find_path(player.global_position, n.global_position)
+                player.set_path(pth)
+                return
+            talk_target = null
+            ui_dialog.visible = false
+            var g = _ground_at(e.position)
+            if g != null:
+                var path := find_path(player.global_position, g)
+                if path.size() > 0:
+                    player.set_path(path)
+                    click_marker.position = path[path.size() - 1] + Vector3(0, 0.05, 0)
+                    click_marker.visible = true
+    elif e is InputEventMouseMotion and rot_drag:
+        cam_yaw -= e.relative.x * 0.006
+        cam_pitch = clamp(cam_pitch - e.relative.y * 0.004, -1.4, -0.3)
+    elif e is InputEventKey and e.pressed and not e.echo:
+        match e.keycode:
+            KEY_1: time_of_day = 0.3
+            KEY_2: time_of_day = 0.48
+            KEY_3: time_of_day = 0.72
+            KEY_4: time_of_day = 0.95
+            KEY_F: time_scale = 20.0 if time_scale < 20.0 else 1.0
+            KEY_G: _set_quality(1 if quality == 2 else 2)
+            KEY_J, KEY_SPACE: player.attack()
+
+func _set_quality(q: int) -> void:
+    quality = q
+    env.volumetric_fog_enabled = q >= 2
+    env.ssao_enabled = q >= 2
+    sun.directional_shadow_max_distance = 120.0 if q >= 2 else 60.0
+
+func _process(delta: float) -> void:
+    time_of_day = fposmod(time_of_day + delta / day_len * time_scale, 1.0)
+    _update_sky()
+    if Input.is_key_pressed(KEY_Q):
+        cam_yaw += delta * 1.5
+    if Input.is_key_pressed(KEY_E):
+        cam_yaw -= delta * 1.5
+    var mv := Vector3.ZERO
+    if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): mv.z -= 1
+    if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): mv.z += 1
+    if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): mv.x -= 1
+    if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): mv.x += 1
+    if mv != Vector3.ZERO:
+        player.drive(mv.normalized().rotated(Vector3.UP, cam_yaw), delta)
+        click_marker.visible = false
+    if click_marker.visible:
+        click_marker.rotation.y += delta * 2.0
+        if not player.has_path():
+            click_marker.visible = false
+    if _test_auto and player.target_mob == null:
+        player.target_mob = field.nearest_slime(player.position, 14.0)
+    _update_cam(delta)
+    # เดินถึง NPC ที่คลิกไว้ -> คุย
+    if talk_target != null and not ui_dialog.visible and player.global_position.distance_to(talk_target.global_position) < 2.6:
+        player.set_path(PackedVector3Array())
+        _talk(talk_target)
+    # เดินเข้าประตูร้าน -> เปิดหน้าร้าน (เหมือนเกมเดิม)
+    var pp := Vector2((player.position.x - OX) / TS, (player.position.z - OZ) / TS)
+    var near := ""
+    for d in doors:
+        if pp.distance_to(d.p) < 0.9:
+            near = d.id
+    if near != "" and near != in_door:
+        open_shop(near)
+    in_door = near
+    var msg := ""
+    if pp.distance_to(Vector2(22.0, 9.3)) < 1.2:
+        msg = "ประตูปราสาท — ทหารยาม: \"พระราชาทรงรอท่านอยู่ ภารกิจจะมาในเร็ว ๆ นี้\""
+    elif pp.x < 1.3 and pp.x > -0.5 and pp.y > 15.5 and pp.y < 18.5:
+        msg = "⬅ ทางออกสู่ทุ่งหญ้า"
+    elif pp.x > 42.7 and pp.y > 15.5 and pp.y < 18.5:
+        msg = "ถนนสู่นครวารี ➡ (ขั้นถัดไป)"
+    prompt.text = msg
+    if quality == 2 and shot_frames < 0:
+        if Engine.get_frames_per_second() < 28 and Time.get_ticks_msec() > 8000:
+            low_fps_t += delta
+            if low_fps_t > 4.0:
+                _set_quality(1)
+        else:
+            low_fps_t = 0.0
+    var hh := int(time_of_day * 24.0)
+    var mm := int(fmod(time_of_day * 24.0 * 60.0, 60.0))
+    var place := "ทุ่งหญ้า" if player.position.x < OX else "เมืองเอลโดเรีย"
+    if place != _last_place:
+        if _last_place != "":
+            field.say_msg("เข้าสู่ทุ่งหญ้า — ระวังสไลม์! (ยิ่งไปทางตะวันตกยิ่งเก่ง)" if place == "ทุ่งหญ้า" else "กลับเข้าเมืองเอลโดเรีย", 3.0)
+        _last_place = place
+    hud.text = "%s · %02d:%02d\nคลิกพื้นเพื่อเดิน · WASD เดิน · J/Space หรือคลิกสไลม์ = ตี\nคลิกขวาลากหมุนกล้อง · ล้อเมาส์ซูม · F เร่งเวลา" % [place, hh, mm]
+    if shot_frames > 0:
+        shot_frames -= 1
+        if shot_frames == 0:
+            var img := get_viewport().get_texture().get_image()
+            img.save_png("user://" + shot_name + ".png")
+            print("SHOT ", OS.get_user_data_dir(), "/", shot_name, ".png")
+            print("STATS lv=%d xp=%d hp=%d coins=%d gel=%d dead=%s slimes=%d" % [player.lv, player.xp, player.hp, player.coins, player.gel, player.dead, field.slimes.size()])
+            get_tree().quit()
