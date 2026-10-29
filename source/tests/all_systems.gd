@@ -1079,6 +1079,23 @@ func _run() -> void:
     p.hp = p.max_hp
     p.mp = p.max_mp
 
+    # ---------- แผนที่เล็ก ----------
+    var mm: Control = world.minimap
+    p.position = world.fw(20.5, 20.5)
+    mm._process(0.3)
+    check(mm.key == "world" and mm.tex != null and mm.visible, "แผนที่เล็ก: โลกภายนอก")
+    var pxw: Vector2 = mm._to_px(p.position)
+    check(pxw.x > 0 and pxw.y > 0 and pxw.x < mm.offset_right - mm.offset_left, "แผนที่เล็ก: จุดผู้เล่นอยู่ในกรอบ")
+    world.mine.enter(0)
+    mm._process(0.3)
+    check(mm.key == "mine0" and mm.size_px == Vector2i(62, 44), "แผนที่เล็ก: เปลี่ยนเป็นแผนที่เหมือง")
+    world.mine.leave(false)
+    world.rooms.enter("gear")
+    mm._process(0.3)
+    check(not mm.visible, "แผนที่เล็ก: ซ่อนตอนอยู่ในร้าน")
+    world.rooms.leave()
+    mm._process(0.3)
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

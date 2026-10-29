@@ -292,3 +292,7 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - 8 อาชีพจาก js/056-fix25.js (NC25 NSK25 NPAS25 calcBonus critCh CRITD spdMul aspdMul) · ท่าสกิลทำแบบง่ายด้วย aoe/shoot/blink · มอนไม่กระเด็น (กฎเจ้าของ)
 - ally.gd: เดินตาม/ตีศัตรูใกล้สุด · อายุ 30 วิ (2D ไม่ได้ระบุชัด → ค่าเสนอ) · ราชสีห์ 25 วิ
 - ยังไม่มี: ล่องหน · ชะลอศัตรู · ไหม้ต่อเนื่อง (ใช้ดาเมจแทน)
+
+## 0.18-minimap (Claude 2026-10-29)
+- แผนที่เล็กมุมขวาใต้ปุ่มตัวละคร/กระเป๋า · ห้ามตั้งชื่อฟังก์ชัน `_set` ใน Control (ชนกับของ Godot → Parse Error)
+- เลเวลสูงสุด 99 → 200 ตาม MAXLV เกม 2D

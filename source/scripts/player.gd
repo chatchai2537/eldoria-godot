@@ -436,7 +436,7 @@ func gain_xp(n: int) -> void:
     town.field.float_text("+%d EXP" % n, position + Vector3(0, 2.6, 0), Color(0.6, 1.0, 0.5), 0.7)
     var ups := 0
     var l0 := lv
-    while xp >= need(lv) and lv < 99:
+    while xp >= need(lv) and lv < 200:  # MAXLV ของเกม 2D (fix96)
         xp -= need(lv)
         lv += 1
         ups += 1

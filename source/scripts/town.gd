@@ -79,6 +79,7 @@ var craft: Node
 var classes: Node
 var story: Node
 var guild: Node
+var minimap: Control
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -183,6 +184,11 @@ func _ready() -> void:
     add_child(story)
     story.setup(self)
     story.build_ui(ui_shop.get_parent())
+    minimap = Control.new()
+    minimap.set_script(load("res://scripts/minimap.gd"))
+    ui_shop.get_parent().add_child(minimap)
+    ui_shop.get_parent().move_child(minimap, 0)
+    minimap.setup(self)
     guild = Node.new()
     guild.set_script(load("res://scripts/guild.gd"))
     add_child(guild)
