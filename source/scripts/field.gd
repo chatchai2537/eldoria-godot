@@ -629,11 +629,14 @@ func _update_world(delta: float) -> void:
     if p.position.distance_to(portal_pos) < 3.4:
         near = "ประตูมิติ — กดตีเพื่อเลือกแผนที่ขุดแร่ (เหมือง 5 แห่ง)"
     elif p.position.distance_to(dungeon_pos) < 4.0:
-        near = "ประตูดันเจี้ยนร้อยชั้น · เร็ว ๆ นี้"
+        near = "ประตูดันเจี้ยนร้อยชั้น — กดตีเพื่อเลือกชั้น"
     elif p.position.distance_to(warp_pos) < 2.2:
         near = "หินวาร์ป · เร็ว ๆ นี้"
     if near != "":
         town.prompt.text = near
+
+func near_dungeon(p) -> bool:
+    return p.position.distance_to(dungeon_pos) < 4.0
 
 func near_portal(p) -> bool:
     return p.position.distance_to(portal_pos) < 3.4

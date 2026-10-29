@@ -59,7 +59,16 @@ func setup(t) -> void:
     town = t
 
 func origin(zi: int) -> Vector3:
+    if zi >= DG_BASE:
+        return Vector3(5000.0, 0.0, 0.0)  # ดันเจี้ยน: ทีละชั้น ใช้ที่เดียวกัน
     return Vector3(3000.0 + zi * 200.0, 0.0, 0.0)
+
+## ข้อมูลแผนที่: เหมือง 0-4 = ZONES · ดันเจี้ยนชั้น f = DG_BASE + f
+func zdef(zi: int) -> Dictionary:
+    return ZONES[zi] if zi < DG_BASE else dg_def(zi - DG_BASE)
+
+func is_dg(zi: int) -> bool:
+    return zi >= DG_BASE
 
 func tile_w(zi: int, x: float, y: float) -> Vector3:
     return origin(zi) + Vector3(x * TS + TS * 0.5, 0.0, y * TS + TS * 0.5)
@@ -74,11 +83,12 @@ func blocked(wx: float, wz: float) -> bool:
         return true
     var d: Dictionary = data[cur]
     var t := _tile(wx, wz)
-    if t.x < 0 or t.y < 0 or t.x >= ZW or t.y >= ZH:
+    var W: int = d.W
+    if t.x < 0 or t.y < 0 or t.x >= W or t.y >= int(d.H):
         return true
-    if d.m[t.y * ZW + t.x] != FL:
+    if d.m[t.y * W + t.x] != FL:
         return true
-    var o = d.ore_at.get(t.y * ZW + t.x)
+    var o = d.ore_at.get(t.y * W + t.x)
     return o != null and o.alive
 
 func blocked_at(wx: float, wz: float, r: float) -> bool:
@@ -110,7 +120,9 @@ func _vn(x: float, y: float, s: int) -> float:
 func gen(zi: int) -> Dictionary:
     if data.has(zi):
         return data[zi]
-    var Zd: Dictionary = ZONES[zi]
+    if is_dg(zi):
+        return gen_dungeon(zi)
+    var Zd: Dictionary = zdef(zi)
     _rng.seed = 9137 * (zi + 1)
     var m := PackedByteArray()
     m.resize(ZW * ZH)
@@ -183,7 +195,7 @@ func gen(zi: int) -> Dictionary:
         var ore := {"tx": tt.x, "ty": tt.y, "kind": kd, "hp": int(K.hp), "max": int(K.hp), "alive": true, "regen": 0.0, "shake": 0.0, "i": -1}
         ores.append(ore)
         ore_at[key] = ore
-    var d := {"m": m, "ores": ores, "ore_at": ore_at, "floor": floor_t, "ent": ent, "arena": arena, "root": null, "mm": {}}
+    var d := {"m": m, "ores": ores, "ore_at": ore_at, "floor": floor_t, "ent": ent, "arena": arena, "root": null, "mm": {}, "W": ZW, "H": ZH}
     data[zi] = d
     return d
 
@@ -226,8 +238,10 @@ func _vc_mat() -> StandardMaterial3D:
 
 func _build(zi: int) -> void:
     var d: Dictionary = data[zi]
-    var Zd: Dictionary = ZONES[zi]
+    var Zd: Dictionary = zdef(zi)
     var pal: Dictionary = Zd.pal
+    var MW: int = d.W
+    var MH: int = d.H
     var root := Node3D.new()
     add_child(root)
     d.root = root
@@ -254,11 +268,18 @@ func _build(zi: int) -> void:
     root.add_child(fmi)
     # ผนังหิน: กล่องสูงเฉพาะช่องที่ติดพื้น (ที่เหลือเป็นหลังคาหินเรียบ)
     var walls := []
-    for y in ZH:
-        for x in ZW:
-            if d.m[y * ZW + x] != WL:
+    for y in MH:
+        for x in MW:
+            if d.m[y * MW + x] != WL:
                 continue
-            walls.append(Vector2i(x, y))
+            # ผนังที่อยู่ห่างพื้นเกิน 2 ช่องไม่ต้องสร้าง (ดันเจี้ยนใหญ่) — ใช้แผ่นหินด้านบนแทน
+            var near := false
+            for yy in range(max(0, y - 2), min(MH, y + 3)):
+                for xx in range(max(0, x - 2), min(MW, x + 3)):
+                    if d.m[yy * MW + xx] == FL:
+                        near = true
+            if near:
+                walls.append(Vector2i(x, y))
     var wm := BoxMesh.new()
     wm.size = Vector3(TS, WALL_H, TS)
     var wmm := MultiMesh.new()
@@ -275,7 +296,7 @@ func _build(zi: int) -> void:
         for dd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
             var nx: int = t.x + dd.x
             var ny: int = t.y + dd.y
-            if nx >= 0 and ny >= 0 and nx < ZW and ny < ZH and d.m[ny * ZW + nx] == FL:
+            if nx >= 0 and ny >= 0 and nx < MW and ny < MH and d.m[ny * MW + nx] == FL:
                 edge = true
         var hy := WALL_H * (0.85 + hh * 0.35) if edge else WALL_H
         # ผนังขอบ: หมุน/ขยายนิดหน่อยให้ดูเป็นหินไม่ใช่กล่องเรียงตาราง
@@ -290,9 +311,11 @@ func _build(zi: int) -> void:
     wmi.material_override = _vc_mat()
     root.add_child(wmi)
     # หินรอบนอกแผนที่ (ไม่ให้เห็นที่ว่าง)
-    var W := ZW * TS
-    var H := ZH * TS
+    var W := MW * TS
+    var H := MH * TS
     var om: Material = town.M(top.darkened(0.2), 0.95)
+    # พื้นมืดใต้แผนที่ (ช่องที่ไม่ได้สร้างผนังจะเห็นเป็นหินมืด)
+    town.box(root, Vector3(W, 0.2, H), o + Vector3(W / 2, -0.4, H / 2), town.M(top.darkened(0.55), 0.95))
     town.box(root, Vector3(W + 200, WALL_H, 100), o + Vector3(W / 2, WALL_H / 2, -50), om)
     town.box(root, Vector3(W + 200, WALL_H, 100), o + Vector3(W / 2, WALL_H / 2, H + 50), om)
     town.box(root, Vector3(100, WALL_H, H), o + Vector3(-50, WALL_H / 2, H / 2), om)
@@ -443,12 +466,19 @@ func enter(zi: int) -> void:
     spawn_t = 2.0
     boss = null
     boss_t = 0.1
-    var n0 := 10 if town.is_mobile else 16
-    for k in n0:
-        _spawn(false)
+    chest = {}
+    if is_dg(zi):
+        _dg_packs(zi - DG_BASE)
+    else:
+        var n0 := 10 if town.is_mobile else 16
+        for k in n0:
+            _spawn(false)
     town._update_sky()
-    var Zd: Dictionary = ZONES[zi]
-    town.field.say_msg("%s (Lv.%d-%d) · บอสรออยู่ทางเหนือ · ออกได้ที่วงเวทด้านล่าง" % [Zd.n, Zd.lv[0], Zd.lv[1]], 4.0)
+    var Zd: Dictionary = zdef(zi)
+    if is_dg(zi):
+        town.field.say_msg("ดันเจี้ยนชั้น %d — กำจัดบอสในห้องที่ไกลที่สุดเพื่อรับกล่องสมบัติ · วงเวทด้านล่าง = ขึ้นชั้นก่อนหน้า" % (zi - DG_BASE), 4.5)
+    else:
+        town.field.say_msg("%s (Lv.%d-%d) · บอสรออยู่ทางเหนือ · ออกได้ที่วงเวทด้านล่าง" % [Zd.n, Zd.lv[0], Zd.lv[1]], 4.0)
 
 func leave(to_portal: bool = true) -> void:
     if cur < 0:
@@ -467,10 +497,18 @@ func leave(to_portal: bool = true) -> void:
     shots.clear()
     town.field.extra = []
     town.ui_shop.visible = false
+    if chest_node != null:
+        chest_node.queue_free()
+        chest_node = null
+    chest = {}
+    if is_dg(zi):
+        # ดันเจี้ยนชั้นอื่นไม่เก็บไว้ (ใช้ที่เดียวกัน)
+        data[zi].root.queue_free()
+        data.erase(zi)
     if to_portal:
         var p = town.player
         p.set_path(PackedVector3Array())
-        p.position = town.field.portal_pos + Vector3(0, 0, 2.6)
+        p.position = (town.field.dungeon_pos + Vector3(0, 0, 3.2)) if is_dg(zi) else (town.field.portal_pos + Vector3(0, 0, 2.6))
         p.heading = 0.0
         p.body.rotation.y = 0.0
         town.field.say_msg("กลับมาที่ทุ่งหญ้าแล้ว", 2.5)
@@ -482,7 +520,7 @@ func _spot(far: bool) -> Vector3:
     var p = town.player
     for g in 200:
         var t: Vector2i = d.floor[randi() % d.floor.size()]
-        var o = d.ore_at.get(t.y * ZW + t.x)
+        var o = d.ore_at.get(t.y * int(d.W) + t.x)
         if o != null and o.alive:
             continue
         if Vector2(t - d.ent).length() < 9 or Vector2(t - d.arena).length() < 10:
@@ -503,7 +541,7 @@ func _mk(fam: String, nm: String, col: Array, L: int, pos: Vector3, o: Dictionar
     return m
 
 func _spawn(far: bool) -> void:
-    var Zd: Dictionary = ZONES[cur]
+    var Zd: Dictionary = zdef(cur)
     var s := _spot(far)
     if s == Vector3.INF:
         return
@@ -515,14 +553,14 @@ func _spawn(far: bool) -> void:
     _mk(str(mb[0]), str(mb[1]), mb[2], L, s, {"elite": randf() < 0.08, "span": float(L - a) / float(b - a)})
 
 func _spawn_boss() -> void:
-    var Zd: Dictionary = ZONES[cur]
+    var Zd: Dictionary = zdef(cur)
     var d: Dictionary = data[cur]
     var B: Dictionary = Zd.boss
     boss = _mk(str(B.f), str(B.n), B.c, int(B.lv), tile_w(cur, d.arena.x, d.arena.y), {"boss": true})
 
 ## บอสเรียกลูกน้อง 2 ตัว (เลือดต่ำกว่า 50% และ 25%)
 func summon(b) -> void:
-    var Zd: Dictionary = ZONES[cur]
+    var Zd: Dictionary = zdef(cur)
     for i in 2:
         var mb: Array = Zd.mobs[i % Zd.mobs.size()]
         var m := _mk(str(mb[0]), str(mb[1]), mb[2], int(Zd.lv[1]), b.position + Vector3(-2.5 if i == 0 else 2.5, 0, 1.2), {})
@@ -532,7 +570,7 @@ func summon(b) -> void:
 
 ## มอนตาย (mobKill + fix31): เหรียญ ×0.45 · ไม่ดรอปแร่/แท่งแร่ (ต้องขุดเอง) · ของเฉพาะตัว 15%
 ## บอส: ของเฉพาะตัว ×3 + หินเสริมพลัง 1 · EXP ×0.8
-const JUNK := {"beetle": "shell", "bat": "wing", "golem": "core", "wolf": "pelt", "wisp": "dust", "dragon": "scale"}
+const JUNK := {"beetle": "shell", "bat": "wing", "golem": "core", "wolf": "pelt", "wisp": "dust", "dragon": "scale", "skeleton": "bone", "zombie": "rag", "drake": "scale"}
 
 func mob_killed(m) -> void:
     var p = town.player
@@ -541,14 +579,16 @@ func mob_killed(m) -> void:
     p.coins += coin
     town.field.float_text("+%d เหรียญ" % coin, m.position + Vector3(0, 2.4 * m.sc, 0), Color(1.0, 0.85, 0.3), 1.3 if m.boss else 0.9)
     var j := str(JUNK.get(m.f, ""))
-    if m.boss:
+    if m.boss and is_dg(cur):
+        _dg_cleared(m)
+    elif m.boss:
         for i in 3:
             _drop_item(j, m.position)
         _drop_item("estone", m.position)
         town.field.say_msg("ปราบ " + m.nm + " สำเร็จ! ได้หินเสริมพลัง · บอสจะกลับมาอีกใน 3 นาที", 4.0)
         boss = null
         boss_t = 180.0
-        town.story.on_boss(str(ZONES[cur].id))
+        town.story.on_boss(str(zdef(cur).id))
     elif j != "" and randf() < 0.15:
         _drop_item(j, m.position)
     var xp: int = max(5, int(round(p.need(m.lv) / 20.0))) * (3 if m.elite else 1) * (15 if m.boss else 1)
@@ -666,9 +706,11 @@ func _process(delta: float) -> void:
             normal += 1
     var cap := 12 if town.is_mobile else 20
     spawn_t -= delta
-    if normal < cap and spawn_t <= 0.0:
+    if normal < cap and spawn_t <= 0.0 and not is_dg(cur):
         _spawn(true)
         spawn_t = 5.0
+    if chest_node != null:
+        chest_node.rotation.y += delta * 0.6
     if boss == null and boss_t > 0.0:
         boss_t -= delta
         if boss_t <= 0.0:
@@ -692,15 +734,365 @@ func _process(delta: float) -> void:
                 ore.hp = ore.max
                 _ore_show(cur, ore, true)
     if p.position.distance_to(exit_pos(cur)) < 1.3 and not p.dead:
-        leave(true)
+        if is_dg(cur) and cur - DG_BASE > 1:
+            var f := cur - DG_BASE - 1
+            leave(false)
+            enter(DG_BASE + f)
+            town.field.say_msg("ขึ้นมาดันเจี้ยนชั้น %d" % f, 2.5)
+        else:
+            leave(true)
         return
-    var Zd: Dictionary = ZONES[cur]
+    var Zd: Dictionary = zdef(cur)
     town.hud.text = "%s · Lv.%d-%d" % [Zd.n, Zd.lv[0], Zd.lv[1]]
+    if is_dg(cur):
+        town.hud.text += " · มอนเหลือ %d" % mobs.size()
     var o = ore_in_front(p)
-    if o != null:
+    if chest_near():
+        town.prompt.text = "กดตีเพื่อเปิดกล่องสมบัติ" if not chest.open else ("กดตีเพื่อลงชั้น %d" % (cur - DG_BASE + 1) if cur - DG_BASE < DG_MAX else "พิชิตดันเจี้ยนครบ %d ชั้นแล้ว!" % DG_MAX)
+    elif o != null:
         var K: Dictionary = OREK[o.kind]
         town.prompt.text = "%s — กดตีเพื่อขุด%s" % [K.n, ("" if pick_tier() >= int(K.req) else " (ต้องใช้" + PICK_NAMES[int(K.req)] + ")")]
     elif p.position.distance_to(exit_pos(cur)) < 4.0:
         town.prompt.text = "เดินเข้าวงเวทเพื่อกลับทุ่งหญ้า"
     else:
         town.prompt.text = ""
+
+# =====================================================================
+# ดันเจี้ยนร้อยชั้น (js/031-core.js DG · dgPool · dgBoss · openDgMenu · enterDg · dgReward · openChest_ · genDungeon · dgPacks)
+# ทางเข้า = ประตูดันเจี้ยนในทุ่งหญ้า · ชนะบอสชั้น = กล่องสมบัติ + เปิดชั้นถัดไป · วงเวทในดัน = ขึ้นชั้นก่อนหน้า (fix11)
+# =====================================================================
+const DG_BASE := 100
+const DG_MAX := 100
+const DGNAME := {"skeleton": "โครงกระดูกนักรบ", "zombie": "ซอมบี้", "bat": "ค้างคาวสุสาน", "wolf": "หมาป่าเงา", "beetle": "ด้วงสุสาน", "golem": "โกเลมหินผี", "wisp": "วิญญาณเร่ร่อน", "drake": "มังกรเล็ก"}
+const DGCOL := [["#8a7a9a", "#3a3048", "#c8a0ff"], ["#6a8a5a", "#2a3a20", "#ff5a3a"], ["#7a6a8a", "#2a2038", "#7fe0ff"], ["#9a6a5a", "#3a2018", "#ffb04a"], ["#6a7a9a", "#1a2038", "#ff4ad8"]]
+var chest := {}
+var chest_node: Node3D
+
+static func dg_pool(f: int) -> Array:
+    if f <= 10:
+        return ["skeleton", "zombie", "bat"]
+    if f <= 30:
+        return ["skeleton", "zombie", "wolf", "beetle"]
+    if f <= 60:
+        return ["skeleton", "zombie", "golem", "wisp"]
+    if f <= 85:
+        return ["drake", "golem", "wisp", "skeleton"]
+    return ["drake", "skeleton", "wisp", "golem"]
+
+static func dg_boss(f: int) -> Dictionary:
+    var r: String = "dragon" if f % 10 == 0 else ["skeleton", "zombie", "golem", "wolf", "beetle"][f % 5]
+    var n := {"dragon": "มังกรผู้พิทักษ์", "skeleton": "ราชาโครงกระดูก", "zombie": "จอมซอมบี้", "golem": "โกเลมผู้คุมคุก", "wolf": "หมาป่าแห่งความมืด", "beetle": "ด้วงราชินีสุสาน"}
+    return {"f": r, "n": str(n[r]) + " ชั้น %d" % f, "lv": min(110, f + 3), "c": DGCOL[(f / 20) % 5]}
+
+func dg_def(f: int) -> Dictionary:
+    var cols: Array = DGCOL[((f - 1) / 20) % 5]
+    var mobs_l := []
+    for k in dg_pool(f):
+        mobs_l.append([k, DGNAME[k], cols])
+    # สีของเกม 2D (#3a3442…) มืดเกินไปในแสง 3D มือถือ → ยกความสว่างขึ้น สีโทนเดิม
+    return {"id": "dg", "n": "ดันเจี้ยนชั้น %d" % f, "lv": [f, f + 2], "ores": [], "dark": false,
+        "pal": {"fl": ["#6a6078", "#625872", "#5a516a"], "top": "#463e54", "face": "#332c40", "vd": "#0a080e"},
+        "mobs": mobs_l, "boss": dg_boss(f)}
+
+static func dg_size(f: int) -> Vector2i:
+    return Vector2i(70, 52) if f <= 20 else (Vector2i(84, 62) if f <= 50 else Vector2i(98, 72))
+
+## ผังดันเจี้ยน: ห้องเรียงเป็นตาราง (สี่เหลี่ยม/ถ้ำ) ต่อกันด้วยทางเดิน (DFS + ทางวน) · ห้องบอส = ห้องที่ไกลที่สุดจากทางเข้า
+func gen_dungeon(zi: int) -> Dictionary:
+    var f := zi - DG_BASE
+    var sz := dg_size(f)
+    var W := sz.x
+    var H := sz.y
+    _rng.seed = f * 977 + 31 * 7331
+    var m := PackedByteArray()
+    m.resize(W * H)
+    m.fill(WL)
+    var setf := func(x: int, y: int) -> void:
+        if x > 1 and y > 1 and x < W - 2 and y < H - 2:
+            m[y * W + x] = FL
+    var cw := 17
+    var chh := 15
+    var cols := (W - 4) / cw
+    var rows := (H - 4) / chh
+    var ox := (W - cols * cw) / 2
+    var oy := (H - rows * chh) / 2
+    var rooms := []
+    for r in rows:
+        for c in cols:
+            var cave := _rng.randf() < 0.45
+            var rw := _rng.randi_range(7, cw - 4)
+            var rh := _rng.randi_range(6, chh - 4)
+            var x0 := ox + c * cw + _rng.randi_range(1, cw - rw - 1)
+            var y0 := oy + r * chh + _rng.randi_range(1, chh - rh - 1)
+            var room := {"c": c, "r": r, "x0": x0, "y0": y0, "rw": rw, "rh": rh, "cx": x0 + (rw >> 1), "cy": y0 + (rh >> 1)}
+            rooms.append(room)
+            if cave:
+                var rx := rw / 2.0
+                var ry := rh / 2.0
+                for y in range(y0 - 1, y0 + rh + 1):
+                    for x in range(x0 - 1, x0 + rw + 1):
+                        var nx: float = (x - int(room.cx)) / rx
+                        var ny: float = (y - int(room.cy)) / ry
+                        var n := _vn(x / 3.1 + f, y / 3.1 + zi, f) * 0.5
+                        if nx * nx + ny * ny < 1.0 + n * 0.6 - 0.15:
+                            setf.call(x, y)
+            else:
+                for y in range(y0, y0 + rh):
+                    for x in range(x0, x0 + rw):
+                        setf.call(x, y)
+    # ห้องอ้างด้วยเลขลำดับ (กันวนอ้างกันเอง)
+    var at := func(c: int, r: int) -> int:
+        if c < 0 or r < 0 or c >= cols or r >= rows:
+            return -1
+        return r * cols + c
+    var adj := []
+    for i in rooms.size():
+        adj.append([])
+    var ent_i: int = at.call(cols >> 1, rows - 1)
+    var vis := {ent_i: true}
+    var st := [ent_i]
+    var links := []
+    while not st.is_empty():
+        var a: int = st.back()
+        var nb := []
+        for dd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+            var bi: int = at.call(int(rooms[a].c) + dd.x, int(rooms[a].r) + dd.y)
+            if bi >= 0 and not vis.has(bi):
+                nb.append(bi)
+        if nb.is_empty():
+            st.pop_back()
+            continue
+        var b2: int = nb[int(_rng.randf() * nb.size())]
+        vis[b2] = true
+        links.append([a, b2])
+        st.append(b2)
+    for a in rooms.size():
+        for dd in [Vector2i(1, 0), Vector2i(0, 1)]:
+            var bi: int = at.call(int(rooms[a].c) + dd.x, int(rooms[a].r) + dd.y)
+            if bi >= 0 and _rng.randf() < 0.22:
+                links.append([a, bi])
+    var carve := func(x: int, y: int, w: int) -> void:
+        for dy in range(-w, w + 1):
+            for dx in range(-w, w + 1):
+                setf.call(x + dx, y + dy)
+    for L in links:
+        var a: Dictionary = rooms[L[0]]
+        var b: Dictionary = rooms[L[1]]
+        adj[L[0]].append(L[1])
+        adj[L[1]].append(L[0])
+        var w := 1 if _rng.randf() < 0.6 else 0
+        var x: int = a.cx
+        var y: int = a.cy
+        var hf := _rng.randf() < 0.5
+        var pts := [Vector2i(b.cx, a.cy), Vector2i(b.cx, b.cy)] if hf else [Vector2i(a.cx, b.cy), Vector2i(b.cx, b.cy)]
+        for tp in pts:
+            var g := 0
+            while (x != tp.x or y != tp.y) and g < 400:
+                g += 1
+                if x != tp.x:
+                    x += signi(tp.x - x)
+                else:
+                    y += signi(tp.y - y)
+                carve.call(x, y, w)
+    # ห้องบอส = ไกลสุดจากทางเข้า
+    var dist := {ent_i: 0}
+    var qq := [ent_i]
+    while not qq.is_empty():
+        var a: int = qq.pop_front()
+        for bi in adj[a]:
+            if not dist.has(bi):
+                dist[bi] = dist[a] + 1
+                qq.append(bi)
+    var boss_i := ent_i
+    for ri in dist:
+        if dist[ri] > dist[boss_i] or (dist[ri] == dist[boss_i] and int(rooms[ri].r) < int(rooms[boss_i].r)):
+            boss_i = ri
+    var ent: Dictionary = rooms[ent_i]
+    var bossr: Dictionary = rooms[boss_i]
+    var arena := Vector2i(clampi(bossr.cx, 12, W - 13), clampi(bossr.cy, 10, H - 11))
+    for y in range(arena.y - 7, arena.y + 8):
+        for x in range(arena.x - 10, arena.x + 11):
+            var nx := (x - arena.x) / 10.0
+            var ny := (y - arena.y) / 7.0
+            if nx * nx + ny * ny < 1.0:
+                setf.call(x, y)
+    var e := Vector2i(ent.cx, min(H - 6, ent.cy))
+    for y in range(e.y - 3, e.y + 4):
+        for x in range(e.x - 3, e.x + 4):
+            setf.call(x, y)
+    # พื้นที่ไปไม่ถึง → ผนัง
+    var seen := PackedByteArray()
+    seen.resize(W * H)
+    var fq := [e.y * W + e.x]
+    seen[fq[0]] = 1
+    while not fq.is_empty():
+        var i: int = fq.pop_back()
+        var x := i % W
+        var y := i / W
+        for dd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+            var j: int = (y + dd.y) * W + x + dd.x
+            if seen[j] == 0 and m[j] == FL:
+                seen[j] = 1
+                fq.append(j)
+    var floor_t := []
+    for y in H:
+        for x in W:
+            var i := y * W + x
+            if m[i] == FL and seen[i] == 0:
+                m[i] = WL
+            elif m[i] == FL:
+                floor_t.append(Vector2i(x, y))
+    var d := {"m": m, "ores": [], "ore_at": {}, "floor": floor_t, "ent": e, "arena": arena, "root": null, "mm": {}, "W": W, "H": H, "rooms": rooms, "ent_room": ent_i, "boss_room": boss_i, "seen": seen}
+    data[zi] = d
+    return d
+
+## ฝูงมอนในห้อง (ยิ่งลึกยิ่งเยอะ) · มือถือจำกัดจำนวน
+func _dg_packs(f: int) -> void:
+    var d: Dictionary = data[cur]
+    var Zd := zdef(cur)
+    var N: int = min(95, 16 + int(f * 0.75))
+    N = min(N, 22 if town.is_mobile else 40)
+    var rooms := []
+    for ri in d.rooms.size():
+        var r: Dictionary = d.rooms[ri]
+        if ri != int(d.ent_room) and ri != int(d.boss_room) and d.seen[int(r.cy) * int(d.W) + int(r.cx)] == 1:
+            rooms.append(r)
+    if rooms.is_empty():
+        return
+    var n := 0
+    var g := 0
+    while n < N and g < 400:
+        g += 1
+        var r = rooms[randi() % rooms.size()]
+        var size: int = min(N - n, 3 + randi() % (3 + f / 25))
+        var lead := randf() < 0.25 + f / 400.0
+        var mb: Array = Zd.mobs[randi() % Zd.mobs.size()]
+        for i in size:
+            var x := 0
+            var y := 0
+            var ok := false
+            for t in 30:
+                x = int(r.x0) + randi() % int(r.rw)
+                y = int(r.y0) + randi() % int(r.rh)
+                if d.m[y * int(d.W) + x] == FL and d.seen[y * int(d.W) + x] == 1:
+                    ok = true
+                    break
+            if not ok:
+                continue
+            var mix: Array = Zd.mobs[randi() % Zd.mobs.size()] if randf() < 0.3 else mb
+            var L := f + randi() % 3
+            _mk(str(mix[0]), str(mix[1]), mix[2], L, tile_w(cur, x, y), {"elite": lead and i == 0, "span": (L - f) / 2.0})
+            n += 1
+
+func _dg_cleared(m) -> void:
+    var f := cur - DG_BASE
+    var p = town.player
+    boss = null
+    boss_t = 0.0
+    chest = {"pos": tile_w(cur, data[cur].arena.x, data[cur].arena.y), "open": false}
+    chest_node = Node3D.new()
+    add_child(chest_node)
+    chest_node.position = chest.pos
+    town.box(chest_node, Vector3(1.4, 0.8, 0.9), Vector3(0, 0.4, 0), town.M(Color(0.48, 0.29, 0.13), 0.8))
+    town.box(chest_node, Vector3(1.45, 0.12, 0.95), Vector3(0, 0.55, 0), town.M(Color(0.91, 0.76, 0.29), 0.3, 0.6))
+    town.box(chest_node, Vector3(1.4, 0.35, 0.9), Vector3(0, 0.98, 0), town.M(Color(0.52, 0.32, 0.15), 0.8))
+    if p.dg_max <= f and f < DG_MAX:
+        p.dg_max = f + 1
+    town.story.on_floor(f)
+    town.field.say_msg("ชนะบอส! กล่องสมบัติปรากฏกลางห้อง — เดินไปกดตีเปิด", 4.0)
+
+func chest_near() -> bool:
+    return not chest.is_empty() and town.player.position.distance_to(chest.pos) < 2.8
+
+## กดตีที่กล่อง: เปิด → รางวัล · เปิดแล้วกดอีกครั้ง = ลงชั้นถัดไป
+func chest_act() -> void:
+    var f := cur - DG_BASE
+    if not chest.open:
+        chest.open = true
+        chest_node.get_child(2).position = Vector3(0, 1.1, -0.35)
+        chest_node.get_child(2).rotation.x = -1.0
+        for k in dg_reward(f):
+            if k == "coin":
+                town.field._drop("coin", chest.pos)
+            else:
+                _drop_item(k, chest.pos)
+        var coins := int(round(40.0 * min(f, 120) * randf_range(0.8, 1.2) * 0.5))
+        town.player.coins += coins
+        town.field.float_text("+%d เหรียญ" % coins, chest.pos + Vector3(0, 2.0, 0), Color(1.0, 0.85, 0.3), 1.4)
+        town.field.say_msg("เปิดกล่องสมบัติชั้น %d! %s" % [f, ("กดตีที่กล่องอีกครั้งเพื่อลงชั้น %d" % (f + 1)) if f < DG_MAX else "พิชิตดันเจี้ยนครบแล้ว!"], 4.0)
+        town.player.save_game()
+    elif f < DG_MAX:
+        leave(false)
+        enter(DG_BASE + f + 1)
+
+## รางวัลกล่อง (dgReward) · ไม่ดรอปอุปกรณ์ (เจ้าของสั่ง: ของคราฟไม่ดรอป ต้องคราฟเอง)
+func dg_reward(f: int) -> Array:
+    var R := []
+    for i in 8 + f / 4:
+        R.append("coin")
+    for i in 1 + f / 12 + (1 if randf() < 0.5 else 0):
+        R.append("estone")
+    var raw: String = ["stone", "iron", "copper", "silver", "gold", "gem"][min(5, f / 17)]
+    for i in 1 + randi() % 3:
+        R.append(raw)
+    if randf() < 0.12 + f / 400.0:
+        R.append("bless")
+    if randf() < 0.15:
+        R.append("phoenix")
+    if randf() < 0.4:
+        R.append("hpp")
+        R.append("hpp")
+    if randf() < 0.3:
+        R.append("mpp")
+        R.append("mpp")
+    return R
+
+## เมนูเลือกชั้น (openDgMenu)
+var dg_sel := 1
+func open_dg_menu() -> void:
+    var p = town.player
+    dg_sel = clampi(dg_sel if dg_sel > 0 else p.dg_max, 1, p.dg_max)
+    town.cur_shop = "dg"
+    for c in town.ui_shop_body.get_children():
+        c.queue_free()
+    var top := HBoxContainer.new()
+    var hv := VBoxContainer.new()
+    hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    hv.add_child(town._nowrap(town._lbl("ดันเจี้ยนใต้พิภพ — ร้อยชั้น", 22, Color(0.85, 0.75, 1.0), true)))
+    hv.add_child(town._lbl("ปลดล็อกแล้วถึงชั้น %d · ชนะบอสแต่ละชั้นเพื่อเปิดชั้นถัดไป" % p.dg_max, 14, Color(0.85, 0.82, 0.74)))
+    top.add_child(hv)
+    var xb: Button = town._btn("X", true, town.close_shop)
+    xb.custom_minimum_size = Vector2(44, 34)
+    top.add_child(xb)
+    town.ui_shop_body.add_child(top)
+    var row := HBoxContainer.new()
+    row.alignment = BoxContainer.ALIGNMENT_CENTER
+    for dv in [-10, -1]:
+        var dd: int = dv
+        var b: Button = town._btn(str(dv), true, func(): dg_sel = clampi(dg_sel + dd, 1, p.dg_max); open_dg_menu())
+        b.custom_minimum_size = Vector2(52, 34)
+        row.add_child(b)
+    var fl: Label = town._nowrap(town._lbl("ชั้น %d" % dg_sel, 22, Color(1.0, 0.9, 0.5), true))
+    fl.custom_minimum_size = Vector2(90, 0)
+    fl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    row.add_child(fl)
+    for dv in [1, 10, 999]:
+        var dd: int = dv
+        var b: Button = town._btn(("+%d" % dv) if dv < 999 else "สูงสุด", true, func(): dg_sel = clampi(dg_sel + dd, 1, p.dg_max); open_dg_menu())
+        b.custom_minimum_size = Vector2(52 if dv < 999 else 70, 34)
+        row.add_child(b)
+    town.ui_shop_body.add_child(row)
+    var f := dg_sel
+    var B := dg_boss(f)
+    var warn := "อันตราย" if p.lv < f - 3 else ("ง่าย" if p.lv > f + 8 else "เหมาะกับคุณ")
+    var names := []
+    for k in dg_pool(f):
+        names.append(DGNAME[k])
+    town.ui_shop_body.add_child(town._lbl("มอนสเตอร์ Lv.%d-%d: %s
+บอส: %s Lv.%d · %s
+รางวัล: หินเสริมพลัง · แร่ · เหรียญ · หินอวยพร (หายาก)" % [f, f + 2, " · ".join(names), B.n, B.lv, warn], 15, Color(0.9, 0.88, 0.8)))
+    var go: Button = town._btn("ลงดันเจี้ยนชั้น %d" % f, true, func(): town.close_shop(); enter(DG_BASE + f))
+    go.custom_minimum_size = Vector2(220, 42)
+    town.ui_shop_body.add_child(go)
+    town.ui_shop_body.add_child(town._lbl("ออกจากดันเจี้ยน: เดินเข้าวงเวท (ขึ้นชั้นก่อนหน้า) หรือใช้ม้วนวาปกลับเมือง", 13, Color(0.75, 0.72, 0.65)))
+    town.ui_shop.visible = true

@@ -269,3 +269,11 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - รางวัลรูนของ 2D ไม่แจก (ยังไม่มีระบบรูน) · บทนำแจกดาบ/ขวาน/ที่ขุดเป็นของชิ้น
 - ผู้เล่นโหลดเซฟก่อนสร้าง story/classes → town เรียก story.load_state(player.pending_story) + recalc_stats + คืนเลือดที่โหลด (player.loaded_hp)
 - เทสกระทืบปฐพีเคยพังสุ่ม (ฆ่าสไลม์แล้วเลเวลอัปเติมมานา) → ตั้ง xp = 0 ก่อนเทส
+
+## 0.14-dungeon (Claude 2026-10-29)
+- ดันเจี้ยนร้อยชั้นตาม 031-core.js (DG dgPool dgBoss openDgMenu enterDg dgReward openChest_ genDungeon dgPacks) + fix11 (วงเวท = ขึ้นชั้นก่อนหน้า · ม้วนวาปออก)
+- ไม่ได้ทำ: ฐานข้อมูล DungeonsData/endless ของ v4.7 · กุญแจดันเจี้ยน dgkey · ทางลงในปราสาท (fix11) · LoadingScreen
+- สีดันเจี้ยนของ 2D มืดเกินในแสง 3D → ยกความสว่าง (dark=false · pal สว่างขึ้น)
+- mine.gd รองรับแผนที่ขนาดต่างกัน (d.W/d.H) · ผนังที่ห่างพื้นเกิน 2 ช่องไม่สร้าง + พื้นมืดใต้แผนที่
+- ห้องในดันอ้างด้วยเลขลำดับ (ถ้าเก็บห้องเป็น Dictionary อ้างกันไปมา Godot จะวนไม่จบตอนเทียบ/แฮช)
+- ทดสอบภาพ `--shot=...,dg:<ชั้น>[:boss]`

@@ -49,6 +49,7 @@ var weapon_tier: int:
             eq.weapon.t = clampi(v, 0, 5)
 var skills := {}       # สกิลที่เรียนแล้ว id -> true
 var cls := "none"
+var dg_max := 1        # ดันเจี้ยนชั้นสูงสุดที่ลงได้
 var pending_story = null   # เนื้อเรื่องที่โหลดก่อนระบบ story ถูกสร้าง
 var loaded_hp := -1.0      # อาชีพ: none / sword / mage / archer (skills.gd)
 var skill_cd := {}     # คูลดาวน์ที่เหลือ
@@ -188,7 +189,7 @@ func crit_rate() -> float:
 var save_path := "user://eldoria_save.json"
 var save_enabled := true
 var _save_t := 0.0
-const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "cls"]
+const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "cls", "dg_max"]
 
 func save_game() -> bool:
     if not save_enabled:
@@ -326,11 +327,13 @@ func use_item(id: String) -> String:
     if u.is_empty() or inv_count(id) <= 0 or dead:
         return ""
     if u.has("warp"):
-        if position.x >= town.OX and abs(position.z) <= 34.0:
+        if position.x >= town.OX and abs(position.z) <= 34.0 and town.mine.cur < 0 and town.room == "":
             return "ใช้ม้วนวาปได้เฉพาะนอกเมือง"
         inv_take(id, 1)
         path = PackedVector3Array()
         target_mob = null
+        if town.mine.cur >= 0:
+            town.mine.leave(false)
         position = town.tw(town.SPAWN.x, town.SPAWN.y)
         return "วาปกลับเมืองเอลโดเรียแล้ว"
     var only_hp: bool = (u.has("hp") or u.has("hpp")) and not (u.has("mp") or u.has("mpp") or u.has("buff"))
@@ -495,6 +498,12 @@ func attack() -> void:
     # หน้าประตูมิติ: ปุ่มตี = เลือกแผนที่ขุดแร่ (กด E/⚔️ ในเกม 2D)
     if town.mine.cur < 0 and town.field.near_portal(self):
         town.mine.open_menu()
+        return
+    if town.mine.cur < 0 and town.field.near_dungeon(self):
+        town.mine.open_dg_menu()
+        return
+    if town.mine.cur >= 0 and town.mine.chest_near():
+        town.mine.chest_act()
         return
     if at >= 0.0:
         queued = true

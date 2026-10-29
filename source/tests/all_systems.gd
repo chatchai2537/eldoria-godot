@@ -871,6 +871,66 @@ func _run() -> void:
     p.lv = 1
     p.recalc_stats()
 
+    # ---------- ดันเจี้ยนร้อยชั้น ----------
+    var dm: Node = world.mine
+    p.dead = false
+    p.hp = p.max_hp
+    p.dg_max = 1
+    p.position = world.field.dungeon_pos + Vector3(0, 0, 3.0)
+    p.stun = 0.0
+    p.dash_t = 0.0
+    p.at = -1.0
+    p.attack()
+    check(world.ui_shop.visible and world.cur_shop == "dg", "ประตูดันเจี้ยน: กดตีแล้วขึ้นเมนูเลือกชั้น")
+    world.close_shop()
+    for fl in [1, 25, 60]:
+        var dd: Dictionary = dm.gen_dungeon(dm.DG_BASE + fl)
+        var Wd: int = dd.W
+        check(dd.m[dd.arena.y * Wd + dd.arena.x] == dm.FL and dd.m[dd.ent.y * Wd + dd.ent.x] == dm.FL and dd.m[(dd.ent.y + 2) * Wd + dd.ent.x] == dm.FL and dd.boss_room != dd.ent_room, "ดันเจี้ยนชั้น %d: ทางเข้า/ห้องบอส/วงเวทอยู่บนพื้นที่เดินถึง" % fl)
+        dm.data.erase(dm.DG_BASE + fl)
+    dm.enter(dm.DG_BASE + 1)
+    dm._process(0.2)
+    check(dm.cur == dm.DG_BASE + 1 and dm.mobs.size() >= 10 and dm.boss != null, "ลงดันเจี้ยนชั้น 1: มีฝูงมอน + บอส")
+    check(not world.blocked(p.position.x, p.position.z), "ดันเจี้ยน: จุดเกิดเดินได้")
+    var stb2 := Mob.stats(3, "skeleton", false, false)
+    check(stb2.x > 0 and dm.zdef(dm.cur).mobs.size() == 3, "ดันเจี้ยนชั้น 1: มอนโครงกระดูก/ซอมบี้/ค้างคาว")
+    dm.mob_killed(dm.boss)
+    check(not dm.chest.is_empty() and p.dg_max == 2 and int(world.story.S.dg) >= 1, "ชนะบอสชั้น 1: กล่องสมบัติ + เปิดชั้น 2 + นับเนื้อเรื่อง")
+    p.position = dm.chest.pos + Vector3(0, 0, 1.5)
+    var cb: int = p.coins
+    var nd2: int = world.field.drops.size()
+    p.attack()
+    var es := false
+    for i in range(nd2, world.field.drops.size()):
+        if world.field.drops[i].k == "estone":
+            es = true
+    check(dm.chest.open and p.coins > cb and es, "เปิดกล่องสมบัติ: เหรียญ + หินเสริมพลัง")
+    p.attack()
+    check(dm.cur == dm.DG_BASE + 2, "กดที่กล่องอีกครั้ง = ลงชั้น 2")
+    p.position = dm.exit_pos(dm.cur)
+    dm._process(0.05)
+    check(dm.cur == dm.DG_BASE + 1, "วงเวทในดันชั้น 2 = ขึ้นชั้น 1")
+    p.position = dm.exit_pos(dm.cur)
+    dm._process(0.05)
+    check(dm.cur == -1 and p.position.distance_to(world.field.dungeon_pos) < 5.0, "วงเวทชั้น 1 = ออกมาหน้าประตูดันเจี้ยน")
+    dm.enter(dm.DG_BASE + 2)
+    p.inv_add("scroll", 1)
+    p.use_item("scroll")
+    check(dm.cur == -1 and not world.in_field_rect(p.position.x, p.position.z, 0.0) and p.position.x < 100.0, "ม้วนวาปในดันเจี้ยน = กลับเมือง")
+    world.story.S.ch = 4
+    world.story.S.st = "active"
+    world.story.on_floor(5)
+    check(world.story.done(), "บทที่ 4: พิชิตดันเจี้ยนชั้น 5 แล้วสำเร็จ")
+    world.story.reset()
+    p.save_enabled = true
+    p.save_path = "user://test_save6.json"
+    p.save_game()
+    p.dg_max = 1
+    p.load_game()
+    check(p.dg_max == 2, "เซฟ/โหลด: ชั้นดันเจี้ยนที่ปลดล็อก")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save6.json"))
+    p.save_enabled = false
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

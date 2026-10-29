@@ -526,12 +526,12 @@ func _update_sky() -> void:
     env.fog_light_color = hor.lerp(Color(0.5, 0.6, 0.75), 0.3)
     env.ambient_light_energy = lerp(0.22, 0.52, day) if not is_mobile else lerp(0.3, 0.85, day)
     env.volumetric_fog_albedo = Color(1, 1, 1).lerp(Color(1.0, 0.8, 0.65), low)
-    if in_mine and mine.ZONES[mine.cur].dark:
+    if in_mine and mine.zdef(mine.cur).dark:
         # เหมืองมืด: แดดอ่อน ฟ้าดำ
         sun.light_energy *= 0.55
         env.ambient_light_energy *= 0.75
         if sky_mat == null:
-            env.background_color = Color.html(str(mine.ZONES[mine.cur].pal.vd))
+            env.background_color = Color.html(str(mine.zdef(mine.cur).pal.vd))
     var night := 1.0 - day
     for l in lights:
         l.light_energy = night * 2.6
@@ -2139,6 +2139,15 @@ func _test_ui(what: String) -> void:
         shot_frames = int(what.substr(6)) if what.length() > 6 else 70
         _test_auto = true
         time_scale = 0.0
+        return
+    if what.begins_with("dg:"):
+        # ทดสอบภาพ: dg:<ชั้น>[:boss] — ลงดันเจี้ยน (boss = ยืนหน้าห้องบอส)
+        var a := what.split(":")
+        mine.enter(mine.DG_BASE + int(a[1]))
+        mine._process(0.2)
+        if a.size() > 2:
+            var d: Dictionary = mine.data[mine.cur]
+            player.position = mine.tile_w(mine.cur, d.arena.x, d.arena.y + 5)
         return
     if what.begins_with("mine:") or what.begins_with("mineboss:"):
         # ทดสอบภาพ: เข้าเหมือง (mineboss = ยืนหน้าลานบอส)

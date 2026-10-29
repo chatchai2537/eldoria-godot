@@ -11,6 +11,10 @@ const FAM := {
     "wolf": {"sz": 1.25, "hp": 1.0, "atk": 1.1, "spd": 82, "r": 13, "range": 80, "type": "lunge", "wu": 0.38, "cd": 1.7},
     "wisp": {"sz": 1.0, "hp": 0.8, "atk": 0.9, "spd": 56, "r": 11, "range": 180, "type": "shoot", "wu": 0.5, "cd": 2.1, "keep": 120, "fly": true},
     "dragon": {"sz": 1.0, "hp": 1.5, "atk": 1.4, "spd": 50, "r": 26, "range": 44, "type": "smash", "wu": 0.6, "cd": 1.6, "fly": true},
+    # ดันเจี้ยน (js/031-core.js 2315)
+    "skeleton": {"sz": 1.0, "hp": 0.9, "atk": 1.1, "spd": 62, "r": 12, "range": 26, "type": "melee", "wu": 0.3, "cd": 1.2},
+    "zombie": {"sz": 1.0, "hp": 1.5, "atk": 1.2, "spd": 30, "r": 13, "range": 28, "type": "lunge", "wu": 0.55, "cd": 1.8},
+    "drake": {"sz": 0.62, "hp": 1.2, "atk": 1.2, "spd": 58, "r": 16, "range": 210, "type": "shoot", "wu": 0.55, "cd": 2.2, "keep": 130, "fly": true},
 }
 
 ## เลือด/พลังโจมตี: mobStats + ตัวคูณจาก fix ตัวหลัง (031 L3194 · fix8 ×1.7/×1.35 · fix31 ×1.25/×1.2)
@@ -153,7 +157,19 @@ func _build() -> void:
             _part("body", _sph(0.38), a, Vector3(0, 0, 0), 1.6)
             _part("core", _sph(0.18), e, Vector3(0, 0, 0.12), 3.0)
             _part("tail", _sph(0.22), b, Vector3(0, -0.3, -0.25), 1.2, Vector3(1, 1, 1.6))
-        "dragon":
+        "skeleton", "zombie":
+            var bone := Color(0.88, 0.86, 0.78) if f == "skeleton" else a
+            _part("body", _bx(Vector3(0.5, 0.65, 0.3)), bone, Vector3(0, 1.05, 0))
+            _part("head", _bx(Vector3(0.38, 0.38, 0.36)), bone, Vector3(0, 1.62, 0.04 if f == "skeleton" else 0.18))
+            _part("eye", _bx(Vector3(0.26, 0.06, 0.05)), e, Vector3(0, 1.66, 0.23 if f == "skeleton" else 0.37), 2.5)
+            _part("al", _bx(Vector3(0.14, 0.7, 0.14)), bone.darkened(0.15), Vector3(-0.36, 1.0, 0.0 if f == "skeleton" else 0.25))
+            _part("ar", _bx(Vector3(0.14, 0.7, 0.14)), bone.darkened(0.15), Vector3(0.36, 1.0, 0.0 if f == "skeleton" else 0.25))
+            _part("legs", _bx(Vector3(0.4, 0.72, 0.22)), b, Vector3(0, 0.36, 0))
+            if f == "skeleton":
+                _part("blade", _bx(Vector3(0.06, 0.08, 0.8)), Color(0.75, 0.78, 0.82), Vector3(0.36, 0.7, 0.4))
+            else:
+                parts["body"].rotation.x = 0.35
+        "dragon", "drake":
             _part("body", _sph(0.6), a, Vector3(0, 0.2, 0), 0.0, Vector3(0.9, 0.8, 1.4))
             _part("head", _bx(Vector3(0.45, 0.4, 0.6)), a, Vector3(0, 0.55, 0.95))
             _part("eye", _bx(Vector3(0.38, 0.07, 0.05)), e, Vector3(0, 0.62, 1.26), 3.0)
@@ -206,7 +222,7 @@ func _build() -> void:
     add_child(ring)
 
 func _top_y() -> float:
-    var base := {"beetle": 0.8, "bat": 0.5, "golem": 1.9, "wolf": 1.05, "wisp": 0.45, "dragon": 1.0}
+    var base := {"beetle": 0.8, "bat": 0.5, "golem": 1.9, "wolf": 1.05, "wisp": 0.45, "dragon": 1.0, "drake": 1.0, "skeleton": 1.9, "zombie": 1.9}
     var fy := 1.6 if F.get("fly", false) else 0.0
     return float(base[f]) * sc + fy
 

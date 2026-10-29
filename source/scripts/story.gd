@@ -112,8 +112,6 @@ func need() -> Array:
 func blocked_reason() -> String:
     var c := cur()
     match str(c.get("need", "")):
-        "dg":
-            return "" if town.has_method("dungeon_ready") and town.dungeon_ready() else "ดันเจี้ยนร้อยชั้นยังไม่เปิดในเกม 3D (เร็ว ๆ นี้)"
         "guild":
             return "เควสกิลด์ยังไม่เปิดในเกม 3D (เร็ว ๆ นี้)"
     return ""
