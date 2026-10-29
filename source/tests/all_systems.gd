@@ -1165,6 +1165,48 @@ func _run() -> void:
     var body_meshes: Array = p.body.inst.find_children("*", "MeshInstance3D", true, false)
     check(body_meshes.all(func(m): return not (m as MeshInstance3D).visible or xr.call(m)), "กล้อง ROM: ทุกชิ้นของตัวละครมีเงาทะลุตึก (stencil) หลังเปลี่ยนโมเดล")
     check(body_meshes.all(func(m): return (m as MeshInstance3D).material_overlay == null), "กล้อง ROM: ไม่ใช้ overlay ที่ทำแขนตัวเองเป็นสีฟ้า")
+    # ---------- ชุดประจำอาชีพ (0.29) ----------
+    var It = load("res://scripts/items.gd")
+    var e4 := {"weapon": p.make_inst("sword2"), "helm": p.make_inst("helm2"), "chest": p.make_inst("chest2"), "arm": p.make_inst("arm2")}
+    var si4: Dictionary = It.set_info(e4, "sword")
+    check(int(si4.st.get("vit", 0)) >= 6 and int(si4.st.get("str", 0)) >= 6 and float(si4.hp) >= 0.05 and str(si4.lines).find("ชุดอัศวิน") >= 0, "ชุดอาชีพ: อัศวินครบ 4 ชิ้น ได้ VIT/STR + เลือด 5%")
+    var si4m: Dictionary = It.set_info(e4, "mage")
+    check(str(si4m.lines).find("ชุดจอมเวท") >= 0 and str(si4m.lines).find("3/4") >= 0 and float(si4m.dmg) == 0.0, "ชุดอาชีพ: นักเวทถือดาบ อาวุธไม่นับ (3/4)")
+    var e2 := {"helm": p.make_inst("helm1"), "chest": p.make_inst("chest1")}
+    var si2: Dictionary = It.set_info(e2, "rogue")
+    check(int(si2.st.get("agi", 0)) == 3 and float(si2.dmg) == 0.0, "ชุดอาชีพ: โจร 2 ชิ้น ได้ AGI ยังไม่ได้ดาเมจ")
+    check(It.inst_name(p.make_inst("arm1"), "rogue").begins_with("มีดซ้าย") and It.inst_name(p.make_inst("arm1"), "archer").begins_with("ซองลูกศร") and It.inst_name(p.make_inst("arm1"), "sword").begins_with("โล่"), "ชุดอาชีพ: ช่องมือรองชื่อตามอาชีพ")
+    p.coins = 2000
+    p.cls = "none"
+    p.lv = 40
+    cl2.pick("sword")
+    cl2.pick("paladin")
+    for k in e4:
+        p.eq[k] = e4[k]
+    p.recalc_stats()
+    check(str(p.set_b.lines).find("ชุดอัศวิน") >= 0, "ชุดอาชีพ: พาลาดินใช้ชุดของสายอัศวิน")
+    p.eq.weapon.e = 10
+    p.update_gear_visual()
+    check(p.aura != null and p.aura.visible, "ตีบวก +10: มีออร่ารอบตัว")
+    p.eq.weapon.e = 9
+    p.update_gear_visual()
+    check(not p.aura.visible, "ตีบวก +9: ยังไม่มีออร่า")
+    p.coins = 2000
+    cl2.pick("rogue")
+    p.update_gear_visual()
+    check(vis_of.call("Knife") and vis_of.call("Knife_Offhand"), "โจร: มีดซ้ายมาจากช่องมือรอง")
+    p.eq.erase("arm")
+    p.update_gear_visual()
+    check(vis_of.call("Knife") and not vis_of.call("Knife_Offhand"), "โจร: ถอดมือรอง เหลือมีดเดียว")
+    p.coins = 2000
+    cl2.pick("archer")
+    p.eq["arm"] = p.make_inst("arm1")
+    p.update_gear_visual()
+    check(vis_of.call("Quiver"), "นักหน้าไม้: ซองลูกศรบนหลัง (ช่องมือรอง)")
+    for k in ["weapon", "helm", "chest", "arm"]:
+        p.eq.erase(k)
+    p.update_gear_visual()
+    p.recalc_stats()
     # ---------- ภาพ 0.24-0.26 ----------
     check(world.field.slimes.size() > 0 and world.field.slimes[0].body.mesh is ArrayMesh, "สไลม์ทรงหยดน้ำ (ArrayMesh)")
     check(world.fade_blds.size() >= 11, "อาคารใหม่ลงทะเบียนจางเมื่อบังกล้อง")

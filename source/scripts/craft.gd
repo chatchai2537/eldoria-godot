@@ -328,12 +328,20 @@ func _anvil() -> void:
         if anvil_tier > p.smith_u:
             town.ui_shop_body.add_child(town._lbl("ยังตีระดับ%sไม่ได้ — คุยกับช่างหนวดเหล็ก → ตำราช่าง (ต้อง Lv.%d)" % [Items.TNAMES[anvil_tier], int(SMQ[anvil_tier].lv)], 15, Color(1.0, 0.55, 0.45), true))
         town.ui_shop_body.add_child(town._lbl("วัสดุ: %s มี %d · ไม้ มี %d · คุณภาพสุ่ม ขาว %d%% · เขียว %d%% · ม่วง %d%% · แดง %d%%" % [Items.item_name(mk), p.inv_count(mk), p.wood, Items.QCHANCE[0], Items.QCHANCE[1], Items.QCHANCE[2], Items.QCHANCE[3]], 14, Color(0.8, 0.85, 0.95)))
+        var b0: String = town.classes.base_of(p.cls) if town.classes != null else ""
+        if Items.CSET.has(b0):
+            var C0: Dictionary = Items.CSET[b0]
+            town.ui_shop_body.add_child(town._lbl("★ %s = %s + หมวก + เสื้อ + %s ระดับเดียวกัน · ครบ 2 ชิ้น/4 ชิ้นได้โบนัส (4 ชิ้น: %s)" % [C0.n, Items.KINDS[C0.w], C0.off, C0.txt], 14, Color(1.0, 0.85, 0.45)))
         for k in Items.KIND_ORDER:
             var kk: String = k
             var r: Array = Items.RECIPE[k]
             var it := {"k": k, "t": anvil_tier, "q": 0, "e": 0}
             var own: int = p.inv_count(k + str(anvil_tier))
-            var txt := "%s%s  ·  %s %d  ·  ใช้%s %d%s" % [Items.inst_name(it), (" (มี ×%d)" % own) if own > 0 else "", Items.stat_label(k), Items.inst_stat(it), Items.item_name(mk), int(r[0]), (" + ไม้ %d" % int(r[1])) if int(r[1]) > 0 else ""]
+            var base: String = town.classes.base_of(p.cls) if town.classes != null else ""
+            var star := ""
+            if Items.CSET.has(base) and (k == Items.CSET[base].w or k in ["helm", "chest", "arm"]):
+                star = "★ "   # ชิ้นชุดประจำอาชีพ (0.29)
+            var txt := "%s%s%s  ·  %s %d  ·  ใช้%s %d%s" % [star, Items.inst_name(it, base), (" (มี ×%d)" % own) if own > 0 else "", Items.stat_label(k), Items.inst_stat(it), Items.item_name(mk), int(r[0]), (" + ไม้ %d" % int(r[1])) if int(r[1]) > 0 else ""]
             town.ui_shop_body.add_child(_big(txt, can_craft(k, anvil_tier) and anvil_tier <= p.smith_u, func(): _msg(craft(kk, anvil_tier)); open("anvil"), Color(0.95, 0.92, 0.85), town.gear_icon_id(it)))
     else:
         var L := enh_list()

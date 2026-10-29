@@ -30,7 +30,7 @@ const CLS := {
     "summoner": {"n": "พรานอสูร", "col": Color("#9adf6a"), "w": "bow", "d": "พรานหน้าไม้ เรียกหมาป่า หมี อินทรี มาสู้แทน · ดาเมจจาก AGI", "pas": "AGI +3+Lv/3 · สัตว์อัญเชิญแรงขึ้น 30%"},
 }
 const CLASS_ORDER := ["sword", "archer", "mage", "rogue", "paladin", "dragoon", "sniper", "summoner", "cleric", "necro", "ninja", "monk"]
-const WNAME := {"sword": "ดาบ", "staff": "คทา", "bow": "ธนู"}
+const WNAME := {"sword": "ดาบ", "staff": "คทา", "bow": "หน้าไม้"}
 const SK := {
     "rogue": [
         {"n": "มีดพิษคู่", "lv": 5, "mp": 12, "cd": 5.0, "d": "แทงมีดคู่ด้านหน้า 2 ครั้ง ครั้งละ ×1.2"},

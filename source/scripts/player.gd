@@ -158,8 +158,8 @@ var model_kind := ""
 const GEAR_SLOTS := {
     "knight": {"helm": "Knight_Helmet", "chest": "Knight_Cape", "arm": "Round_Shield"},
     "mage": {"helm": "Mage_Hat", "chest": "Mage_Cape", "arm": "Spellbook"},
-    "rogue": {"helm": "", "chest": "Rogue_Cape", "arm": ""},
-    "hooded": {"helm": "", "chest": "Rogue_Cape", "arm": ""},
+    "rogue": {"helm": "", "chest": "Rogue_Cape", "arm": "Knife_Offhand"},
+    "hooded": {"helm": "", "chest": "Rogue_Cape", "arm": "Quiver"},
     "barbarian": {"helm": "Barbarian_Hat", "chest": "Barbarian_Cape", "arm": "Barbarian_Round_Shield"},
 }
 ## ของในมือที่ต้องยืมจากโมเดลอื่น: ชิ้น → ไฟล์โมเดลต้นทาง
@@ -198,7 +198,7 @@ func _weapon_items(wk: String) -> Array:
     match wk:
         "sword":
             if model_kind == "rogue":
-                return ["Knife", "Knife_Offhand"]
+                return ["Knife"]   # มีดซ้าย = ช่องมือรอง (0.29)
             if model_kind == "barbarian":
                 return ["2H_Axe"]
             return ["1H_Sword"]
@@ -239,13 +239,20 @@ func update_gear_visual() -> void:
     for it_name in ITEM_SRC.keys():
         body.show_item(it_name, show.has(it_name), TIER_COL[int(w.get("t", 0))], glow.call(w) if show.has(it_name) else 0.0)
     var slots: Dictionary = GEAR_SLOTS.get(model_kind, GEAR_SLOTS.knight)
+    if slots.arm == "Quiver":
+        _quiver_node()
+    if slots.arm == "Knife_Offhand":
+        body.borrow_item("rogue", "Knife_Offhand")
+    _update_aura(w)
     for pair in [["helm", slots.helm], ["chest", slots.chest], ["arm", slots.arm]]:
         if str(pair[1]) == "":
             continue
         var it: Dictionary = eq.get(pair[0], {})
         # ผ้าคลุมไม่เรืองแสง (ผืนใหญ่ บังตัวละคร) · ย้อมสีอ่อน ๆ
         var gl: float = 0.0 if pair[0] == "chest" or it.is_empty() else glow.call(it)
-        body.show_item(str(pair[1]), not it.is_empty(), TIER_COL[int(it.get("t", 0))] if not it.is_empty() else Color(0, 0, 0, 0), gl, 0.35 if pair[0] == "chest" else 0.65)
+        # ซองลูกศรไม่ย้อมสี (วัสดุหนังของมันเอง) — ย้อมซ้ำแล้วตอนเปลี่ยนโมเดล GLES3 แจ้ง material null
+        var tint: Color = TIER_COL[int(it.get("t", 0))] if not it.is_empty() and str(pair[1]) != "Quiver" else Color(0, 0, 0, 0)
+        body.show_item(str(pair[1]), not it.is_empty(), tint, gl, 0.35 if pair[0] == "chest" else 0.65)
     if town != null and town.has_method("apply_xray"):
         town.apply_xray(self)
 
@@ -288,7 +295,7 @@ func best_tool(kind: String) -> Dictionary:
 const STAT_NAMES := {"str": "STR พลัง (โจมตี)", "vit": "VIT อึด (เลือด +12 · ป้องกัน)", "int": "INT ปัญญา (มานา +6)", "agi": "AGI ว่องไว (คริ +0.4%)", "end": "END ทนทาน"}
 
 func recalc_stats() -> void:
-    set_b = Items.set_info(eq)
+    set_b = Items.set_info(eq, town.classes.base_of(cls) if town != null and town.get("classes") != null else "")
     max_hp = 100 + (lv - 1) * 15 + stat_total("vit") * 12 + (Items.inst_stat(eq.neck) if eq.has("neck") else 0)
     max_hp = int(round(max_hp * (1.0 + float(set_b.get("hp", 0.0)))))
     max_mp = 50 + (lv - 1) * 5 + stat_total("int") * 6
@@ -726,6 +733,79 @@ static func _make_pick_mesh() -> ArrayMesh:
     holder.free()
     return mesh
 
+## ซองลูกศรบนหลัง (นักหน้าไม้ · ช่องมือรอง) — ปั้นด้วยโค้ด ติดกระดูก chest
+static var _quiver_mesh: ArrayMesh
+func _quiver_node() -> MeshInstance3D:
+    var L: Dictionary = body._item_nodes()
+    if L.has("Quiver"):
+        return L["Quiver"]
+    if _quiver_mesh == null:
+        var kit = preload("res://scripts/building_kit.gd").new()
+        var leather := StandardMaterial3D.new()
+        leather.albedo_color = Color(0.5, 0.32, 0.18)
+        leather.roughness = 0.8
+        var wood := StandardMaterial3D.new()
+        wood.albedo_color = Color(0.62, 0.45, 0.25)
+        var fl := StandardMaterial3D.new()
+        fl.albedo_color = Color(0.92, 0.9, 0.85)
+        kit.cyl(leather, 0.13, 0.11, 0.62, Vector3(0, 0.0, 0), 10)
+        kit.cyl(leather, 0.15, 0.15, 0.06, Vector3(0, 0.3, 0), 10)
+        for i in 4:
+            var off := Vector3(cos(i * 1.6) * 0.06, 0, sin(i * 1.6) * 0.06)
+            kit.cyl(wood, 0.015, 0.015, 0.3, off + Vector3(0, 0.45, 0), 4)
+            kit.box(fl, Vector3(0.07, 0.12, 0.01), off + Vector3(0, 0.56, 0), Vector3(0, i * 0.8, 0))
+        var holder := Node3D.new()
+        kit.commit(holder)
+        _quiver_mesh = ArrayMesh.new()
+        for mi in holder.get_children():
+            _quiver_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ((mi as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0))
+            _quiver_mesh.surface_set_material(_quiver_mesh.get_surface_count() - 1, (mi as MeshInstance3D).material_override)
+        holder.free()
+    var sk: Skeleton3D = body.inst.get_node("Rig/Skeleton3D")
+    var att := BoneAttachment3D.new()
+    att.bone_name = "chest"
+    sk.add_child(att)
+    var mi := MeshInstance3D.new()
+    mi.name = "Quiver"
+    mi.mesh = _quiver_mesh
+    mi.position = Vector3(0.12, 0.35, -0.42)
+    mi.rotation = Vector3(0.25, 0, -0.45)
+    mi.visible = false
+    att.add_child(mi)
+    L["Quiver"] = mi
+    return mi
+
+## ออร่าตีบวก +10 ขึ้นไป: วงแสงสีตามระดับอาวุธหมุนรอบเท้า (+7 เรืองแสงอยู่แล้วใน show_item)
+var aura: MeshInstance3D
+func _update_aura(w: Dictionary) -> void:
+    var on: bool = not w.is_empty() and int(w.get("e", 0)) >= 10
+    if not on:
+        if aura != null:
+            aura.visible = false
+        return
+    if aura == null:
+        aura = MeshInstance3D.new()
+        aura.name = "Aura"
+        var tm := TorusMesh.new()
+        tm.inner_radius = 0.75
+        tm.outer_radius = 0.9
+        tm.rings = 24
+        tm.ring_segments = 6
+        aura.mesh = tm
+        aura.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        aura.scale = Vector3(1, 0.15, 1)
+        aura.position.y = 0.1
+        add_child(aura)
+    var c: Color = TIER_COL[int(w.get("t", 0))]
+    var m := StandardMaterial3D.new()
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.albedo_color = Color(c.r, c.g, c.b, 0.55)
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.emission_enabled = true
+    m.emission = c
+    aura.material_override = m
+    aura.visible = true
+
 func _tool_node(kind: String) -> MeshInstance3D:
     if kind == "axe":
         return body.borrow_item("barbarian", "1H_Axe")
@@ -839,6 +919,9 @@ func _face(dir: Vector3, delta: float) -> void:
     body.rotation.y = heading
 
 func _process(delta: float) -> void:
+    if aura != null and aura.visible:
+        aura.rotation.y += delta * 1.6
+        aura.scale = Vector3.ONE * (1.0 + 0.06 * sin(Time.get_ticks_msec() * 0.004)) * Vector3(1, 0.15, 1)
     if tool_t > 0.0:
         tool_t -= delta
         if tool_t <= 0.0:

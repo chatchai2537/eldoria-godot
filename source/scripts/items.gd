@@ -65,7 +65,7 @@ const ITEM := {
     "wood": {"name": "ไม้"},
     "sword0": {"name": "ดาบหินธรรมดา"},
     "staff0": {"name": "คทาหินธรรมดา"},
-    "bow0": {"name": "ธนูหินธรรมดา"},
+    "bow0": {"name": "หน้าไม้หินธรรมดา"},
     "axe0": {"name": "ขวานหินธรรมดา", "note": "มีในกระเป๋า = หันหน้าเข้าต้นไม้แล้วกดตีเพื่อตัดไม้ (1 หน่วย/ที)"},
     "pick0": {"name": "ที่ขุดแร่หินธรรมดา", "note": "มีในกระเป๋า = หันเข้าก้อนแร่ในเหมืองแล้วกดตีเพื่อขุด (ขุดหิน/เหล็กได้)"},
     "iron": {"name": "แร่เหล็ก"},
@@ -141,11 +141,11 @@ const RANGED := {
 
 # ---------- อุปกรณ์ / คราฟ / ตีบวก (js/015-core.js · 031-core.js furnace/anvil · v4.7 ENHCFG · GAME_DESIGN.md) ----------
 ## ไอดีอุปกรณ์ = ชนิด + ระดับ เช่น sword0 · helm3 · pick5 · ของแต่ละชิ้นเก็บเป็น {k,t,q,e,b} (q = คุณภาพ · e = ตีบวก · b = แตก)
-const KINDS := {"sword": "ดาบ", "staff": "คทา", "bow": "ธนู", "axe": "ขวาน", "pick": "ที่ขุดแร่", "helm": "หมวก", "chest": "เสื้อเกราะ", "pants": "กางเกง", "arm": "เกราะแขน", "neck": "สร้อย", "ring": "แหวน"}
+const KINDS := {"sword": "ดาบ", "staff": "คทา", "bow": "หน้าไม้", "axe": "ขวาน", "pick": "ที่ขุดแร่", "helm": "หมวก", "chest": "เสื้อเกราะ", "pants": "กางเกง", "arm": "เกราะแขน", "neck": "สร้อย", "ring": "แหวน"}
 const KIND_ORDER := ["sword", "staff", "bow", "axe", "pick", "helm", "chest", "pants", "arm", "neck", "ring"]
 const SLOT_OF := {"sword": "weapon", "staff": "weapon", "bow": "weapon", "helm": "helm", "chest": "chest", "pants": "pants", "arm": "arm", "neck": "neck", "ring": "ring"}
 const SLOTS := ["weapon", "helm", "chest", "pants", "arm", "neck", "ring"]
-const SLOT_NAMES := {"weapon": "อาวุธ", "helm": "หมวก", "chest": "เสื้อ", "pants": "กางเกง", "arm": "แขน", "neck": "สร้อย", "ring": "แหวน"}
+const SLOT_NAMES := {"weapon": "อาวุธ", "helm": "หมวก", "chest": "เสื้อ", "pants": "กางเกง", "arm": "มือรอง", "neck": "สร้อย", "ring": "แหวน"}
 ## ระดับ 0-5 = คราฟได้ · 6-11 = ชุดดรอปจากบอส (fix59 B59 · คราฟไม่ได้ · ขายร้านไม่ได้ · ต้องถึงเลเวลของชุด)
 const TNAMES := ["หินธรรมดา", "เหล็ก", "ทองแดง", "เงิน", "ทอง", "เพชร", "หนามพงไพร", "เกล็ดอสรพิษ", "เขี้ยวเหมันต์", "ฟาโรห์สุริยัน", "มังกรโลหิต", "จักรพรรดิเงา"]
 const ADEF := {"helm": [1, 2, 3, 4, 5, 7, 3, 5, 8, 11, 14, 19], "chest": [2, 3, 5, 6, 8, 11, 5, 8, 13, 18, 23, 30], "pants": [1, 2, 3, 4, 5, 7, 3, 5, 8, 11, 14, 19], "arm": [1, 1, 2, 3, 4, 6, 2, 4, 7, 10, 13, 17]}
@@ -179,8 +179,39 @@ static func _addst(o: Dictionary, add: Dictionary) -> void:
     for k in add:
         o[k] = int(o.get(k, 0)) + int(add[k])
 
-## โบนัสจากของที่สวม: {st:{str..}, dmg, hp, lines:[ข้อความ]}
-static func set_info(eq: Dictionary) -> Dictionary:
+## ---- ชุดประจำอาชีพ (0.29 · docs/PLAN_4CLASS_TH.md ข้อ 3) ----
+## 4 ชิ้นหลัก: อาวุธประจำสาย + หมวก + เสื้อ + มือรอง (ช่องแขน) ระดับหลอมเดียวกัน (0-5) · 2 ชิ้น / 4 ชิ้น
+## ซ้อนกับโบนัสชุดตามแร่ 3/5/7 ชิ้นเดิม (SETB) · สายย่อยใช้ชุดของสายหลัก
+const CSET := {
+    "sword": {"n": "ชุดอัศวิน", "w": "sword", "off": "โล่", "b2": {"vit": [2, 2]}, "b4": {"str": [2, 2]}, "hp": 0.05, "dmg": 0.0, "txt": "เลือด +5%"},
+    "archer": {"n": "ชุดพรานหน้าไม้", "w": "bow", "off": "ซองลูกศร", "b2": {"agi": [2, 2]}, "b4": {"agi": [2, 2]}, "hp": 0.0, "dmg": 0.05, "txt": "ดาเมจ +5%"},
+    "mage": {"n": "ชุดจอมเวท", "w": "staff", "off": "คัมภีร์", "b2": {"int": [3, 2]}, "b4": {"int": [3, 2], "vit": [1, 1]}, "hp": 0.0, "dmg": 0.04, "txt": "ดาเมจ +4%"},
+    "rogue": {"n": "ชุดเงาจันทร์", "w": "sword", "off": "มีดซ้าย", "b2": {"agi": [2, 1], "str": [1, 1]}, "b4": {"str": [2, 2]}, "hp": 0.0, "dmg": 0.06, "txt": "ดาเมจ +6%"},
+}
+const CSET_SLOTS := ["weapon", "helm", "chest", "arm"]
+
+static func _cst(b: Dictionary, t: int) -> Dictionary:
+    var o := {}
+    for k in b:
+        o[k] = int(b[k][0]) + int(b[k][1]) * t
+    return o
+
+## นับชิ้นชุดประจำอาชีพ: คืน [ระดับ, จำนวนชิ้น] ของระดับที่ใส่มากที่สุด
+static func class_set_count(eq: Dictionary, base: String) -> Vector2i:
+    if not CSET.has(base):
+        return Vector2i(-1, 0)
+    var best := Vector2i(-1, 0)
+    for tt in BOSS_T0:
+        var n := 0
+        for sl in CSET_SLOTS:
+            if eq.has(sl) and int(eq[sl].t) == tt and (sl != "weapon" or str(eq[sl].k) == str(CSET[base].w)):
+                n += 1
+        if n > best.y:
+            best = Vector2i(tt, n)
+    return best
+
+## โบนัสจากของที่สวม: {st:{str..}, dmg, hp, lines:[ข้อความ]} · base = สายหลักของอาชีพ (ไม่ส่ง = ไม่คิดชุดอาชีพ)
+static func set_info(eq: Dictionary, base: String = "") -> Dictionary:
     var st := {}
     var dmg := 0.0
     var hp := 0.0
@@ -206,6 +237,23 @@ static func set_info(eq: Dictionary) -> Dictionary:
             hp += f
             ln += " · ครบชุด ดาเมจ/เลือด +%.1f%%" % (f * 100.0)
         lines.append(ln)
+    var cs := class_set_count(eq, base)
+    if cs.y >= 2:
+        var C: Dictionary = CSET[base]
+        var b2 := _cst(C.b2, cs.x)
+        _addst(st, b2)
+        var b4 := _cst(C.b4, cs.x)
+        var cl := ""
+        if cs.y >= 4:
+            _addst(st, b4)
+            dmg += float(C.dmg)
+            hp += float(C.hp)
+            var tot := b2.duplicate()
+            _addst(tot, b4)
+            cl = "%s%s ครบ 4/4: %s · %s" % [C.n, TNAMES[cs.x], _sttxt(tot), C.txt]
+        else:
+            cl = "%s%s %d/4: %s (ครบ 4 ชิ้นได้เพิ่ม %s · %s)" % [C.n, TNAMES[cs.x], cs.y, _sttxt(b2), _sttxt(b4), C.txt]
+        lines.append(cl)
     if eq.has("neck") and eq.has("ring") and int(eq.neck.t) == int(eq.ring.t):
         var tt := t2d(int(eq.neck.t))
         var nr := {"int": 2 + tt * 2, "agi": 1 + tt}
@@ -300,8 +348,11 @@ static func stat_label(k: String) -> String:
             return "แรงขุด"
     return "ป้องกัน"
 
-static func inst_name(it: Dictionary) -> String:
-    var n := str(KINDS[it.k]) + str(TNAMES[int(it.t)])
+static func inst_name(it: Dictionary, base: String = "") -> String:
+    var kn := str(KINDS[it.k])
+    if str(it.k) == "arm" and CSET.has(base):
+        kn = str(CSET[base].off)
+    var n := kn + str(TNAMES[int(it.t)])
     if int(it.get("e", 0)) > 0:
         n += " +%d" % int(it.e)
     return n
