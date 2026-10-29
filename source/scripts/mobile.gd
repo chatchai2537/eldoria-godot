@@ -22,6 +22,8 @@ var atk: Panel
 var dash: Panel
 var ride: Panel   # ปุ่มขี่/ลงสัตว์ขี่ (เห็นเมื่อมีสัตว์ขี่)
 var rot_hint: Label
+var compass: Panel      # เข็มทิศ: ชี้ทิศเหนือตามมุมกล้อง · แตะ = หันกล้องกลับทิศเหนือ
+var needle: Node2D
 var skill_btns := {}   # ปุ่มสกิล 4 ช่อง วงรอบปุ่มตี (ผังเดียวกับเกม 2D fix30/fix41) · ช่อง 3 = เยียวยา
 const SLOT_COLOR := [Color(0.15, 0.3, 0.45, 0.92), Color(0.5, 0.18, 0.08, 0.92), Color(0.35, 0.2, 0.45, 0.92), Color(0.1, 0.4, 0.2, 0.92)]
 var _sk_tick := 0.0
@@ -57,6 +59,26 @@ func setup(t) -> void:
         (b.get_child(0) as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         root.add_child(b)
         skill_btns[i] = b
+    compass = _circle(46, Color(0.05, 0.09, 0.14, 0.82), Color(0.85, 0.72, 0.42, 0.9), 2)
+    compass.size = Vector2(46, 46)
+    root.add_child(compass)
+    needle = Node2D.new()
+    needle.position = Vector2(23, 23)
+    compass.add_child(needle)
+    var n_up := Polygon2D.new()
+    n_up.polygon = PackedVector2Array([Vector2(0, -17), Vector2(5, 0), Vector2(-5, 0)])
+    n_up.color = Color(0.95, 0.3, 0.25)
+    needle.add_child(n_up)
+    var n_dn := Polygon2D.new()
+    n_dn.polygon = PackedVector2Array([Vector2(0, 17), Vector2(5, 0), Vector2(-5, 0)])
+    n_dn.color = Color(0.9, 0.88, 0.82)
+    needle.add_child(n_dn)
+    var nl := Label.new()
+    nl.text = "N"
+    nl.add_theme_font_size_override("font_size", 10)
+    nl.add_theme_color_override("font_color", Color(1, 1, 1))
+    nl.position = Vector2(-4, -31)
+    needle.add_child(nl)
     refresh_skills()
     _layout()
     get_viewport().size_changed.connect(_layout)
@@ -110,7 +132,10 @@ func _layout() -> void:
     atk.position = Vector2(vs.x - 76 - 14, vs.y - 76 - 14)
     dash.position = Vector2(vs.x - 76 - 14 - 52 - 14, vs.y - 52 - 10)
     joy_hint.position = Vector2(26, vs.y - 146)
-    ride.position = Vector2(vs.x * 0.45 - 44 - 10, vs.y - 44 - 12)  # กลางล่าง (ไม่ทับปุ่มสกิล/จอย)
+    ride.position = Vector2(vs.x * 0.45 - 44 - 10, vs.y - 44 - 12)
+    if compass != null:
+        var ml: float = town.minimap.offset_left if town.minimap != null else -150.0
+        compass.position = Vector2(vs.x + ml - 46 - 10, 60)  # กลางล่าง (ไม่ทับปุ่มสกิล/จอย)
     # วงรอบปุ่มตี: ซ้ายบน · บน · ซ้าย (คล้าย sk1-sk3 ของเกม 2D)
     var c := atk.position + atk.size * 0.5
     var offs := {0: Vector2(-98, -58), 1: Vector2(-40, -106), 2: Vector2(-152, -14), 3: Vector2(22, -132)}
@@ -131,6 +156,11 @@ func refresh_skills() -> void:
         b.modulate = Color(1, 1, 1, 1.0 if c <= 0.0 else 0.6)
 
 func _process(delta: float) -> void:
+    if needle != null:
+        needle.rotation = town.cam_yaw_vis
+        compass.visible = town.room == ""
+        var ml: float = town.minimap.offset_left if town.minimap != null else -150.0
+        compass.position = Vector2(root.get_viewport_rect().size.x + ml - 56, 60)
     _sk_tick += delta
     if _sk_tick >= 0.2:
         _sk_tick = 0.0
@@ -183,6 +213,12 @@ func _input(e: InputEvent) -> void:
                 town.field.say_msg(town.steed.toggle())
                 get_viewport().set_input_as_handled()
                 return
+            if compass.visible and _in(compass, pos, 6.0):
+                _press(compass)
+                town.cam_spin = 0.0
+                town.cam_yaw = round(town.cam_yaw / TAU) * TAU
+                get_viewport().set_input_as_handled()
+                return
             if _in(dash, pos):
                 _press(dash)
                 town.player.dash(_world_dir())
@@ -222,6 +258,10 @@ func _input(e: InputEvent) -> void:
                 joy_knob.visible = false
                 joy_hint.visible = true
             cam_ids.erase(e.index)
+            if cam_ids.is_empty():
+                town.cam_dragging = false
+            else:
+                town.cam_spin = 0.0
     elif e is InputEventScreenDrag:
         if e.index == attack_touch_id:
             town.player.attack_held = _in(atk, e.position)
@@ -245,12 +285,16 @@ func _input(e: InputEvent) -> void:
                 var ps2: Array = cam_ids.values()
                 var nd := (ps2[0] as Vector2).distance_to(ps2[1])
                 if pinch_d > 0.0:
-                    town.cam_dist = clamp(town.cam_dist * pinch_d / max(nd, 1.0), 8.0, 60.0)
+                    var outside: bool = town.room == ""
+                    town.cam_dist = clamp(town.cam_dist * pinch_d / max(nd, 1.0), town.CAM_NEAR if outside else 8.0, town.CAM_FAR if outside else 60.0)
                 pinch_d = nd
             else:
                 cam_ids[e.index] = e.position
+                town.cam_dragging = true
                 town.cam_yaw -= e.relative.x * 0.008
-                town.cam_pitch = clamp(town.cam_pitch - e.relative.y * 0.005, -1.4, -0.3)
+                town.cam_spin = -e.velocity.x * 0.008
+                if town.room != "":
+                    town.cam_pitch = clamp(town.cam_pitch - e.relative.y * 0.005, -1.4, -0.3)
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:

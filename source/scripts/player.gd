@@ -174,6 +174,8 @@ func update_gear_visual() -> void:
         # ผ้าคลุมไม่เรืองแสง (ผืนใหญ่ บังตัวละคร) · ย้อมสีอ่อน ๆ
         var gl: float = 0.0 if pair[0] == "chest" or it.is_empty() else glow.call(it)
         body.show_item(str(pair[1]), not it.is_empty(), TIER_COL[int(it.get("t", 0))] if not it.is_empty() else Color(0, 0, 0, 0), gl, 0.35 if pair[0] == "chest" else 0.65)
+    if town != null and town.has_method("apply_xray"):
+        town.apply_xray(self)
 
 func equip(it: Dictionary) -> String:
     var k := str(it.k)

@@ -48,6 +48,14 @@ var cam: Camera3D
 var cam_yaw := 0.0
 var cam_pitch := -0.78
 var cam_dist := 22.0
+## กล้องมุมบนหมุนได้แบบ ROM: ลากนิ้วซ้าย-ขวาหมุน · ถ่างนิ้วซูม · มุมก้มเปลี่ยนตามระยะซูม · หมุนแล้วไหลต่อเล็กน้อย
+const CAM_NEAR := 10.0
+const CAM_FAR := 34.0
+var cam_yaw_vis := 0.0      # มุมที่กล้องแสดงจริง (ไล่ตาม cam_yaw ให้นุ่ม)
+var cam_spin := 0.0         # ความเร็วหมุนค้าง (เรเดียน/วิ) หลังปล่อยนิ้ว
+var cam_dragging := false
+var xray_mat: StandardMaterial3D
+var fade_blds: Array = []   # อาคารที่จางลงเมื่อบังกล้อง: {meshes, aabb, f}
 var rot_drag := false
 var hud: Label
 var prompt: Label
@@ -1048,6 +1056,8 @@ func _building(b: Array, st: Dictionary, title: String, sid: String) -> void:
             kit.cyl(gold, 0.0, 0.09, 0.7, Vector3(tx, th + 4.3, tz), 6)
         kit.cyl(roof, 0.0, 0.7, 3.0, Vector3(0, top + rh + 1.4, uzc), 8)
     kit.commit(root)
+    var reach: float = top + rh + (4.5 if st.kind == "gothic" else 1.5)
+    fade_blds.append({"root": root, "meshes": [], "f": 0.0, "aabb": AABB(root.position + Vector3(-uw * 0.5 - ov, 0, uzc - ud * 0.5 - ov), Vector3(uw + ov * 2.0, reach, ud + ov * 2.0 + 0.6))})
     # ของประจำร้าน
     match st.kind:
         "forge":
@@ -1590,6 +1600,7 @@ func _build_player() -> void:
         player.save_enabled = false
     elif player.load_game():
         loading_stage.emit("โหลดเซฟแล้ว", 0.95)
+    apply_xray(player)
     cam = Camera3D.new()
     cam.fov = 45.0
     cam.far = 800.0
@@ -1604,6 +1615,60 @@ func _build_player() -> void:
     add_child(click_marker)
     _update_cam(1.0)
 
+## เงาตัวละครทะลุตึก: เห็นเป็นเงาสีฟ้าจาง ๆ เมื่อมีอาคารบัง (วาดเฉพาะส่วนที่ถูกบัง)
+func apply_xray(n: Node) -> void:
+    if xray_mat == null:
+        xray_mat = StandardMaterial3D.new()
+        xray_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        xray_mat.albedo_color = Color(0.45, 0.82, 1.0, 0.42)
+        xray_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        xray_mat.depth_test = BaseMaterial3D.DEPTH_TEST_INVERTED
+        xray_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+        xray_mat.render_priority = 10
+    for m in n.find_children("*", "MeshInstance3D", true, false):
+        var mi := m as MeshInstance3D
+        if mi.material_overlay == null and mi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+            mi.material_overlay = xray_mat
+
+## ตึกที่อยู่ระหว่างกล้องกับตัวละครจะจางลง (แบบ ROM)
+## มือถือใช้ Compatibility ซึ่งไม่รองรับ GeometryInstance3D.transparency → สลับเป็นวัสดุโปร่ง (cache ต่อวัสดุ)
+var _fade_mats := {}
+func _faded(m: Material) -> Material:
+    if not (m is StandardMaterial3D):
+        return m
+    if not _fade_mats.has(m):
+        var c: StandardMaterial3D = m.duplicate()
+        c.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        c.albedo_color.a = 0.28
+        c.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_OPAQUE_ONLY
+        c.cull_mode = BaseMaterial3D.CULL_BACK
+        _fade_mats[m] = c
+    return _fade_mats[m]
+
+func _update_fade(_delta: float) -> void:
+    if room != "" or cam == null:
+        return
+    var a := cam.global_position
+    var b := player.global_position + Vector3(0, 1.0, 0)
+    for fb in fade_blds:
+        var hit: bool = (fb.aabb as AABB).intersects_segment(a, b) != null
+        var want := 1.0 if hit else 0.0
+        if fb.f == want:
+            continue
+        fb.f = want
+        if (fb.meshes as Array).is_empty():
+            fb.meshes = (fb.root as Node).find_children("*", "MeshInstance3D", true, false)
+        for m in fb.meshes:
+            var mi := m as MeshInstance3D
+            if hit:
+                if not mi.has_meta("solid_mat"):
+                    mi.set_meta("solid_mat", mi.material_override)
+                mi.material_override = _faded(mi.material_override)
+                mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            elif mi.has_meta("solid_mat"):
+                mi.material_override = mi.get_meta("solid_mat")
+                mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
 func _update_cam(delta: float) -> void:
     var vsz := get_viewport().get_visible_rect().size
     if vsz.x < vsz.y:
@@ -1613,12 +1678,24 @@ func _update_cam(delta: float) -> void:
         cam.keep_aspect = Camera3D.KEEP_HEIGHT
         cam.fov = 45.0
     var target := player.global_position + Vector3(0, 1.4, 0)
-    var off := Vector3(0, 0, cam_dist).rotated(Vector3(1, 0, 0), cam_pitch).rotated(Vector3.UP, cam_yaw)
+    if delta < 1.0:
+        if not cam_dragging and abs(cam_spin) > 0.01:
+            cam_yaw += cam_spin * delta
+            cam_spin *= exp(-5.0 * delta)
+        cam_yaw_vis = lerp_angle(cam_yaw_vis, cam_yaw, min(1.0, delta * 14.0))
+    else:
+        cam_yaw_vis = cam_yaw
+    var pitch := cam_pitch
+    if room == "":
+        # ใกล้ = มองเฉียงเห็นตึกสูง · ไกล = มองจากบนเห็นแผนที่กว้าง
+        pitch = lerp(-0.62, -1.02, clamp((cam_dist - CAM_NEAR) / (CAM_FAR - CAM_NEAR), 0.0, 1.0))
+    var off := Vector3(0, 0, cam_dist).rotated(Vector3(1, 0, 0), pitch).rotated(Vector3.UP, cam_yaw_vis)
     var want := target + off
     if room != "":
         want = rooms.clamp_cam(want)
     cam.global_position = cam.global_position.lerp(want, min(1.0, delta * 8.0)) if delta < 1.0 else want
     cam.look_at(target)
+    _update_fade(min(delta, 0.1))
 
 func _setup_hud() -> void:
     var cl := CanvasLayer.new()
@@ -2564,18 +2641,21 @@ func click_at(pos: Vector2) -> void:
 func _unhandled_input(e: InputEvent) -> void:
     if e is InputEventMouseButton:
         if e.button_index == MOUSE_BUTTON_WHEEL_UP and e.pressed:
-            cam_dist = max(8.0, cam_dist * 0.9)
+            cam_dist = max(CAM_NEAR if room == "" else 8.0, cam_dist * 0.9)
         elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and e.pressed:
-            cam_dist = min(70.0, cam_dist * 1.1)
+            cam_dist = min(CAM_FAR if room == "" else 70.0, cam_dist * 1.1)
         elif e.button_index == MOUSE_BUTTON_RIGHT or e.button_index == MOUSE_BUTTON_MIDDLE:
             rot_drag = e.pressed
+            cam_dragging = e.pressed
         elif e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
             if is_mobile and e.device == InputEvent.DEVICE_ID_EMULATION:
                 return
             click_at(e.position)
     elif e is InputEventMouseMotion and rot_drag:
         cam_yaw -= e.relative.x * 0.006
-        cam_pitch = clamp(cam_pitch - e.relative.y * 0.004, -1.4, -0.3)
+        cam_spin = -e.velocity.x * 0.006
+        if room != "":
+            cam_pitch = clamp(cam_pitch - e.relative.y * 0.004, -1.4, -0.3)
     elif e is InputEventKey and e.pressed and not e.echo:
         match e.keycode:
             KEY_F5: time_of_day = 0.3
