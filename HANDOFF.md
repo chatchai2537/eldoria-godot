@@ -1,6 +1,6 @@
 # ใบงาน Eldoria Godot — อ่านไฟล์นี้ + SYSTEMS_TH.md พอ (ไม่ต้องอ่านโค้ดทั้งหมด)
 
-อัปเดตล่าสุด: 2026-10-28 (Claude) · รุ่นปัจจุบัน **0.18-minimap**
+อัปเดตล่าสุด: 2026-10-28 (Claude) · รุ่นปัจจุบัน **0.19-fishing**
 ไฟล์อื่นไม่ต้องอ่าน เว้นแต่จำเป็น: `docs/HISTORY.md` (ประวัติละเอียด) · `AI_HANDOFF_TH.md` (รายละเอียดงาน Codex 0.2-0.4 · วิธีเซ็น APK ด้วย apksigner)
 
 ## 1. ขั้นตอนทำงาน (บังคับ ทุก AI ทุกครั้ง)
@@ -43,6 +43,7 @@
 - 0.2 (Codex) แก้แอปเด้ง: โหลดเป็นช่วง · recovery mode · ปิดของหนักบนมือถือ
 - 0.3 (Codex) กดค้างตีท่าเดียว · กลิ้งหลบ · มอนไม่กระเด็น · ไม่แลค (เจ้าของยืนยัน)
 - 0.4 (Codex) ภาพแนวโมเดิร์น: วัสดุ/ลาย/AO · เงาใต้เท้า · HUD ใหม่
+- 0.19 (Claude) ตกปลา (fishing.gd): คันเบ็ด 2 แบบ · ปลา 6 ชนิด (กลางคืนปลาดุก/มังกรขึ้นง่าย) · แถบดึงปลา · เควสตกปลา · เทส 376
 - 0.18 (Claude) แผนที่เล็ก (minimap.gd) ทุ่ง+เมือง/เหมือง/ดันเจี้ยน · เลเวลสูงสุด 200 · เทส 365
 - 0.17 (Claude) อาชีพเพิ่ม 8 สาย (fix25): นินจา สไนเปอร์ พาลาดิน นักบวช เนโครฯ มังค์ อัศวินมังกร ผู้อัญเชิญ · สัตว์/โครงกระดูกที่เรียกมาสู้ (ally.gd) · ลดดาเมจ/บัฟโจมตี/ดูดเลือด/ดาเมจคริ/เดินเร็ว/ตีเร็ว · เทส 361
 - 0.16 (Claude) อุปกรณ์บนตัวละคร (model.gd `show_item` `borrow_item` · player.gd `update_gear_visual`): ดาบ/คทา(ยืมจาก Mage.glb)/หน้าไม้แทนธนู(Rogue.glb) · หมวก · ผ้าคลุม=เสื้อ · โล่=เกราะแขน · สีตามระดับ เรืองแสงตามคุณภาพ · ขายอุปกรณ์ที่ร้านอาวุธ (gearPrice×0.6) · เทส 236
@@ -71,7 +72,7 @@
 ## 6. build / APK / กุญแจ
 - Godot 4.7.2 · export: `godot --headless --path source --export-release Web build/web/index.html` แล้วคัดลอก `source/build/web/index.*` ไป root
 - APK บนหน้า `apk.html` = `Eldoria.apk`
-  - แพ็กเกจ `com.wiwekwin.eldoria` ชื่อแอป "Eldoria" · versionCode ล่าสุด **21**
+  - แพ็กเกจ `com.wiwekwin.eldoria` ชื่อแอป "Eldoria" · versionCode ล่าสุด **22**
   - เซ็นด้วยกุญแจของ Claude ผ่าน `source/tools/apksign_v2.py` (ไม่มี Android SDK ก็เซ็นได้)
   - **กุญแจ eldoria.p12 อยู่แค่ในเครื่องคลาวด์ของ Claude** → ต้องเก็บลงคอมเจ้าของเมื่อเชื่อมคอม
 - APK ของ Codex (`Eldoria-modern.apk`) แพ็กเกจ `.stability` ชื่อ "Eldoria ทดสอบแก้เด้ง" · กุญแจอยู่ใน ChatGPT Library (Eldoria-stability-test-signing-backup.zip) · เลิกใช้เป็นลิงก์หลักแล้ว

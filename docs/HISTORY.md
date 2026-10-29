@@ -296,3 +296,7 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 ## 0.18-minimap (Claude 2026-10-29)
 - แผนที่เล็กมุมขวาใต้ปุ่มตัวละคร/กระเป๋า · ห้ามตั้งชื่อฟังก์ชัน `_set` ใน Control (ชนกับของ Godot → Parse Error)
 - เลเวลสูงสุด 99 → 200 ตาม MAXLV เกม 2D
+
+## 0.19-fishing (Claude 2026-10-29)
+- ตกปลาตาม 031-core.js (FISHES waterAhead fishStart pickFish fishPress fishCatch fishTick) · ไม่มีความหิว → ผลของปลาเป็นเลือด/มานา/บัฟ
+- all_systems.gd ยาวมาก (_run ฟังก์ชันเดียว) ชื่อตัวแปรชนกันง่าย → ใส่คำนำหน้าตามหัวข้อ (f…, c…)

@@ -1096,6 +1096,54 @@ func _run() -> void:
     world.rooms.leave()
     mm._process(0.3)
 
+    # ---------- ตกปลา ----------
+    var fsh: Node = world.fishing
+    # หาจุดริมน้ำในทุ่ง: ช่องหญ้าที่ช่องถัดไปทางขวาเป็นน้ำ
+    var fspot := Vector2i(-1, -1)
+    for ty in range(2, world.FH - 2):
+        for tx in range(2, world.FW - 3):
+            if fspot.x < 0 and world.ftile(tx, ty) == world.F_GRASS and world.ftile(tx + 1, ty) == world.F_WATER and not world.blocked(world.fw(tx + 0.5, ty + 0.5).x, world.fw(tx + 0.5, ty + 0.5).z):
+                fspot = Vector2i(tx, ty)
+    check(fspot.x >= 0, "ตกปลา: มีริมน้ำในทุ่ง")
+    p.dead = false
+    p.stun = 0.0
+    p.dash_t = 0.0
+    p.at = -1.0
+    p.position = world.fw(fspot.x + 0.7, fspot.y + 0.5)
+    p.heading = PI / 2.0
+    for fsl in world.field.slimes:
+        if is_instance_valid(fsl) and fsl.position.distance_to(p.position) < 4.0:
+            fsl.position += Vector3(30, 0, 0)
+    p.inv_add("rod", -p.inv_count("rod"))
+    p.inv_add("rod2", -p.inv_count("rod2"))
+    check(not fsh.try_start(p), "ตกปลา: ไม่มีคันเบ็ดตกไม่ได้")
+    p.inv_add("rod", 1)
+    check(fsh.water_ahead(p) != Vector3.INF, "ตกปลา: หันเข้าน้ำแล้วเจอน้ำ")
+    p.attack()
+    check(fsh.st == "cast", "ตกปลา: กดตีริมน้ำ = เหวี่ยงเบ็ด")
+    fsh._process(0.6)
+    check(fsh.st == "wait", "ตกปลา: รอปลา")
+    fsh.t = fsh.wait + 0.01
+    fsh._process(0.01)
+    check(fsh.st == "bite", "ตกปลา: ปลากินเบ็ด")
+    p.attack()
+    check(fsh.st == "reel", "ตกปลา: กดตีทัน = เริ่มดึง")
+    var ffish0: String = fsh.fish
+    var fhave0: int = p.inv_count(ffish0)
+    for k in fsh.need:
+        fsh.cur = fsh.zc
+        fsh.press()
+    check(fsh.st == "" and p.inv_count(ffish0) == fhave0 + 1, "ตกปลา: ดึงตรงช่องเขียวครบ = ได้ปลา")
+    fsh.try_start(p)
+    fsh._process(0.6)
+    p.position += Vector3(1.0, 0, 0)
+    fsh._process(0.05)
+    check(fsh.st == "", "ตกปลา: ขยับตัว = เลิกตก")
+    fsh.rod = 1
+    check(fsh.pick_fish(0.0) == "carp" and fsh.pick_fish(99.9) == "dragon", "ตกปลา: สุ่มปลาตามน้ำหนัก (ตะเพียนมากสุด มังกรน้อยสุด)")
+    p.inv_add("salmon", 1)
+    check(p.use_item("salmon").find("แล้ว") >= 0, "กินปลาแซลมอนได้ (มานา + INT)")
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

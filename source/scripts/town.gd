@@ -80,6 +80,7 @@ var classes: Node
 var story: Node
 var guild: Node
 var minimap: Control
+var fishing: Node
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -189,6 +190,11 @@ func _ready() -> void:
     ui_shop.get_parent().add_child(minimap)
     ui_shop.get_parent().move_child(minimap, 0)
     minimap.setup(self)
+    fishing = Node.new()
+    fishing.set_script(load("res://scripts/fishing.gd"))
+    add_child(fishing)
+    fishing.setup(self)
+    fishing.build_ui(ui_shop.get_parent())
     guild = Node.new()
     guild.set_script(load("res://scripts/guild.gd"))
     add_child(guild)

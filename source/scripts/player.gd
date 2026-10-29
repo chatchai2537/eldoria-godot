@@ -541,6 +541,10 @@ func attack() -> void:
     if town.mine.cur >= 0 and town.mine.chest_near():
         town.mine.chest_act()
         return
+    # ตกปลา: กำลังตกอยู่ = กดดึง · มีคันเบ็ด + หันเข้าน้ำ + ไม่มีมอนใกล้ = เหวี่ยงเบ็ด
+    if town.fishing != null and (town.fishing.st != "" or town.field.nearest_slime(position, 3.0) == null):
+        if town.fishing.try_start(self):
+            return
     if at >= 0.0:
         queued = true
         return
