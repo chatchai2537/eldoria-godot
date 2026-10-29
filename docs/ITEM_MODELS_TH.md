@@ -20,10 +20,11 @@ mesh(id) แชร์ mesh/material ใน runtime; instance(id) สร้าง
 สร้างฉากซ้ำ: godot --headless --path source --script res://tools/export_item_models.gd
 ภาพรวม: godot --path source --script res://tools/preview_item_models.gd (เขียน user://item-models-preview.png)
 
-## สถานะและรับช่วง
-เสร็จเฉพาะชุดโมเดลและฉากพร้อมใช้ ยังไม่ได้เปลี่ยนไอคอนในกระเป๋าหรือ mesh ที่ถือ/ตกพื้นในเกมจริง ไม่ได้ build APK จากงานนี้ เนื่องจาก field/player/model ถูกจองงานต่อสู้ระหว่างเริ่มงาน จึงแยกไฟล์ไว้ไม่ทับงาน
-ผู้เชื่อมต่อให้ใช้โมเดลชุดเดียวกันทั้งภาพไอคอนและของดรอป โดยปรับ source/tools/make_icons.gd build(), field._drop/_add_pickup และ mine._drop_item (อย่า material_override ทับ surfaces) แล้วตรวจการเก็บ/จำนวน/เซฟ และ build ด้วยกุญแจแอปที่ใช้อยู่ ห้ามเปลี่ยนไอดีไอเท็มหรือค่าต่อสู้
+## สถานะและรับช่วง (อัปเดตหลังเชื่อมเกม)
+เชื่อมโมเดลจริงเข้ากับ field._drop, field._add_pickup และ mine._drop_item แล้ว: เหรียญ เจล ไม้ หิน เหล็ก ทองแดง เงิน ทอง และเพชร รักษารหัสเพชร `gem` จำนวนของ ความเร็ว/ระยะเก็บ และ RNG เกมเดิม ไม่ material_override ทับวัสดุหลาย surface
 
-เทส negative: ถ้าไม่มีฉากทั้ง 18 แบบ all_systems ล้มเหลว 18 ข้อ; หลังเพิ่มตรวจฉากจริง งบสามเหลี่ยม และไม่มีวัสดุโปร่งใส/เรืองแสง ไม่ได้วัด FPS บนอุปกรณ์เจ้าของ
+สร้างไอคอนใหม่ 18 ไฟล์จากโมเดลเดียวกันด้วย make_icons.gd -- --item-models-only ได้แก่ sword0/staff0/bow0/axe0/pick0/hpp/mpp/hp/mp/scroll/wood/stone/iron/copper/silver/gold/gem/gel ชุดเกราะและไอคอนระดับสูงคงเดิม
 
-ผลตรวจสุดท้ายบนฐาน Claude 0.33: startup/recovery/combat/visual/all ผ่านทั้งหมด — ALL checks=582 failures=0
+ยังไม่เปลี่ยน mesh ของอาวุธที่ติดกระดูกมือ (model.gd/player.gd) ไม่ได้อัปเดต APK หรือเว็บจากงานไอเท็มนี้ เว็บ PCK export ผ่านในเครื่องแต่ยังไม่เผยแพร่ หากผู้ถือกุญแจเดิมจะ build ให้ใช้ source ล่าสุด ไม่ต้องทำโมเดลใหม่
+
+ตรวจจริง: ชุดทดสอบก่อนเชื่อมพบ failure ของดรอป/วัสดุ/ของพื้น; หลังเชื่อม startup/recovery/combat/visual/all ผ่าน — ALL checks=632 failures=0 ตรวจรูปไอคอนที่เรนเดอร์ออกมาแล้ว ไม่มีการวัด FPS บนมือถือเจ้าของ

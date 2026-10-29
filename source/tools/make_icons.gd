@@ -1,6 +1,7 @@
 extends SceneTree
 ## สร้างไอคอนไอเท็มจากโมเดล 3D (ชิ้นส่วน KayKit + รูปทรง) → assets/icons/<id>.png (96×96 พื้นโปร่งใส)
 ## เจ้าของสั่ง: ใช้โมเดล 3D เท่านั้น ห้ามภาพที่ AI วาด · รัน: xvfb-run godot --path source --rendering-driver opengl3 --script res://tools/make_icons.gd
+const ItemModels = preload("res://scripts/item_model_kit.gd")
 const Items = preload("res://scripts/items.gd")
 const Steed = preload("res://scripts/steed.gd")
 const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff"),
@@ -115,6 +116,12 @@ func _bottle(n: Node3D, c: Color, alpha: float = 1.0) -> void:
     _mesh(n, _cyl(0.11, 0.11, 0.1), Color(0.55, 0.38, 0.2), Vector3(0, 0.47, 0))
 
 func build(id: String) -> Node3D:
+    var model_id = {"gem":"diamond", "sword0":"sword", "staff0":"staff", "bow0":"bow", "axe0":"axe", "pick0":"pick", "hp":"hpp", "mp":"mpp"}.get(id, id)
+    if ItemModels.IDS.has(model_id):
+        var visual = ItemModels.instance(model_id)
+        if model_id == "bow": visual.rotation.x = 0.85
+        if model_id == "coin": visual.rotation.x = 1.1
+        return visual
     var n := Node3D.new()
     if Items.is_gear(id):
         var k := Items.gear_kind(id)
@@ -352,6 +359,8 @@ func _run() -> void:
         ids.append("m_" + k)
     for k in Steed.PET_ORDER:
         ids.append("p_" + k)
+    if OS.get_cmdline_user_args().has("--item-models-only"):
+        ids = ["sword0", "staff0", "bow0", "axe0", "pick0", "hpp", "mpp", "hp", "mp", "scroll", "wood", "stone", "iron", "copper", "silver", "gold", "gem", "gel"]
     var n_ok := 0
     for id in ids:
         if holder != null:

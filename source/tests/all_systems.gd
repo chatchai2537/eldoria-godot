@@ -1832,5 +1832,19 @@ func _run() -> void:
             check(opaque, "โมเดลไอเท็ม: ไม่ใช้โปร่งใสหรือเรืองแสง " + item_id)
             item_scene.free()
 
+    var drop_kit = load("res://scripts/item_model_kit.gd")
+    for drop_kind in ["wood", "gel", "coin", "iron", "copper", "silver", "gold", "gem"]:
+        var prior_drops: int = f.drops.size()
+        world.mine._drop_item(drop_kind, Vector3(10000, 0, 10000))
+        var new_drop: Dictionary = f.drops.back()
+        check(f.drops.size() == prior_drops+1 and new_drop.k == drop_kind, "ไอเท็มดรอปใหม่: จำนวนและชนิดไม่เปลี่ยน " + drop_kind)
+        check(new_drop.n.mesh == drop_kit.mesh("diamond" if drop_kind == "gem" else drop_kind) and new_drop.n.material_override == null, "ไอเท็มดรอปใหม่: ใช้โมเดลจริงและคงวัสดุ " + drop_kind)
+        new_drop.n.queue_free()
+        f.drops.pop_back()
+    for pickup in f.pickups:
+        var expected_id = "stone" if pickup.k == "stone" else "wood"
+        check(pickup.n.mesh == drop_kit.mesh(expected_id), "ไอเท็มพื้น: รูปทรงตรงกับไอเท็ม " + expected_id)
+
+
     print("ALL checks=%d failures=%d" % [checks, failures])
     quit(1 if failures > 0 else 0)

@@ -69,3 +69,5 @@
 
 ## ชุดโมเดลไอเท็ม 3D (แยกฉาก ยังไม่ผูก gameplay)
 - `scripts/item_model_kit.gd`: mesh/instance/build · `assets/item_models/*.tscn` 18 แบบ · export `tools/export_item_models.gd` · preview `tools/preview_item_models.gd` · คู่มือ `docs/ITEM_MODELS_TH.md` · เทสคำว่า โมเดลไอเท็ม
+
+- โมเดลไอเท็มผูกของดรอป: `field._drop/_add_pickup`, `mine._drop_item` (รักษาวัสดุ), ไอคอน `tools/make_icons.gd build` และ `--item-models-only`; เพชรใช้ id gem → mesh diamond; เทส ไอเท็มดรอปใหม่/ไอเท็มพื้น

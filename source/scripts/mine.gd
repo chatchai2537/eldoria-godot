@@ -652,6 +652,8 @@ func _drop_item(kind: String, at: Vector3) -> void:
     town.field._drop(kind, at)
     var q: Dictionary = town.field.drops.back()
     var n: MeshInstance3D = q.n
+    if kind == "gem" or preload("res://scripts/item_model_kit.gd").IDS.has(kind):
+        return # Keep the new mesh surface materials; do not tint minerals as generic spheres.
     var c := Color(0.7, 0.7, 0.75)
     for k in OREK:
         if OREK[k].drop == kind:

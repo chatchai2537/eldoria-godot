@@ -350,3 +350,6 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 สร้างชุดโมเดลจริง 3D แยกฉาก ไม่รวมชุดเกราะ ไม่แก้ gameplay/เซฟ/ไอคอน ใช้กับ Godot 4.7.2 ได้ รูปร่างคมมีด/ด้ามพัน/ขวดยา/ม้วนกระดาษและวัสดุผิว grain พร้อมแร่ใช้ NatureKit แชร์ mesh runtime งบ 92–1152 triangles รายละเอียดและงานผูกต่ออยู่ ITEM_MODELS_TH.md ภาพ preview เรนเดอร์ด้วย Godot llvmpipe ไม่ใช่ภาพ concept หรือการเทสมือถือจริง เพิ่ม 54 checks และ negative test ฉากหาย 18 ข้อ เก็บงาน Claude 0.33 ล่าสุดไว้ครบ งานนี้ยังไม่ export เว็บ/APK
 
 ผลตรวจสุดท้ายบนฐาน Claude 0.33: startup/recovery/combat/visual/all ผ่านทั้งหมด — ALL checks=582 failures=0
+
+## 2026-10-29 Codex/Astra — เชื่อมโมเดลไอเท็มจริง
+ของดรอปและของเก็บตามพื้นใช้ ItemModels.mesh ร่วมกัน ไม่เปลี่ยนจำนวน รหัส เซฟ การสุ่ม และระบบเก็บ mine._drop_item ไม่ทับวัสดุของโมเดลที่รองรับ เพชร mapping gem→diamond เพิ่มไอคอนโมเดลเดียวกัน 18 รูป ไม่แตะชุดเกราะ/อาวุธในมือ/ระดับสูง เทส negative ก่อนเชื่อม fail43; หลังแก้และใช้ gem ถูกต้อง ผ่าน632 checks และทุก smoke suite ภาพไอคอนตรวจด้วย Godot OpenGL/llvmpipe ยังไม่มีผลมือถือจริง Sourceพร้อม build แต่เว็บ/APKยังไม่อัปเดตจากงานนี้

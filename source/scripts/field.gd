@@ -2,6 +2,7 @@ extends Node3D
 ## ทุ่งหญ้า (นอกประตูตะวันตก) + ระบบต่อสู้: สไลม์ Lv1-5, ของดรอป, ตัวเลขดาเมจ, แถบเลือด/มานา/EXP
 ## กติกาตามเกมเดิม: สไลม์สูงสุด 16 ตัว เกิดใหม่ทุก 6 วิ · ดรอปเจล 1-2 + เหรียญ 1-3(+เลเวล/2) · EXP = 5×เลเวล
 
+const ItemModels = preload("res://scripts/item_model_kit.gd")
 const MAX_SLIMES := 16
 const NatureKit = preload("res://scripts/nature_kit.gd")
 
@@ -579,6 +580,12 @@ func _add_pickup() -> void:
             m.rotation = Vector3(PI / 2.0, randf() * TAU, 0)
             m.position = Vector3(p.x, town.ground_y(p.x, p.z) + 0.08, p.z)
         m.rotation.y = randf() * TAU
+        # Preserve all existing RNG draws, pickup IDs and interaction positions.
+        m.mesh = ItemModels.mesh("stone" if k == "stone" else "wood")
+        m.material_override = null
+        if k == "stick":
+            m.rotation.x = 0.0
+            m.scale = Vector3(0.85, 0.55, 0.55)
         add_child(m)
         pickups.append({"tx": tx, "ty": ty, "k": k, "n": m})
         return
@@ -814,6 +821,12 @@ func _drop(kind: String, at: Vector3) -> void:
         _:
             m.mesh = gel_mesh
             m.material_override = gel_mat
+    var model_kind = "diamond" if kind == "gem" else kind
+    if ItemModels.IDS.has(model_kind):
+        m.mesh = ItemModels.mesh(model_kind)
+        m.material_override = null
+        m.rotation = Vector3.ZERO
+        m.scale = Vector3.ONE * (0.75 if kind == "wood" else 1.0)
     m.position = at + Vector3(0, 0.6, 0)
     add_child(m)
     var a := randf() * TAU
