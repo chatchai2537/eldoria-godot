@@ -1207,6 +1207,46 @@ func _run() -> void:
         p.eq.erase(k)
     p.update_gear_visual()
     p.recalc_stats()
+    # ---------- หน้าต่างอาชีพแบบการ์ด + ภาพสกิล + ชื่อมีด (0.30) ----------
+    var cards_of := func() -> Array:
+        return world.ui_shop_body.find_children("*", "PanelContainer", true, false).filter(func(n): return n.has_meta("cls"))
+    p.cls = "none"
+    p.lv = 10
+    p.recalc_stats()
+    cl2.open_menu()
+    var cds: Array = cards_of.call()
+    check(cds.size() == 4 and cds.all(func(c): return c.find_children("*", "TextureRect", true, false).filter(func(r): return r.texture != null).size() >= 4), "หน้าต่างอาชีพ: การ์ด 4 สายหลัก มีภาพหน้าอาชีพ + ภาพสกิล 3 รูป")
+    p.coins = 1000
+    cl2.pick("sword")
+    p.lv = 40
+    cl2.open_menu()
+    var keys: Array = cards_of.call().map(func(c): return c.get_meta("cls"))
+    check(keys.has("paladin") and keys.has("dragoon") and keys.size() == 6, "หน้าต่างอาชีพ: อัศวิน Lv.40 เห็นการ์ดเลื่อนขั้น 2 ใบ + สายหลัก 4")
+    world.close_shop()
+    var miss := []
+    for ck in cl2.CLASS_ORDER:
+        for i in 3:
+            if world.icon_tex("sk_%s_%d" % [ck, i]) == null:
+                miss.append("%s%d" % [ck, i])
+        if world.icon_tex("cls_" + ck) == null:
+            miss.append("cls_" + ck)
+    for bk in ["whirl", "fireball", "heal"]:
+        if world.icon_tex("sk_" + bk) == null:
+            miss.append(bk)
+    check(miss.is_empty(), "ภาพสกิลครบ 39 + ภาพหน้าอาชีพ 12 (ขาด: %s)" % str(miss))
+    if world.mobile != null:
+        world.mobile.refresh_skills()
+        var sb0: Panel = world.mobile.skill_btns[0]
+        check(sb0.visible and (sb0.get_node("Icon") as TextureRect).texture != null, "ปุ่มสกิลมือถือมีรูปสกิล")
+    p.coins = 1000
+    cl2.pick("rogue")
+    check(It.item_name("sword2") == "มีดทองแดง" and It.inst_name(p.make_inst("sword2")) == "มีดทองแดง", "โจร: อาวุธชื่อมีด")
+    check(cl2.use_class(0).find("มีด") >= 0 or p.eq.has("weapon"), "โจร: ข้อความต้องถือมีด")
+    p.coins = 1000
+    cl2.pick("sword")
+    check(It.item_name("sword2") == "ดาบทองแดง", "อัศวิน: อาวุธชื่อดาบ")
+    p.cls = "none"
+    p.recalc_stats()
     # ---------- ภาพ 0.24-0.26 ----------
     check(world.field.slimes.size() > 0 and world.field.slimes[0].body.mesh is ArrayMesh, "สไลม์ทรงหยดน้ำ (ArrayMesh)")
     check(world.fade_blds.size() >= 11, "อาคารใหม่ลงทะเบียนจางเมื่อบังกล้อง")

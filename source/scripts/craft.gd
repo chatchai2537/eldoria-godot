@@ -331,7 +331,7 @@ func _anvil() -> void:
         var b0: String = town.classes.base_of(p.cls) if town.classes != null else ""
         if Items.CSET.has(b0):
             var C0: Dictionary = Items.CSET[b0]
-            town.ui_shop_body.add_child(town._lbl("★ %s = %s + หมวก + เสื้อ + %s ระดับเดียวกัน · ครบ 2 ชิ้น/4 ชิ้นได้โบนัส (4 ชิ้น: %s)" % [C0.n, Items.KINDS[C0.w], C0.off, C0.txt], 14, Color(1.0, 0.85, 0.45)))
+            town.ui_shop_body.add_child(town._lbl("★ %s = %s + หมวก + เสื้อ + %s ระดับเดียวกัน · ครบ 2 ชิ้น/4 ชิ้นได้โบนัส (4 ชิ้น: %s)" % [C0.n, Items.kind_name(C0.w, b0), C0.off, C0.txt], 14, Color(1.0, 0.85, 0.45)))
         for k in Items.KIND_ORDER:
             var kk: String = k
             var r: Array = Items.RECIPE[k]

@@ -57,6 +57,17 @@ func setup(t) -> void:
         var b := _button("", 54, SLOT_COLOR[i], 12)
         b.visible = false
         (b.get_child(0) as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        # รูปสกิล (0.30) วาดใต้ข้อความ · ข้อความเหลือแค่ตัวเลขคูลดาวน์เมื่อมีรูป
+        var ic := TextureRect.new()
+        ic.name = "Icon"
+        ic.position = Vector2(-2, -2)
+        ic.size = Vector2(58, 58)
+        ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        b.add_child(ic)
+        b.move_child(ic, 0)
+        b.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW   # รูปสี่เหลี่ยมถูกตัดเป็นวงกลมตามปุ่ม
         root.add_child(b)
         skill_btns[i] = b
     compass = _circle(46, Color(0.05, 0.09, 0.14, 0.82), Color(0.85, 0.72, 0.42, 0.9), 2)
@@ -151,9 +162,18 @@ func refresh_skills() -> void:
         var b: Panel = skill_btns[i]
         b.visible = nm != ""
         var c: float = town.classes.slot_cd(town.player, i)
-        var l := b.get_child(0) as Label
-        l.text = nm if c <= 0.0 else "%s\n%d" % [nm, int(ceil(c))]
-        b.modulate = Color(1, 1, 1, 1.0 if c <= 0.0 else 0.6)
+        var l := b.get_child(1) as Label
+        var ic := b.get_node("Icon") as TextureRect
+        ic.texture = town.icon_tex(town.classes.slot_icon(town.player, i))
+        if ic.texture != null:
+            l.text = "" if c <= 0.0 else str(int(ceil(c)))
+            l.add_theme_font_size_override("font_size", 12 if c <= 0.0 else 22)
+            l.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+            l.add_theme_constant_override("outline_size", 6)
+            ic.modulate = Color(1, 1, 1, 1.0 if c <= 0.0 else 0.45)
+        else:
+            l.text = nm if c <= 0.0 else "%s\n%d" % [nm, int(ceil(c))]
+        b.modulate = Color(1, 1, 1, 1.0 if c <= 0.0 else 0.75)
 
 func _process(delta: float) -> void:
     if needle != null:

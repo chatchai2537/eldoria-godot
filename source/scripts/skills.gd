@@ -243,6 +243,10 @@ func base_of(k: String) -> String:
             return b
     return k
 
+## ชื่ออาวุธประจำอาชีพ (โจร = มีด)
+func wname(k: String) -> String:
+    return town.Items.kind_name(str(CLS[k].w), base_of(k)) if town != null else str(WNAME[CLS[k].w])
+
 func model_of(k: String) -> String:
     return str(MODEL.get(k, MODEL.get(base_of(k), "knight")))
 
@@ -278,37 +282,125 @@ func pick(k: String) -> String:
         town.mobile.refresh_skills()
     if adv:
         return "เลื่อนขั้นเป็น%sแล้ว! สกิลใหม่ 3 ท่าพร้อมใช้" % CLS[k].n
-    return "คุณกลายเป็น%sแล้ว! อย่าลืมคราฟ%sที่ทั่งตีเหล็ก เพื่อใช้สกิลอาชีพ" % [CLS[k].n, WNAME[CLS[k].w]]
+    return "คุณกลายเป็น%sแล้ว! อย่าลืมคราฟ%sที่ทั่งตีเหล็ก เพื่อใช้สกิลอาชีพ" % [CLS[k].n, wname(k)]
 
-func _class_btn(k: String, tag: String) -> Button:
+# ---------- หน้าต่างเลือกอาชีพแบบการ์ด (0.30 · ต้นแบบ openClassMenu เกม 2D: การ์ดขอบสีสาย · หัว+อาวุธ · คำอธิบาย · ติดตัว · สกิลมีรูป · พาสซีฟ · ปุ่ม) ----------
+## สถานะปุ่มของการ์ด: [ข้อความ, กดได้ไหม]
+func _card_action(k: String) -> Array:
+    var p = town.player
+    if p.cls == k:
+        return ["อาชีพปัจจุบัน", false]
+    if BASES.has(k):
+        if p.lv < CLASS_LV:
+            return ["ต้อง Lv.%d" % CLASS_LV, false]
+        return ["เลือกเส้นทางนี้" if p.cls == "none" else "เปลี่ยนสาย (%d เหรียญ)" % CHANGE_COST, true]
+    if base_of(p.cls) != base_of(k):
+        return ["ต้องเป็น%sก่อน" % CLS[base_of(k)].n, false]
+    if p.lv < ADV_LV:
+        return ["เลื่อนขั้น Lv.%d" % ADV_LV, false]
+    return ["เลื่อนขั้น (ฟรี)" if BASES.has(p.cls) else "สลับสาย (%d เหรียญ)" % CHANGE_COST, true]
+
+func _card(k: String) -> PanelContainer:
+    var p = town.player
     var C: Dictionary = CLS[k]
-    var sk := []
-    for s in SK[k]:
-        sk.append("%s (Lv.%d)" % [s.n, s.lv])
-    var b := Button.new()
-    b.text = "%s%s\n%s\nติดตัว: %s · อาวุธ: %s\nสกิล: %s" % [C.n, tag, C.d, C.pas, WNAME[C.w], " · ".join(sk)]
-    b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-    b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    b.add_theme_font_override("font", town.font_b)
-    b.add_theme_font_size_override("font_size", 14)
-    b.add_theme_color_override("font_color", C.col)
-    b.focus_mode = Control.FOCUS_NONE
-    b.pressed.connect(func():
+    var col: Color = C.col
+    var on: bool = p.cls == k or (BASES.has(k) and base_of(p.cls) == k)
+    var pc := PanelContainer.new()
+    pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var sb := StyleBoxFlat.new()
+    sb.bg_color = Color(0.07, 0.08, 0.12, 0.92).lerp(col, 0.08)
+    sb.border_color = Color(1, 1, 1) if p.cls == k else col
+    sb.set_border_width_all(3 if p.cls == k else 2)
+    sb.set_corner_radius_all(12)
+    sb.content_margin_left = 8
+    sb.content_margin_right = 8
+    sb.content_margin_top = 6
+    sb.content_margin_bottom = 8
+    if on:
+        sb.shadow_color = Color(col.r, col.g, col.b, 0.55)
+        sb.shadow_size = 8
+    pc.add_theme_stylebox_override("panel", sb)
+    var v := VBoxContainer.new()
+    v.add_theme_constant_override("separation", 3)
+    pc.add_child(v)
+    # หัวการ์ด: ภาพหน้าอาชีพ (โมเดล 3D) + ชื่อ + อาวุธ
+    var hd := HBoxContainer.new()
+    var pic := TextureRect.new()
+    pic.texture = town.icon_tex("cls_" + k)
+    pic.custom_minimum_size = Vector2(58, 58)
+    pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    hd.add_child(pic)
+    var hv := VBoxContainer.new()
+    hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    hv.add_theme_constant_override("separation", 0)
+    hv.add_child(town._lbl(str(C.n), 18, col, true))
+    hv.add_child(town._lbl("อาวุธ: " + wname(k), 12, Color(1, 1, 1, 0.75)))
+    hv.add_child(town._lbl("สายหลัก" if BASES.has(k) else "เลื่อนขั้นจาก" + str(CLS[base_of(k)].n), 11, Color(1.0, 0.85, 0.45)))
+    hd.add_child(hv)
+    v.add_child(hd)
+    var ds: Label = town._lbl(str(C.d), 12, Color(0.88, 0.9, 0.95))
+    ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    v.add_child(ds)
+    var pas: Label = town._lbl("ติดตัว: " + str(C.pas), 12, Color(1.0, 0.86, 0.5))
+    pas.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    v.add_child(pas)
+    v.add_child(town._lbl("สกิล", 13, col, true))
+    for i in SK[k].size():
+        var S: Dictionary = SK[k][i]
+        var row := HBoxContainer.new()
+        row.add_theme_constant_override("separation", 6)
+        var ic := TextureRect.new()
+        ic.texture = town.icon_tex("sk_%s_%d" % [k, i])
+        ic.custom_minimum_size = Vector2(36, 36)
+        ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        ic.tooltip_text = str(S.d)
+        row.add_child(ic)
+        var sl: Label = town._lbl("%s  Lv.%d" % [S.n, S.lv], 12, Color(0.95, 0.95, 1.0))
+        sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        sl.tooltip_text = str(S.d)
+        row.add_child(sl)
+        v.add_child(row)
+    v.add_child(town._lbl("พาสซีฟ", 13, col, true))
+    for ps in PASSIVE.get(k, []):
+        var got: bool = p.cls == k and p.lv >= int(ps.lv)
+        var pl: Label = town._lbl("%s %s (Lv.%d) — %s" % ["●" if got else "○", ps.n, ps.lv, ps.d], 11, Color(1.0, 0.92, 0.6) if got else Color(0.75, 0.77, 0.85, 0.7))
+        pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        v.add_child(pl)
+    var act: Array = _card_action(k)
+    var b: Button = town._btn(str(act[0]), bool(act[1]), func():
         var m := pick(k)
         if m != "":
             town.field.say_msg(m, 4.0)
         open_menu())
-    return b
+    b.custom_minimum_size = Vector2(0, 38)
+    v.add_child(b)
+    pc.set_meta("cls", k)
+    return pc
+
+func _grid(keys: Array) -> GridContainer:
+    var g := GridContainer.new()
+    # มือถือแนวนอน: การ์ดเรียงแถวเดียว (แบบเกม 2D) · จอแคบ/แนวตั้ง 2 คอลัมน์
+    var vs: Vector2 = town.get_viewport().get_visible_rect().size
+    g.columns = keys.size() if vs.x >= vs.y * 1.3 else mini(2, keys.size())
+    g.add_theme_constant_override("h_separation", 8)
+    g.add_theme_constant_override("v_separation", 8)
+    for k in keys:
+        g.add_child(_card(k))
+    return g
 
 func open_menu() -> void:
     var p = town.player
     town.cur_shop = "class"
     for c in town.ui_shop_body.get_children():
+        town.ui_shop_body.remove_child(c)   # เอาออกทันที (กดเลือกแล้วเปิดใหม่ในเฟรมเดียวกัน)
         c.queue_free()
     var top := HBoxContainer.new()
     var hv := VBoxContainer.new()
     hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    hv.add_child(town._nowrap(town._lbl("ปรมาจารย์อาชีพ — 4 สำนัก", 22, Color(0.85, 0.75, 1.0), true)))
+    hv.add_child(town._nowrap(town._lbl("ปรมาจารย์อาชีพ — เลือกเส้นทางของเจ้า", 22, Color(0.85, 0.75, 1.0), true)))
     var sub := "อาชีพปัจจุบัน: %s · " % CLS[p.cls].n + ("เลือกครั้งแรกฟรี" if p.cls == "none" else "เปลี่ยนสาย %d เหรียญ" % CHANGE_COST)
     if p.lv < CLASS_LV:
         sub += " · ต้อง Lv.%d ขึ้นไป (ตอนนี้ Lv.%d)" % [CLASS_LV, p.lv]
@@ -320,14 +412,21 @@ func open_menu() -> void:
     town.ui_shop_body.add_child(top)
     var base: String = base_of(p.cls)
     if ADV.has(base):
-        var head := "เลื่อนขั้น (Lv.%d)" % ADV_LV + (" — ครั้งแรกฟรี" if BASES.has(p.cls) else " — สลับสายย่อย %d เหรียญ" % CHANGE_COST)
-        town.ui_shop_body.add_child(town._lbl(head, 17, Color(1.0, 0.9, 0.5), true))
-        for k in ADV[base]:
-            town.ui_shop_body.add_child(_class_btn(k, "  ✓ ปัจจุบัน" if p.cls == k else ("" if p.lv >= ADV_LV else "  (Lv.%d)" % ADV_LV)))
+        town.ui_shop_body.add_child(town._lbl("เลื่อนขั้น (Lv.%d)" % ADV_LV + (" — ครั้งแรกฟรี" if BASES.has(p.cls) else " — สลับสายย่อย %d เหรียญ" % CHANGE_COST), 17, Color(1.0, 0.9, 0.5), true))
+        town.ui_shop_body.add_child(_grid(ADV[base]))
         town.ui_shop_body.add_child(town._lbl("สายหลัก (เปลี่ยนแล้วกลับเป็นสายหลัก ต้องเลื่อนขั้นใหม่)", 15, Color(0.8, 0.85, 0.95)))
-    for k in BASES:
-        town.ui_shop_body.add_child(_class_btn(k, "  ✓ สายของคุณ" if base == k else ""))
+    town.ui_shop_body.add_child(_grid(BASES))
     town.ui_shop.visible = true
+
+## รูปสกิลของช่อง (ปุ่มมือถือ): sk_<อาชีพ>_<ช่อง> · ยังไม่มีอาชีพ = sk_whirl/sk_fireball · ช่อง 3 = sk_heal
+func slot_icon(p, i: int) -> String:
+    if slot_name(p, i) == "":
+        return ""
+    if i == 3:
+        return "sk_heal"
+    if p.cls == "none":
+        return "sk_" + ["whirl", "fireball", ""][i]
+    return "sk_%s_%d" % [p.cls, i]
 
 # ---------- ปุ่มสกิล 4 ช่อง ----------
 ## ช่อง 0-2: ไม่มีอาชีพ = ฟันวงพายุ / ลูกไฟ / - · มีอาชีพ = สกิลอาชีพ 3 ท่า · ช่อง 3: เยียวยา (ถ้าเรียนแล้ว)
@@ -369,7 +468,7 @@ func use_class(i: int) -> String:
         return "%s ปลดล็อกที่ Lv.%d" % [S.n, S.lv]
     var need: String = CLS[p.cls].w
     if not p.eq.has("weapon") or str(p.eq.weapon.k) != need:
-        return "ต้องถือ%sเพื่อใช้สกิล%s" % [WNAME[need], CLS[p.cls].n]
+        return "ต้องถือ%sเพื่อใช้สกิล%s" % [wname(p.cls), CLS[p.cls].n]
     if town.room != "" or (abs(p.position.x) <= 44.0 and abs(p.position.z) <= 34.0 and p.position.x < 600.0):
         return "ใช้สกิลต่อสู้ในเมืองไม่ได้"
     var chain: bool = S.has("steps") and step > 0 and i == 1

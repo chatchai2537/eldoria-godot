@@ -348,10 +348,20 @@ static func stat_label(k: String) -> String:
             return "แรงขุด"
     return "ป้องกัน"
 
+## สายหลักของผู้เล่น (player.recalc_stats ตั้งให้) — ใช้ตั้งชื่อตามอาชีพเมื่อไม่ได้ส่ง base มา
+static var name_base := ""
+
+## ชื่อชนิดตามอาชีพ: โจรถือ "มีด" (ไอเท็มชนิด sword) · ช่องมือรองตามสาย (โล่/ซองลูกศร/คัมภีร์/มีดซ้าย)
+static func kind_name(k: String, base: String = "") -> String:
+    var b := base if base != "" else name_base
+    if k == "sword" and b == "rogue":
+        return "มีด"
+    if k == "arm" and CSET.has(b):
+        return str(CSET[b].off)
+    return str(KINDS[k])
+
 static func inst_name(it: Dictionary, base: String = "") -> String:
-    var kn := str(KINDS[it.k])
-    if str(it.k) == "arm" and CSET.has(base):
-        kn = str(CSET[base].off)
+    var kn := kind_name(str(it.k), base)
     var n := kn + str(TNAMES[int(it.t)])
     if int(it.get("e", 0)) > 0:
         n += " +%d" % int(it.e)
@@ -372,6 +382,6 @@ static func hidden(id: String) -> bool:
     return HIDE.has(id)
 
 static func item_name(id: String) -> String:
-    if not ITEM.has(id) and is_gear(id):
-        return str(KINDS[gear_kind(id)]) + str(TNAMES[gear_tier(id)])
+    if is_gear(id):   # อุปกรณ์: ชื่อตามชนิด+ระดับ (โจร = มีด)
+        return kind_name(gear_kind(id)) + str(TNAMES[gear_tier(id)])
     return str(ITEM.get(id, {}).get("name", id))

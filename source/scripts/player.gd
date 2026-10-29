@@ -295,7 +295,8 @@ func best_tool(kind: String) -> Dictionary:
 const STAT_NAMES := {"str": "STR พลัง (โจมตี)", "vit": "VIT อึด (เลือด +12 · ป้องกัน)", "int": "INT ปัญญา (มานา +6)", "agi": "AGI ว่องไว (คริ +0.4%)", "end": "END ทนทาน"}
 
 func recalc_stats() -> void:
-    set_b = Items.set_info(eq, town.classes.base_of(cls) if town != null and town.get("classes") != null else "")
+    Items.name_base = town.classes.base_of(cls) if town != null and town.get("classes") != null else ""
+    set_b = Items.set_info(eq, Items.name_base)
     max_hp = 100 + (lv - 1) * 15 + stat_total("vit") * 12 + (Items.inst_stat(eq.neck) if eq.has("neck") else 0)
     max_hp = int(round(max_hp * (1.0 + float(set_b.get("hp", 0.0)))))
     max_mp = 50 + (lv - 1) * 5 + stat_total("int") * 6
