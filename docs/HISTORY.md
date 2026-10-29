@@ -345,3 +345,8 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - Dodge_Forward ของ KayKit ยาว 0.4 วิ เป็นท่าย่อตัว ไม่ใช่ม้วน → model.update_roll หมุนรอบเอว (ROLL_C 0.42) ติดพื้น
 - ทดสอบภาพ: `--shot=n,0.45,0,9,0,0,fxtest:<เฟรม>:<hit|roll|warp|skill>` (ถ่ายในเหมืองเพราะเมือง/ทุ่งกล้องโดนบัง)
 - tests/combat_smoke.gd ปรับตามสเปกใหม่ (ตี 0.7 · กลิ้ง 3.8)
+
+## 2026-10-29 Codex/Astra — โมเดลไอเท็ม 18 แบบ
+สร้างชุดโมเดลจริง 3D แยกฉาก ไม่รวมชุดเกราะ ไม่แก้ gameplay/เซฟ/ไอคอน ใช้กับ Godot 4.7.2 ได้ รูปร่างคมมีด/ด้ามพัน/ขวดยา/ม้วนกระดาษและวัสดุผิว grain พร้อมแร่ใช้ NatureKit แชร์ mesh runtime งบ 92–1152 triangles รายละเอียดและงานผูกต่ออยู่ ITEM_MODELS_TH.md ภาพ preview เรนเดอร์ด้วย Godot llvmpipe ไม่ใช่ภาพ concept หรือการเทสมือถือจริง เพิ่ม 54 checks และ negative test ฉากหาย 18 ข้อ เก็บงาน Claude 0.33 ล่าสุดไว้ครบ งานนี้ยังไม่ export เว็บ/APK
+
+ผลตรวจสุดท้ายบนฐาน Claude 0.33: startup/recovery/combat/visual/all ผ่านทั้งหมด — ALL checks=582 failures=0

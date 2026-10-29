@@ -66,3 +66,6 @@
 | ตกปลา | fishing.gd `FISHES` `try_start` `water_ahead` `pick_fish` `press` `catch` `stop` `_process` (bob/สาย/แถบดึง) · player.gd `attack` · items.gd rod/rod2/ปลา | js/031-core.js 2148-2185 · ขยับ 0.4 หน่วย = เลิก · ทุ่นกระตุก 0.9 วิ · ดึงไม่เกิน 8 วิ | "ตกปลา" |
 
 | ธรรมชาติ 3D รุ่นภาพใหม่ | nature_kit.gd `tree` `bark_material` `foliage_material` `rock` `ore_material` · field.gd `_build_trees` `_falling_tree` · mine.gd `_build` | 3 ชนิดต้นไม้ / สายแร่ในผิวหิน 6 แบบ; mesh cache; MultiMesh ต่อพื้นที่/ชนิด; ของ/HP/การเกิดใหม่เดิม | "ธรรมชาติ:" |
+
+## ชุดโมเดลไอเท็ม 3D (แยกฉาก ยังไม่ผูก gameplay)
+- `scripts/item_model_kit.gd`: mesh/instance/build · `assets/item_models/*.tscn` 18 แบบ · export `tools/export_item_models.gd` · preview `tools/preview_item_models.gd` · คู่มือ `docs/ITEM_MODELS_TH.md` · เทสคำว่า โมเดลไอเท็ม

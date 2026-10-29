@@ -1817,5 +1817,20 @@ func _run() -> void:
     fxp._process(0.4)
     check(fxp.body.roll_pivot.transform.is_equal_approx(Transform3D.IDENTITY), "กลิ้งหลบ: จบแล้วยืนตรง")
 
+    # โมเดลไอเท็มแยกจากไฟล์ต่อสู้ที่มีผู้รับผิดชอบอื่น
+    for item_id in ["sword", "dagger", "staff", "bow", "axe", "pick", "hpp", "mpp", "scroll", "wood", "stone", "iron", "copper", "silver", "gold", "diamond", "coin", "gel"]:
+        var item_path = "res://assets/item_models/%s.tscn" % item_id
+        check(ResourceLoader.exists(item_path), "โมเดลไอเท็ม: มีฉากจริง " + item_id)
+        if ResourceLoader.exists(item_path):
+            var item_scene = load(item_path).instantiate()
+            check(item_scene is MeshInstance3D and item_scene.mesh.get_faces().size() > 0 and item_scene.mesh.get_faces().size()/3 <= 1200, "โมเดลไอเท็ม: mesh จริง ไม่เกิน 1200 สามเหลี่ยม " + item_id)
+            var opaque = true
+            for surface in item_scene.mesh.get_surface_count():
+                var item_mat = item_scene.mesh.surface_get_material(surface)
+                if item_mat is StandardMaterial3D:
+                    opaque = opaque and item_mat.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and not item_mat.emission_enabled
+            check(opaque, "โมเดลไอเท็ม: ไม่ใช้โปร่งใสหรือเรืองแสง " + item_id)
+            item_scene.free()
+
     print("ALL checks=%d failures=%d" % [checks, failures])
     quit(1 if failures > 0 else 0)
