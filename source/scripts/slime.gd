@@ -19,7 +19,7 @@ static func _sphere(key: String, r: float, h: float, segments: int, rings: int) 
         _meshes[key] = mesh
     return _meshes[key]
 
-## ตัวสไลม์ทรงหยดน้ำ (0.5): ก้นแบนย้วยออกข้าง มีจุกบนหัวโค้งไปด้านหลัง
+## ตัวสไลม์ทรงหยดน้ำ (0.24): ก้นแบนย้วยออกข้าง มีจุกบนหัวโค้งไปด้านหลัง
 ## จุดกึ่งกลางอยู่ที่ (0,0,0) สูง h กว้างครึ่งหนึ่ง w ลึกครึ่งหนึ่ง d — เครื่องมือต้นแบบ: tools/make_slime.py
 static func _drop(key: String, w: float, h: float, d: float, nu: int, nv: int) -> ArrayMesh:
     if _meshes.has(key):

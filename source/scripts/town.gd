@@ -891,7 +891,7 @@ func _kit_window(k, glass: Material, frame: Material, shutter: Material, c: Vect
                 k.box(frame, Vector3(s.x * 0.44, 0.04, 0.03), c + Vector3(sx * (s.x * 0.75 + t + 0.06), -s.y * 0.38 + i * s.y * 0.25, 0.09))
 
 func _building(b: Array, st: Dictionary, title: String, sid: String) -> void:
-    # 0.6 แฟนตาซีทันสมัย: ชั้นล่างหิน · ชั้นบนยื่น (jetty) โครงไม้ · หลังคาชายคาหนา + จั่วหน้า
+    # 0.25 แฟนตาซีทันสมัย: ชั้นล่างหิน · ชั้นบนยื่น (jetty) โครงไม้ · หลังคาชายคาหนา + จั่วหน้า
     # หน้าต่างมีกรอบลึก บานเกล็ด · ประตูซุ้มหิน · โคมคริสตัล · ประกอบเป็น mesh ไม่กี่ชิ้นต่อหลัง
     var beam := M(Color(0.3, 0.19, 0.11), 0.85)
     var stone := M(Color(0.5, 0.48, 0.45), 0.95)
