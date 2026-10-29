@@ -319,8 +319,26 @@ func _run() -> void:
         p.inv_add("axe0", 1)
         f.try_chop(p)
         check(small.hp == hp_t - 1, "ตัดไม้: มีขวานฟันได้ทีละ 1")
-        f.try_chop(p)
-        check(not small.alive, "ต้นไม้เล็ก (2 ที) ล้ม")
+        # 0.28: ถือคทา (สายยิงไกล) ก็ตัดไม้ได้ · ขวานโผล่ในมือแทนอาวุธ แล้วกลับเป็นอาวุธเดิม
+        var w_keep = p.eq.get("weapon")
+        p.weapon = "staff1"
+        p.at = -1.0
+        p.dead = false
+        p.stun = 0.0
+        p.dash_t = 0.0
+        p.attack()
+        var items_now: Dictionary = p.body._item_nodes()
+        check(p.tool_t > 0.0 and items_now.has("1H_Axe") and items_now["1H_Axe"].visible and not items_now["2H_Staff"].visible, "ตัดไม้: ขวานโผล่ในมือแทนคทา")
+        check(not small.alive, "ต้นไม้เล็ก (2 ที) ล้ม · สายยิงไกลกดตีหน้าต้นไม้ = ตัดไม้")
+        p.tool_t = 0.01
+        p._process(0.05)
+        check(items_now.has("1H_Axe") and not items_now["1H_Axe"].visible and items_now["2H_Staff"].visible, "ตัดไม้เสร็จ: เก็บขวาน คทากลับมา")
+        if w_keep == null:
+            p.eq.erase("weapon")
+        else:
+            p.eq["weapon"] = w_keep
+        p.update_gear_visual()
+        p.at = -1.0
         var tp: Vector3 = world.fw(small.tx + 0.5, small.ty + 0.5)
         check(not world.blocked(tp.x, tp.z), "ตอไม้เดินผ่านได้")
         var wood0: int = p.wood
@@ -520,6 +538,16 @@ func _run() -> void:
     p.position = ow + Vector3(0, 0, 6.0)
     mn._process(0.05)
     check(ore.alive and ore.hp == ore.max, "ขุดแร่: แร่งอกใหม่")
+    p.position = ow + Vector3(0, 0, 1.6)
+    p.heading = PI
+    p.at = -1.0
+    p.attack()
+    var pick_n = p.body._item_nodes().get("Tool_Pick")
+    check(ore.hp < ore.max and pick_n != null and pick_n.visible and p.body.cur == "1H_Melee_Attack_Chop", "ขุดแร่: พลั่วขุดโผล่ในมือ ท่าสับ")
+    p.tool_t = 0.01
+    p._process(0.05)
+    check(not pick_n.visible, "ขุดแร่เสร็จ: เก็บพลั่ว")
+    p.at = -1.0
     # แร่ทองแดงต้องใช้ที่ขุดระดับสูงกว่า
     mn.leave(false)
     mn.enter(1)

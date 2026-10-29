@@ -216,7 +216,22 @@ func update_gear_visual() -> void:
         return
     var w: Dictionary = eq.get("weapon", {})
     var wk := str(w.get("k", ""))
-    var show: Array = _weapon_items(wk)
+    var show: Array = _weapon_items(wk) if tool_t <= 0.0 else []
+    for tk in TOOL_ITEM.keys():
+        var tn: MeshInstance3D = body._item_nodes().get(TOOL_ITEM[tk])
+        if tool_t > 0.0 and tk == tool_kind:
+            tn = _tool_node(tk)
+        if tn != null:
+            var on: bool = tool_t > 0.0 and tk == tool_kind
+            tn.visible = on
+            if on:
+                var tcol: Color = TIER_COL[int(best_tool(tk).get("t", 0))]
+                if tk == "axe":
+                    body.show_item("1H_Axe", true, tcol, 0.0, 0.55)
+                else:
+                    var mt: StandardMaterial3D = (tn.mesh.surface_get_material(1) as StandardMaterial3D).duplicate()
+                    mt.albedo_color = Color(1, 1, 1).lerp(tcol, 0.7)
+                    tn.set_surface_override_material(1, mt)
     for it_name in show:
         body.borrow_item(str(ITEM_SRC.get(it_name, "knight")), it_name)
     var glow := func(it: Dictionary) -> float:
@@ -658,16 +673,116 @@ func attack() -> void:
         heading = atan2(s.position.x - position.x, s.position.z - position.z)
         body.rotation.y = heading
     cur_atk = town.field.new_attack()
+    # เก็บของ (0.28): ไม่มีมอนประชิด + หันเข้าต้นไม้/แร่ = ตัด/ขุด ทุกอาชีพ (สายยิงไกลเดิมยิงทิ้งแทน)
+    var gk := ""
+    if town.field.nearest_slime(position, 3.5) == null:
+        if town.mine.cur >= 0 and town.mine.ore_in_front(self) != null:
+            gk = "pick"
+        elif town.mine.cur < 0 and town.field.has_method("tree_in_front") and town.field.tree_in_front(self) != null:
+            gk = "axe"
+    if gk != "":
+        if gk == "pick":
+            town.mine.try_mine(self)
+        else:
+            town.field.try_chop(self)
+        _gather_fx(gk)
+        return
     if is_ranged():
         body.action("Spellcast_Shoot" if str(eq.weapon.k) == "staff" else "1H_Ranged_Shoot", atk_dur)
         town.field.shoot(self, ranged_spec(), 1.0)
         return
     body.action(attack_anim(), atk_dur)
-    # ไม่มีสไลม์ใกล้ ๆ และหันหน้าเข้าต้นไม้ = ฟันต้นไม้ (ต้องมีขวาน)
-    if s == null and town.mine.cur >= 0:
-        town.mine.try_mine(self)
-    elif s == null and town.field.has_method("try_chop"):
-        town.field.try_chop(self)
+
+## ---- เครื่องมือในมือตอนตัดไม้/ขุดแร่ (0.28) ----
+## ขวาน = ยืม 1H_Axe จากโมเดลคนเถื่อน · พลั่วขุด = ปั้นด้วยโค้ด (โมเดลไม่มี) · สีตามระดับเครื่องมือ
+const TOOL_ITEM := {"axe": "1H_Axe", "pick": "Tool_Pick"}
+var tool_t := 0.0
+var tool_kind := ""
+static var _pick_mesh: ArrayMesh
+
+static func _make_pick_mesh() -> ArrayMesh:
+    # ด้ามไม้ตามแกน +Y (กรอบเดียวกับ 1H_Axe ของ KayKit) · หัวโค้งสองปลายตามแกน X
+    var kit = preload("res://scripts/building_kit.gd").new()
+    var wood := StandardMaterial3D.new()
+    wood.albedo_color = Color(0.45, 0.28, 0.14)
+    wood.roughness = 0.8
+    var metal := StandardMaterial3D.new()
+    metal.albedo_color = Color(0.75, 0.76, 0.8)
+    metal.metallic = 0.6
+    metal.roughness = 0.35
+    kit.cyl(wood, 0.05, 0.06, 1.25, Vector3(0, 0.35, 0), 8)
+    kit.cyl(wood, 0.075, 0.075, 0.12, Vector3(0, -0.22, 0), 8)
+    kit.box(metal, Vector3(0.2, 0.22, 0.16), Vector3(0, 0.95, 0))
+    for s in [-1.0, 1.0]:
+        kit.box(metal, Vector3(0.32, 0.12, 0.12), Vector3(s * 0.25, 0.93, 0), Vector3(0, 0, s * -0.18))
+        kit.cyl(metal, 0.0, 0.07, 0.3, Vector3(s * 0.52, 0.84, 0), 6, Vector3(0, 0, s * 1.9))
+    var holder := Node3D.new()
+    kit.commit(holder)
+    var mesh := ArrayMesh.new()
+    for mi in holder.get_children():
+        var src: ArrayMesh = (mi as MeshInstance3D).mesh
+        mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, src.surface_get_arrays(0))
+        mesh.surface_set_material(mesh.get_surface_count() - 1, (mi as MeshInstance3D).material_override)
+    holder.free()
+    return mesh
+
+func _tool_node(kind: String) -> MeshInstance3D:
+    if kind == "axe":
+        return body.borrow_item("barbarian", "1H_Axe")
+    var L: Dictionary = body._item_nodes()
+    if L.has("Tool_Pick"):
+        return L["Tool_Pick"]
+    var hand: MeshInstance3D = body.borrow_item("knight", "1H_Sword")
+    if hand == null:
+        return null
+    if _pick_mesh == null:
+        _pick_mesh = _make_pick_mesh()
+    var mi := MeshInstance3D.new()
+    mi.name = "Tool_Pick"
+    mi.mesh = _pick_mesh
+    mi.transform = hand.transform
+    mi.visible = false
+    hand.get_parent().add_child(mi)
+    L["Tool_Pick"] = mi
+    return mi
+
+func _gather_fx(kind: String) -> void:
+    var tl: Dictionary = best_tool(kind)
+    if tl.is_empty():
+        body.action(attack_anim(), atk_dur)
+        return
+    tool_kind = kind
+    tool_t = atk_dur + 0.35
+    update_gear_visual()
+    body.action("1H_Melee_Attack_Chop", atk_dur)
+    var fwd := Vector3(sin(heading), 0, cos(heading))
+    var col := Color(0.55, 0.36, 0.18) if kind == "axe" else Color(0.62, 0.62, 0.66)
+    _chips(position + fwd * 1.3 + Vector3(0, 0.9, 0), col, fwd)
+
+## เศษไม้/สะเก็ดหินกระเด็น — กล่องเล็ก 6 ชิ้น + tween (ไม่ใช้ GPUParticles ตามกฎมือถือ)
+static var _chip_mesh: BoxMesh
+func _chips(at: Vector3, col: Color, fwd: Vector3) -> void:
+    if _chip_mesh == null:
+        _chip_mesh = BoxMesh.new()
+        _chip_mesh.size = Vector3(0.12, 0.08, 0.1)
+    var mat: StandardMaterial3D = town.M(col, 0.8)
+    for i in 6:
+        var c := MeshInstance3D.new()
+        c.mesh = _chip_mesh
+        c.material_override = mat
+        c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        town.add_child(c)
+        c.global_position = at
+        var side := fwd.cross(Vector3.UP) * randf_range(-1.2, 1.2)
+        var peak := at + side * 0.5 - fwd * 0.4 + Vector3(0, randf_range(0.5, 1.0), 0)
+        var land := at + side - fwd * randf_range(0.3, 0.9) + Vector3(0, -0.85, 0)
+        c.rotation = Vector3(randf() * TAU, randf() * TAU, 0)
+        var tw := c.create_tween()
+        tw.tween_property(c, "global_position", peak, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+        tw.tween_property(c, "global_position", land, 0.24).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+        tw.parallel().tween_property(c, "rotation:x", c.rotation.x + 6.0, 0.24)
+        tw.tween_property(c, "scale", Vector3.ZERO, 0.2)
+        tw.tween_callback(c.queue_free)
 
 func dash(dir: Vector3) -> void:
     if dead or dash_t > 0.0 or dash_cd > 0.0:
@@ -724,6 +839,11 @@ func _face(dir: Vector3, delta: float) -> void:
     body.rotation.y = heading
 
 func _process(delta: float) -> void:
+    if tool_t > 0.0:
+        tool_t -= delta
+        if tool_t <= 0.0:
+            tool_t = 0.0
+            update_gear_visual()
     _save_t += delta
     if _save_t >= 10.0:
         _save_t = 0.0
