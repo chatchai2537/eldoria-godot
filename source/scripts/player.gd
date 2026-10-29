@@ -41,6 +41,7 @@ var weapon: String:
             eq.erase("weapon")
         else:
             eq["weapon"] = make_inst(v)
+        update_gear_visual()
 var weapon_tier: int:
     get:
         return int(eq.weapon.t) if eq.has("weapon") else 0
@@ -85,6 +86,7 @@ func setup(t, pos: Vector3) -> void:
     body.set_script(load("res://scripts/model.gd"))
     add_child(body)
     body.build({"model": "knight", "keep": ["1H_Sword", "Round_Shield", "Knight_Cape", "Knight_Helmet"]})
+    update_gear_visual()
     VisualStyle.add_contact(self, 1.65, 1.3)
     var ring := MeshInstance3D.new()
     var tm := TorusMesh.new()
@@ -130,6 +132,29 @@ func atk() -> int:
 func make_inst(id: String, q: int = 0) -> Dictionary:
     return {"k": Items.gear_kind(id), "t": Items.gear_tier(id), "q": q, "e": 0, "b": false}
 
+## อุปกรณ์บนตัวละคร: ดาบ/คทา/หน้าไม้(ธนู) ในมือ · หมวก · ผ้าคลุม (เสื้อ) · โล่ (เกราะแขน) · สีตามระดับ เรืองแสงตามคุณภาพ
+const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff")]
+
+func update_gear_visual() -> void:
+    if body == null or body.inst == null:
+        return
+    var w: Dictionary = eq.get("weapon", {})
+    var wk := str(w.get("k", ""))
+    if wk == "staff":
+        body.borrow_item("mage", "2H_Staff")
+    elif wk == "bow":
+        body.borrow_item("rogue", "1H_Crossbow")
+    var glow := func(it: Dictionary) -> float:
+        return [0.0, 0.0, 0.12, 0.25][int(it.get("q", 0))] + (0.15 if int(it.get("e", 0)) >= 7 else 0.0)
+    body.show_item("1H_Sword", wk == "sword", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "sword" else 0.0)
+    body.show_item("2H_Staff", wk == "staff", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "staff" else 0.0)
+    body.show_item("1H_Crossbow", wk == "bow", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "bow" else 0.0)
+    for pair in [["helm", "Knight_Helmet"], ["chest", "Knight_Cape"], ["arm", "Round_Shield"]]:
+        var it: Dictionary = eq.get(pair[0], {})
+        # ผ้าคลุมไม่เรืองแสง (ผืนใหญ่ บังตัวละคร) · ย้อมสีอ่อน ๆ
+        var gl: float = 0.0 if pair[0] == "chest" or it.is_empty() else glow.call(it)
+        body.show_item(str(pair[1]), not it.is_empty(), TIER_COL[int(it.get("t", 0))] if not it.is_empty() else Color(0, 0, 0, 0), gl, 0.35 if pair[0] == "chest" else 0.65)
+
 func equip(it: Dictionary) -> String:
     var k := str(it.k)
     if not Items.SLOT_OF.has(k):
@@ -142,6 +167,7 @@ func equip(it: Dictionary) -> String:
         gear.append(eq[slot])
     eq[slot] = it
     recalc_stats()
+    update_gear_visual()
     return "สวม " + Items.inst_name(it) + " แล้ว"
 
 func unequip(slot: String) -> String:
@@ -151,6 +177,7 @@ func unequip(slot: String) -> String:
     eq.erase(slot)
     gear.append(it)
     recalc_stats()
+    update_gear_visual()
     return "ถอด " + Items.inst_name(it) + " เข้ากระเป๋า"
 
 ## เครื่องมือที่ดีที่สุดในกระเป๋า (ไม่แตก) · ไม่มี = {}
@@ -258,6 +285,7 @@ func load_game() -> bool:
             for i in int(inv[k]):
                 gear.append(make_inst(str(k)))
             inv.erase(k)
+    update_gear_visual()
     pending_story = d.get("story")
     pending_guild = d.get("guild")
     if town.guild != null:

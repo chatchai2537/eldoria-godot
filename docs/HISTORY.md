@@ -282,3 +282,8 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - บอร์ดเควสกิลด์ตาม 031-core.js (QST QT qGen qRefresh questEv openGuild qTake qClaim) · ไม่รวมเควสตกปลา
 - เวลาเปลี่ยนบอร์ดใช้นาฬิกาเครื่อง (เกม 3D ยังออฟไลน์ — 2D ใช้ srvNow)
 - บทเรียน: ตัวแปร `var x := i` ใน for ที่วนจากค่า Variant → Parse Error ทั้งไฟล์ แล้วเทสค้างจนหมดเวลา 600 วิ — ใช้ `var x: int = i`
+
+## 0.16-gear (Claude 2026-10-29)
+- เห็นอุปกรณ์บนตัว: ใช้ชิ้นส่วนใน KayKit (Knight: 1H_Sword Knight_Helmet Knight_Cape Round_Shield · Mage: 2H_Staff · Rogue: 1H_Crossbow) · เริ่มเกมไม่มีอะไรในมือ (เหมือน 2D)
+- เรืองแสงคุณภาพแรงเกินจนตัวกลายเป็นก้อนสีเหลือง → ลดเหลือ 0.12/0.25 · ผ้าคลุมไม่เรืองแสง ย้อมอ่อน
+- ขายอุปกรณ์: gearPrice ของ 2D (GP × GK) × 0.6 ตาม fix31

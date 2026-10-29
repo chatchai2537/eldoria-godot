@@ -163,6 +163,12 @@ static func gear_tier(id: String) -> int:
 static func q_bonus(base: int, q: int) -> int:
     return q * max(1, int(round(base * 0.2))) if q > 0 else 0
 
+## ราคาขายอุปกรณ์ (js/031-core.js gearPrice: GP[ระดับ] × GK[ชนิด] · fix31 ×0.6)
+const GP := [8, 24, 50, 100, 200, 420]
+const GK := {"sword": 1.0, "staff": 1.0, "bow": 1.0, "axe": 0.8, "pick": 0.8, "helm": 0.8, "chest": 1.4, "pants": 1.0, "arm": 0.7, "neck": 1.1, "ring": 0.9}
+static func gear_price(it: Dictionary) -> int:
+    return max(1, int(round(round(GP[int(it.t)] * float(GK[it.k])) * 0.6)))
+
 static func enh_atk(l: int) -> int:
     return min(l, 5) + max(0, min(l, 10) - 5) * 2 + max(0, l - 10) * 3
 

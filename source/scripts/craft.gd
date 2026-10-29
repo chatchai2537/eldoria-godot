@@ -97,6 +97,7 @@ func enhance(it: Dictionary, roll: float = -1.0) -> String:
     if roll < Items.RATE[l]:
         it.e = l + 1
         p.recalc_stats()
+        p.update_gear_visual()
         return "ตีบวกสำเร็จ! %s" % Items.inst_name(it)
     if l < Items.BREAK_FROM:
         return "พลาด… วัตถุดิบหายไป (ของไม่เสียหาย)"

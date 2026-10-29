@@ -140,3 +140,74 @@ func _finish_materials(skeleton: Skeleton3D, kind: String) -> void:
                         material.normal_texture = VisualStyle.texture_for("plaster_normal")
                     material.normal_scale = 0.12
                     node.set_surface_override_material(surface, material)
+
+# ---------- ของที่ถือ/สวม (แสดงอุปกรณ์บนตัว) ----------
+var _items := {}   # ชื่อ -> MeshInstance3D
+
+func _item_nodes() -> Dictionary:
+    if _items.is_empty():
+        var sk := inst.get_node("Rig/Skeleton3D")
+        for c in sk.get_children():
+            if c is BoneAttachment3D:
+                for m in c.get_children():
+                    _items[String(m.name)] = m
+    return _items
+
+## ยืมของจากโมเดลอื่น (เช่น คทาของนักเวท · หน้าไม้ของโจร) มาติดมือขวา/ซ้าย
+func borrow_item(kind: String, item: String) -> MeshInstance3D:
+    var L := _item_nodes()
+    if L.has(item):
+        return L[item]
+    var ps: PackedScene = _cache.get(kind)
+    if ps == null:
+        ps = load(FILES[kind])
+        _cache[kind] = ps
+    var other: Node = ps.instantiate()
+    var osk := other.get_node("Rig/Skeleton3D")
+    var found: MeshInstance3D = null
+    var bone := ""
+    for c in osk.get_children():
+        if c is BoneAttachment3D:
+            for m in c.get_children():
+                if String(m.name) == item:
+                    found = m
+                    bone = c.bone_name
+    if found == null:
+        other.free()
+        return null
+    var sk := inst.get_node("Rig/Skeleton3D")
+    var att: BoneAttachment3D = null
+    for c in sk.get_children():
+        if c is BoneAttachment3D and c.bone_name == bone:
+            att = c
+    if att == null:
+        other.free()
+        return null
+    var dup: MeshInstance3D = found.duplicate()
+    other.free()
+    att.add_child(dup)
+    dup.visible = false
+    L[item] = dup
+    return dup
+
+## เปิด/ปิดของ 1 ชิ้น · tint = สีวัสดุตามระดับ · glow = เรืองแสง (คุณภาพสูง)
+func show_item(item: String, on: bool, tint: Color = Color(0, 0, 0, 0), glow: float = 0.0, mix: float = 0.65) -> void:
+    var L := _item_nodes()
+    if not L.has(item):
+        return
+    var m: MeshInstance3D = L[item]
+    m.visible = on
+    if not on or tint.a <= 0.0:
+        return
+    for si in m.mesh.get_surface_count():
+        var base: Material = m.mesh.surface_get_material(si)
+        if base is StandardMaterial3D:
+            var mt: StandardMaterial3D = base.duplicate()
+            mt.albedo_color = Color(1, 1, 1).lerp(tint, mix)
+            mt.metallic = 0.5
+            mt.roughness = 0.35
+            if glow > 0.0:
+                mt.emission_enabled = true
+                mt.emission = tint
+                mt.emission_energy_multiplier = glow
+            m.set_surface_override_material(si, mt)

@@ -975,6 +975,28 @@ func _run() -> void:
     p.save_enabled = false
     world.story.reset()
 
+    # ---------- ขายอุปกรณ์ · อุปกรณ์บนตัว ----------
+    p.gear = []
+    p.eq = {}
+    p.inv_add("chest1", 1)
+    var cg: int = p.coins
+    world.open_shop("gear")
+    world.sell_gear(p.gear[0])
+    check(p.gear.is_empty() and p.coins == cg + 20, "ร้านอาวุธรับซื้ออุปกรณ์ (เสื้อเหล็ก 20 เหรียญ)")
+    world.close_shop()
+    p.weapon = "staff2"
+    var bd: Dictionary = p.body._item_nodes()
+    check(bd.has("2H_Staff") and bd["2H_Staff"].visible and not bd["1H_Sword"].visible, "ถือคทาแล้วเห็นคทาในมือ (ไม่เห็นดาบ)")
+    var hm: Dictionary = p.make_inst("helm1")
+    p.gear.append(hm)
+    p.equip(hm)
+    check(bd["Knight_Helmet"].visible, "สวมหมวกแล้วเห็นหมวกบนหัว")
+    p.unequip("helm")
+    check(not bd["Knight_Helmet"].visible, "ถอดหมวกแล้วหมวกหาย")
+    p.gear = []
+    p.eq = {}
+    p.update_gear_visual()
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

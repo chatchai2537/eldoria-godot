@@ -1723,6 +1723,14 @@ func shop_sell_ok() -> void:
     shop_qty = 1
     _shop_msg(m, "ขอบคุณที่อุดหนุนนะ!")
 
+func sell_gear(g: Dictionary) -> String:
+    if not player.gear.has(g):
+        return ""
+    var pr := Items.gear_price(g)
+    player.gear.erase(g)
+    player.coins += pr
+    return "ขาย %s ได้ %d เหรียญ" % [Items.inst_name(g), pr]
+
 func close_shop() -> void:
     ui_shop.visible = false
     shop_sel = ""
@@ -1886,6 +1894,15 @@ func open_shop(id: String) -> void:
         else:
             grid.add_child(_slot(txt, func(): field.say_msg("ร้านนี้ไม่รับซื้อของชิ้นนี้"), true, false))
     rv.add_child(grid)
+    # ร้านอาวุธรับซื้ออุปกรณ์ในกระเป๋า (ไม่รวมที่สวมอยู่) · ราคา gearPrice × 0.6 (fix31)
+    if id == "gear" and not player.gear.is_empty():
+        rv.add_child(_lbl("อุปกรณ์ในกระเป๋า (แตะเพื่อขาย)", 14, Color(0.95, 0.9, 0.75), true))
+        for it in player.gear:
+            var g: Dictionary = it
+            var pr3 := Items.gear_price(g)
+            var gb := _slot("%s\n%d เหรียญ" % [Items.inst_name(g), pr3], func(): _shop_msg(sell_gear(g), "ขอบคุณที่อุดหนุนนะ!"), false, false)
+            gb.add_theme_color_override("font_color", Items.QCOLORS[int(g.q)])
+            rv.add_child(gb)
     if ids.is_empty():
         rv.add_child(_lbl("กระเป๋าว่างเปล่า — ยังไม่มีอะไรให้ขาย", 14, Color(0.75, 0.72, 0.65)))
     ui_shop.visible = true
@@ -2163,6 +2180,18 @@ func _test_ui(what: String) -> void:
         if what.begins_with("mineboss:"):
             var d: Dictionary = mine.data[zi]
             player.position = mine.tile_w(zi, d.arena.x, d.arena.y + 7)
+        return
+    if what.begins_with("gear:"):
+        # ทดสอบภาพ: gear:<อาวุธ> — สวมชุดเต็ม (หมวก/เสื้อ/แขน ระดับทอง คุณภาพแดง +9)
+        player.weapon = what.substr(5)
+        for k in ["helm4", "chest4", "arm4"]:
+            var it: Dictionary = player.make_inst(k, 3)
+            it.e = 9
+            player.gear.append(it)
+            player.equip(it)
+        player.eq.weapon.q = 3
+        player.update_gear_visual()
+        cam_dist = 7.0
         return
     if what.begins_with("cls:"):
         # ทดสอบภาพ: cls:<อาชีพ>:<เลเวล>[:ช่องสกิล] — มีอาชีพ + อาวุธประจำสาย + ปุ่มสกิลครบ แล้วกดสกิล
