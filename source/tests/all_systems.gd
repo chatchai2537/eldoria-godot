@@ -289,6 +289,36 @@ func _run() -> void:
     check(p.inv_count("scroll") == 0 and not world.in_field_rect(p.position.x, p.position.z, 0.0), "ม้วนวาปจากทุ่งกลับเมือง")
     world.toggle_bag()
     check(world.ui_bag.visible, "เปิดกระเป๋าได้")
+    # 0.31 กระเป๋าแบบช่องเกม 2D: ช่องสวม 7 ช่อง · ของเป็นช่อง 52px · แตะ = การ์ดรายละเอียด · สวม/ถอด/ใช้จากการ์ด
+    var slots_of := func() -> Array:
+        return world.ui_bag_body.find_children("*", "Button", true, false).filter(func(b): return (b as Button).custom_minimum_size == Vector2(world.SLOT_PX, world.SLOT_PX))
+    check(slots_of.call().size() >= 7 + 8, "กระเป๋า: มีช่องสวม 7 + ตารางช่องของ")
+    p.inv_add("helm1", 1)
+    p.inv_add("hpp", 2)
+    world.refresh_bag()
+    var hg: Dictionary = {}
+    for g0 in p.gear:
+        if str(g0.k) == "helm":
+            hg = g0
+    world._bag_pick({"t": "gear", "g": hg})
+    var card_btns: Array = world.ui_bag_body.find_children("*", "PanelContainer", true, false).filter(func(n): return n.has_meta("bag_card"))
+    check(card_btns.size() == 1, "กระเป๋า: แตะช่องอุปกรณ์ = การ์ดรายละเอียด")
+    for b in card_btns[0].find_children("*", "Button", true, false):
+        if (b as Button).text == "สวม":
+            (b as Button).pressed.emit()
+    check(p.eq.has("helm") and world.bag_sel.is_empty(), "กระเป๋า: กดสวมจากการ์ด")
+    world._bag_pick({"t": "eq", "sl": "helm"})
+    for b in world.ui_bag_body.find_children("*", "Button", true, false):
+        if (b as Button).text == "ถอด":
+            (b as Button).pressed.emit()
+    check(not p.eq.has("helm"), "กระเป๋า: กดถอดจากการ์ดช่องสวม")
+    p.hp = 10.0
+    world._bag_pick({"t": "mat", "k": "hpp"})
+    for b in world.ui_bag_body.find_children("*", "Button", true, false):
+        if (b as Button).text == "ใช้":
+            (b as Button).pressed.emit()
+            break
+    check(p.inv_count("hpp") == 1, "กระเป๋า: กดใช้ยาจากการ์ด")
     world.toggle_bag()
     check(not world.ui_bag.visible, "ปิดกระเป๋าได้")
 
@@ -1671,7 +1701,7 @@ func _run() -> void:
     world.close_shop()
     world.refresh_bag()
     await process_frame
-    check(world.ui_bag_body.find_children("*", "TextureRect", true, false).size() >= 1, "ไอคอน: กระเป๋าแสดงรูปของ")
+    check(world.ui_bag_body.find_children("*", "Button", true, false).filter(func(b): return (b as Button).icon != null).size() >= 1, "ไอคอน: กระเป๋าแสดงรูปของ (ช่องแบบเกม 2D)")
     world.craft.open("furnace")
     await process_frame
     var ic_cf := 0

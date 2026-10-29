@@ -258,7 +258,7 @@ func _ready() -> void:
         ui_bag.anchor_top = 0.0
         ui_bag.anchor_bottom = 1.0
         ui_bag.offset_top = 40
-        ui_bag.offset_bottom = -100
+        ui_bag.offset_bottom = -6   # 0.31: กระเป๋าแบบช่องใช้ความสูงเต็มจอ (ปุ่มมือถือซ่อนตอนเปิดกระเป๋าอยู่แล้ว)
         for pn in [ui_char]:
             pn.anchor_left = 0.0
             pn.anchor_right = 1.0
@@ -2188,32 +2188,54 @@ func open_shop(id: String) -> void:
         rv.add_child(ok_b)
     else:
         rv.add_child(_lbl("แตะของที่มีราคาเพื่อเลือกขาย · สีจาง = ร้านนี้ไม่รับซื้อ", 13, Color(0.75, 0.72, 0.65)))
+    # 0.31: ช่องแบบเกม 2D · ราคามุมซ้ายบน · อุปกรณ์อยู่ช่องเดียวกัน (ร้านอาวุธรับซื้อ gearPrice×0.6 · ไม่รวมที่สวมอยู่)
+    if not shop_gsel.is_empty() and (id != "gear" or not player.gear.has(shop_gsel)):
+        shop_gsel = {}
+    if not shop_gsel.is_empty():
+        var gs: Dictionary = shop_gsel
+        var gp := Items.gear_price(gs)
+        var gh := HBoxContainer.new()
+        var gl := _lbl("%s · ขายได้ %d เหรียญ" % [Items.inst_name(gs), gp], 15, Items.QCOLORS[int(gs.q)] if int(gs.q) > 0 else Color(1, 0.95, 0.8), true)
+        gl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        gh.add_child(gl)
+        var gx := _btn("X", true, func(): shop_gsel = {}; open_shop(cur_shop))
+        gx.custom_minimum_size = Vector2(40, 30)
+        gh.add_child(gx)
+        rv.add_child(gh)
+        var gok := _btn("ขาย ได้ %d เหรียญ" % gp, true, func():
+            shop_gsel = {}
+            _shop_msg(sell_gear(gs), "ขอบคุณที่อุดหนุนนะ!"))
+        gok.add_theme_color_override("font_color", Color(1, 0.88, 0.35))
+        rv.add_child(gok)
     var grid := GridContainer.new()
-    grid.columns = 4
+    grid.columns = maxi(4, _grid_cols(ui_shop.size.x * 0.5) if ui_shop.size.x > 100.0 else 5)
     grid.add_theme_constant_override("h_separation", 4)
     grid.add_theme_constant_override("v_separation", 4)
     var ids := _bag_ids()
+    if id == "gear":
+        for it in player.gear:
+            var g: Dictionary = it
+            var pr3 := Items.gear_price(g)
+            if pr3 > 0:
+                grid.add_child(_islot(gear_icon_id(g), _enh_txt(g), str(pr3), _gear_edge(g), func():
+                    shop_sel = ""
+                    shop_gsel = g
+                    open_shop(cur_shop), false, shop_gsel == g, Items.inst_name(g)))
     for iid in ids:
         var pr2 := _sell_price(sh, iid)
         var n: int = player.inv_count(iid)
         var a: String = iid
-        var txt := "%s\n×%d" % [Items.item_name(iid), n] + (("  %d เหรียญ" % pr2) if pr2 > 0 else "")
         if pr2 > 0:
-            grid.add_child(_slot(txt, func(): shop_pick(a), false, shop_sel == iid, iid))
+            grid.add_child(_islot(iid, str(n), str(pr2), SLOT_EDGE, func():
+                shop_gsel = {}
+                shop_pick(a), false, shop_sel == iid, Items.item_name(iid)))
         else:
-            grid.add_child(_slot(txt, func(): field.say_msg("ร้านนี้ไม่รับซื้อของชิ้นนี้"), true, false, iid))
-    rv.add_child(grid)
-    # ร้านอาวุธรับซื้ออุปกรณ์ในกระเป๋า (ไม่รวมที่สวมอยู่) · ราคา gearPrice × 0.6 (fix31)
-    if id == "gear" and not player.gear.is_empty():
-        rv.add_child(_lbl("อุปกรณ์ในกระเป๋า (แตะเพื่อขาย)", 14, Color(0.95, 0.9, 0.75), true))
+            grid.add_child(_islot(iid, str(n), "", SLOT_EDGE, func(): field.say_msg("ร้านนี้ไม่รับซื้อของชิ้นนี้"), true, false, Items.item_name(iid)))
+    if id != "gear":
         for it in player.gear:
-            var g: Dictionary = it
-            var pr3 := Items.gear_price(g)
-            if pr3 <= 0:
-                continue
-            var gb := _slot("%s\n%d เหรียญ" % [Items.inst_name(g), pr3], func(): _shop_msg(sell_gear(g), "ขอบคุณที่อุดหนุนนะ!"), false, false, gear_icon_id(g))
-            gb.add_theme_color_override("font_color", Items.QCOLORS[int(g.q)])
-            rv.add_child(gb)
+            var g2: Dictionary = it
+            grid.add_child(_islot(gear_icon_id(g2), _enh_txt(g2), "", _gear_edge(g2), func(): field.say_msg("อุปกรณ์ขายได้ที่ร้านอาวุธลุงเหล็ก"), true, false, Items.inst_name(g2)))
+    rv.add_child(grid)
     if ids.is_empty():
         rv.add_child(_lbl("กระเป๋าว่างเปล่า — ยังไม่มีอะไรให้ขาย", 14, Color(0.75, 0.72, 0.65)))
     ui_shop.visible = true
@@ -2276,73 +2298,255 @@ func toggle_bag() -> void:
     if ui_bag.visible:
         ui_bag.visible = false
         return
+    bag_sel = {}
     ui_shop.visible = false
     ui_char.visible = false
     refresh_bag()
     ui_bag.visible = true
 
-func refresh_bag() -> void:
-    for c in ui_bag_body.get_children():
+## ---- ช่องไอเท็มแบบเกม 2D (0.31) ----
+## ช่องสี่เหลี่ยม 52px พื้น #33302a ขอบตามคุณภาพ · รูปของกลางช่อง · จำนวน/+ตีบวก มุมขวาล่าง · ราคา มุมซ้ายบน
+const SLOT_PX := 52
+const SLOT_BG := Color(0.2, 0.188, 0.165, 0.97)
+const SLOT_EDGE := Color(0.353, 0.333, 0.29)
+
+func _islot(icon: String, cnt: String, tag: String, edge: Color, cb: Callable, faded: bool = false, on: bool = false, tip: String = "", empty_txt: String = "") -> Button:
+    var b := Button.new()
+    b.custom_minimum_size = Vector2(SLOT_PX, SLOT_PX)
+    b.focus_mode = Control.FOCUS_NONE
+    b.tooltip_text = clean(tip)
+    var st := StyleBoxFlat.new()
+    st.bg_color = SLOT_BG if empty_txt == "" else Color(0.14, 0.13, 0.115, 0.85)
+    st.border_color = Color(0.49, 0.85, 0.34) if on else edge
+    st.set_border_width_all(3 if on else (2 if edge != SLOT_EDGE else 1))
+    st.set_corner_radius_all(6)
+    for k in ["normal", "hover", "pressed", "disabled"]:
+        b.add_theme_stylebox_override(k, st)
+    var tx := icon_tex(icon)
+    if tx != null:
+        b.icon = tx
+        b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        b.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+        b.expand_icon = true
+        b.add_theme_constant_override("icon_max_width", 38)
+    elif empty_txt != "":
+        b.text = empty_txt
+        b.add_theme_font_override("font", font)
+        b.add_theme_font_size_override("font_size", 11)
+        b.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
+    for pair in [[cnt, true], [tag, false]]:
+        if str(pair[0]) == "":
+            continue
+        var l := Label.new()
+        l.text = str(pair[0])
+        l.add_theme_font_override("font", font_b)
+        l.add_theme_font_size_override("font_size", 12 if pair[1] else 11)
+        l.add_theme_color_override("font_color", Color(1, 1, 1) if pair[1] else Color(1.0, 0.85, 0.3))
+        l.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+        l.add_theme_constant_override("outline_size", 5)
+        l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        if pair[1]:
+            l.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+            l.offset_left = -SLOT_PX
+            l.offset_top = -18
+            l.offset_right = -3
+            l.offset_bottom = 0
+            l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        else:
+            l.position = Vector2(3, 0)
+        b.add_child(l)
+    if faded:
+        b.modulate = Color(1, 1, 1, 0.38)
+    b.pressed.connect(cb)
+    return b
+
+func _gear_edge(g: Dictionary) -> Color:
+    if g.get("b", false):
+        return Color(1.0, 0.3, 0.25)
+    if Items.is_boss_tier(int(g.t)):
+        return Color(Items.RARITY[int(g.t) - Items.BOSS_T0][1])
+    return SLOT_EDGE if int(g.q) == 0 else Items.QCOLORS[int(g.q)]
+
+func _enh_txt(g: Dictionary) -> String:
+    return ("+%d" % int(g.e)) if int(g.get("e", 0)) > 0 else ""
+
+func _grid_cols(width: float) -> int:
+    return maxi(4, int((width - 30.0) / float(SLOT_PX + 4)))
+
+## ของที่เลือกในกระเป๋า: {t: "gear"|"eq"|"mat", g: อุปกรณ์, sl: ช่อง, k: id}
+var bag_sel := {}
+var shop_gsel := {}   # อุปกรณ์ที่เลือกขายในร้านอาวุธ
+
+func _clear(box: Node) -> void:
+    for c in box.get_children():
+        box.remove_child(c)
         c.queue_free()
+
+func refresh_bag() -> void:
+    _clear(ui_bag_body)
     var top := HBoxContainer.new()
-    var title := _nowrap(_lbl("กระเป๋า", 24, Color(1.0, 0.85, 0.45), true))
+    var title := _nowrap(_lbl("กระเป๋า", 22, Color(1.0, 0.85, 0.45), true))
     title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     top.add_child(title)
-    top.add_child(_nowrap(_lbl("เหรียญ %d" % player.coins, 18, Color(1.0, 0.85, 0.4), true)))
-    top.add_child(_btn("ปิด X", true, func(): ui_bag.visible = false))
+    var nslot: int = player.gear.size() + _bag_ids().size()
+    top.add_child(_nowrap(_lbl("%d ช่อง · เหรียญ %s" % [nslot, _num(player.coins)], 16, Color(1.0, 0.85, 0.4), true)))
+    var xb := _btn("X", true, func(): ui_bag.visible = false)
+    xb.custom_minimum_size = Vector2(44, 34)
+    top.add_child(xb)
     ui_bag_body.add_child(top)
-    ui_bag_body.add_child(_lbl("ATK %d · DEF %d · เลือดสูงสุด %d" % [player.atk(), player.def(), player.max_hp], 17, Color(0.85, 0.92, 1.0), true))
-    # ของที่สวมอยู่
+    ui_bag_body.add_child(_lbl("ATK %d · DEF %d · เลือด %d · คริ %.1f%%" % [player.atk(), player.def(), player.max_hp, player.crit_rate() * 100.0], 14, Color(0.85, 0.92, 1.0)))
+    # ซ้าย: ช่องสวม + ตารางของ · ขวา: การ์ดรายละเอียด (แบบเกม 2D ที่การ์ดลอยข้างกระเป๋า)
+    var main := HBoxContainer.new()
+    main.add_theme_constant_override("separation", 10)
+    ui_bag_body.add_child(main)
+    var left := VBoxContainer.new()
+    left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    main.add_child(left)
+    var right := VBoxContainer.new()
+    right.custom_minimum_size = Vector2(290, 0)
+    main.add_child(right)
+    # สวมอยู่: 7 ช่อง
+    left.add_child(_lbl("สวมอยู่", 13, Color(0.95, 0.9, 0.75, 0.75), true))
+    var er := HBoxContainer.new()
+    er.add_theme_constant_override("separation", 4)
     for sl in Items.SLOTS:
-        if not player.eq.has(sl):
-            continue
-        var it: Dictionary = player.eq[sl]
         var ss: String = sl
-        var r := _row("%s: %s" % [Items.SLOT_NAMES[sl], Items.inst_name(it)], "คุณภาพ%s · %s %d" % [Items.QNAMES[int(it.q)], Items.stat_label(str(it.k)), Items.inst_stat(it)], [_btn("ถอด", true, func(): field.say_msg(player.unequip(ss)); refresh_bag())], gear_icon_id(it))
-        _row_label(r).add_theme_color_override("font_color", Items.QCOLORS[int(it.q)])
-        ui_bag_body.add_child(r)
-    if player.eq.is_empty():
-        ui_bag_body.add_child(_lbl("ยังไม่ได้สวมอะไร (ซื้อดาบที่ร้านอาวุธลุงเหล็ก หรือคราฟที่ทั่งตีเหล็ก)", 15, Color(0.75, 0.72, 0.65)))
-    # อุปกรณ์ในกระเป๋า
+        var col := VBoxContainer.new()
+        col.add_theme_constant_override("separation", 0)
+        if player.eq.has(sl):
+            var it: Dictionary = player.eq[sl]
+            col.add_child(_islot(gear_icon_id(it), _enh_txt(it), "", _gear_edge(it), func(): _bag_pick({"t": "eq", "sl": ss}), false, bag_sel.get("sl", "") == sl, Items.inst_name(it)))
+        else:
+            col.add_child(_islot("", "", "", SLOT_EDGE, func(): pass, false, false, "", "ว่าง"))
+        var cap := _lbl(str(Items.SLOT_NAMES[sl]), 10, Color(1, 1, 1, 0.6))
+        cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        cap.custom_minimum_size = Vector2(SLOT_PX, 0)
+        col.add_child(cap)
+        er.add_child(col)
+    left.add_child(er)
+    var card: PanelContainer = _bag_card() if not bag_sel.is_empty() else null
+    if card != null:
+        right.add_child(card)
+    else:
+        var hint := _lbl("แตะช่องของเพื่อดูรายละเอียด · สวม · ถอด · ใช้", 14, Color(0.75, 0.72, 0.65))
+        hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        right.add_child(hint)
+    # ของในกระเป๋า
+    left.add_child(_lbl("ของในกระเป๋า (แตะเพื่อดู/ใช้/สวม)", 13, Color(0.95, 0.9, 0.75, 0.75), true))
+    var grid := GridContainer.new()
+    grid.columns = _grid_cols((ui_bag.size.x if ui_bag.size.x > 100.0 else 660.0) - 300.0)
+    grid.add_theme_constant_override("h_separation", 4)
+    grid.add_theme_constant_override("v_separation", 4)
     for it in player.gear:
         var g: Dictionary = it
-        var tool: bool = not Items.SLOT_OF.has(str(g.k))
-        var btns := []
-        if not tool and not g.get("b", false):
-            btns.append(_btn("สวม", true, func(): field.say_msg(player.equip(g)); refresh_bag()))
-        var sub := "%s %d" % [Items.stat_label(str(g.k)), Items.inst_stat(g)]
-        if tool:
-            sub += " · ใช้จากกระเป๋าได้เลย"
+        grid.add_child(_islot(gear_icon_id(g), _enh_txt(g), "", _gear_edge(g), func(): _bag_pick({"t": "gear", "g": g}), false, bag_sel.get("g") == g, Items.inst_name(g)))
+    for iid in _bag_ids():
+        var k: String = iid
+        grid.add_child(_islot(iid, str(player.inv_count(iid)), "", SLOT_EDGE, func(): _bag_pick({"t": "mat", "k": k}), false, bag_sel.get("k", "") == iid, Items.item_name(iid)))
+    var n_items := grid.get_child_count()
+    var total := maxi(grid.columns * 2, int(ceil(float(n_items) / grid.columns)) * grid.columns)
+    for i in total - n_items:   # ช่องว่างเติมให้เต็มแถว แบบกระเป๋าเกม 2D
+        grid.add_child(_islot("", "", "", SLOT_EDGE, func(): pass, false, false, "", " "))
+    left.add_child(grid)
+    if player.gear.is_empty() and _bag_ids().is_empty():
+        ui_bag_body.add_child(_lbl("กระเป๋าว่าง — ตีสไลม์ เก็บหิน/กิ่งไม้ในทุ่งหญ้า", 14, Color(0.75, 0.72, 0.65)))
+
+func _bag_pick(sel: Dictionary) -> void:
+    var same: bool = sel.get("t") == bag_sel.get("t") and sel.get("sl", "") == bag_sel.get("sl", "") and sel.get("k", "") == bag_sel.get("k", "") and sel.get("g") == bag_sel.get("g")
+    bag_sel = {} if same else sel
+    refresh_bag()
+
+## การ์ดรายละเอียดของที่เลือก (แบบ icShow เกม 2D): รูปใหญ่ · ชื่อสีตามคุณภาพ · ค่า · ปุ่ม
+func _bag_card() -> PanelContainer:
+    var t: String = bag_sel.get("t", "")
+    var g: Dictionary = {}
+    if t == "eq":
+        if not player.eq.has(bag_sel.sl):
+            bag_sel = {}
+            return null
+        g = player.eq[bag_sel.sl]
+    elif t == "gear":
+        g = bag_sel.g
+        if not player.gear.has(g):
+            bag_sel = {}
+            return null
+    elif t == "mat" and player.inv_count(bag_sel.k) <= 0:
+        bag_sel = {}
+        return null
+    var pc := PanelContainer.new()
+    var sb := StyleBoxFlat.new()
+    sb.bg_color = Color(0.1, 0.09, 0.08, 0.95)
+    sb.border_color = Color(0.91, 0.76, 0.29)
+    sb.set_border_width_all(2)
+    sb.set_corner_radius_all(10)
+    sb.content_margin_left = 10
+    sb.content_margin_right = 10
+    sb.content_margin_top = 6
+    sb.content_margin_bottom = 8
+    pc.add_theme_stylebox_override("panel", sb)
+    pc.set_meta("bag_card", true)
+    var h := VBoxContainer.new()
+    h.add_theme_constant_override("separation", 4)
+    pc.add_child(h)
+    var pic := TextureRect.new()
+    pic.texture = icon_tex(gear_icon_id(g) if not g.is_empty() else str(bag_sel.k))
+    pic.custom_minimum_size = Vector2(64, 64)
+    pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    h.add_child(pic)
+    var v := VBoxContainer.new()
+    v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    v.add_theme_constant_override("separation", 1)
+    h.add_child(v)
+    var btns := HBoxContainer.new()
+    btns.add_theme_constant_override("separation", 6)
+    if not g.is_empty():
+        v.add_child(_lbl(Items.inst_name(g), 17, Color(1.0, 0.4, 0.35) if g.get("b", false) else (Items.QCOLORS[int(g.q)] if int(g.q) > 0 else Color(1, 0.95, 0.85)), true))
+        var lines := ["%s %d · คุณภาพ%s" % [Items.stat_label(str(g.k)), Items.inst_stat(g), Items.QNAMES[int(g.q)]]]
+        if Items.SLOT_OF.has(str(g.k)):
+            lines.append("ช่อง: " + str(Items.SLOT_NAMES[Items.SLOT_OF[str(g.k)]]))
         else:
-            sub = "คุณภาพ%s · " % Items.QNAMES[int(g.q)] + sub
-        if g.get("b", false):
-            sub = "แตก — ซ่อมที่ทั่งตีเหล็กก่อนใส่ · " + sub
+            lines.append("เครื่องมือ — ใช้อัตโนมัติเมื่อตัดไม้/ขุดแร่ (ใช้อันที่ดีที่สุด)")
+        var base: String = classes.base_of(player.cls) if classes != null else ""
+        if Items.CSET.has(base) and int(g.t) < Items.BOSS_T0 and (str(g.k) == str(Items.CSET[base].w) or str(g.k) in ["helm", "chest", "arm"]):
+            lines.append("★ ชิ้น%s%s" % [Items.CSET[base].n, Items.TNAMES[int(g.t)]])
         if Items.is_boss_tier(int(g.t)):
-            sub = "ชุดบอส [%s] ต้อง Lv.%d · " % [Items.RARITY[int(g.t) - Items.BOSS_T0][0], Items.req_lv(int(g.t))] + sub
-        var r2 := _row(Items.inst_name(g), sub, btns, gear_icon_id(g))
-        _row_label(r2).add_theme_color_override("font_color", Color(1.0, 0.4, 0.35) if g.get("b", false) else Items.QCOLORS[int(g.q)])
-        ui_bag_body.add_child(r2)
-    var ids := ["gel", "stone", "wood"]
-    for k in player.inv.keys():
-        ids.append(str(k))
-    var any := false
-    for iid in ids:
-        var n: int = player.inv_count(iid)
-        if n <= 0:
-            continue
-        any = true
-        var info: Dictionary = Items.ITEM.get(iid, {})
-        var btns := []
+            lines.append("ชุดบอส [%s] ต้อง Lv.%d" % [Items.RARITY[int(g.t) - Items.BOSS_T0][0], Items.req_lv(int(g.t))])
+        if g.get("b", false):
+            lines.append("แตก — ซ่อมที่ทั่งตีเหล็กก่อนใส่")
+        var dl := _lbl(" · ".join(lines), 13, Color(0.85, 0.88, 0.95))
+        dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        v.add_child(dl)
+        if t == "eq":
+            var sl: String = bag_sel.sl
+            btns.add_child(_btn("ถอด", true, func():
+                field.say_msg(player.unequip(sl))
+                bag_sel = {}
+                refresh_bag()))
+        elif Items.SLOT_OF.has(str(g.k)):
+            btns.add_child(_btn("สวม", not g.get("b", false), func():
+                field.say_msg(player.equip(g))
+                bag_sel = {}
+                refresh_bag()))
+    else:
+        var k: String = bag_sel.k
+        var info: Dictionary = Items.ITEM.get(k, {})
+        v.add_child(_lbl("%s ×%d" % [Items.item_name(k), player.inv_count(k)], 17, Color(1, 0.95, 0.85), true))
+        var note := str(info.get("note", "")) if info.get("note") else "วัตถุดิบ — ใช้หลอม/คราฟ หรือขายที่ร้าน"
+        var nl := _lbl(clean(note), 13, Color(0.85, 0.88, 0.95))
+        nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        v.add_child(nl)
         if info.has("use"):
-            var use_id: String = iid
-            btns.append(_btn("ใช้", true, func():
-                var m: String = player.use_item(use_id)
+            btns.add_child(_btn("ใช้", true, func():
+                var m: String = player.use_item(k)
                 if m != "":
                     field.say_msg(m)
                 refresh_bag()))
-        ui_bag_body.add_child(_row("%s ×%d" % [Items.item_name(iid), n], str(info.get("note", "")), btns, iid))
-    if not any:
-        ui_bag_body.add_child(_lbl("กระเป๋าว่าง — ตีสไลม์ เก็บหิน/กิ่งไม้ในทุ่งหญ้า", 16, Color(0.75, 0.72, 0.65)))
+    btns.add_child(_btn("ปิด", true, func():
+        bag_sel = {}
+        refresh_bag()))
+    v.add_child(btns)
+    return pc
 
 func _panel(cl: CanvasLayer, sb: StyleBox) -> Array:
     var pnl := PanelContainer.new()
