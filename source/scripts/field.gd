@@ -343,7 +343,7 @@ func try_chop(p) -> bool:
     if tr.border:
         say_msg("ต้นไม้ขอบทุ่งตัดไม่ได้")
         return true
-    if p.inv_count("axe0") <= 0:
+    if p.best_tool("axe").is_empty():
         say_msg("ต้นไม้ต้องใช้ขวาน — ซื้อขวานหินที่ร้านอาวุธลุงเหล็ก")
         return true
     var dm: int = p.axe_dmg()

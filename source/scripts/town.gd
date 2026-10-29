@@ -75,6 +75,7 @@ var is_mobile := false
 var test_lv := 0  # ทดสอบหาต้นเหตุจอดำ: ?t=1 ไม่มีหญ้า/ป่า · ?t=2 +ไม่มีคน · ?t=3 +ไม่มีฟ้าจำลอง
 var mobile: CanvasLayer
 var mine: Node3D
+var craft: Node
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -174,6 +175,10 @@ func _ready() -> void:
     rooms.set_script(load("res://scripts/rooms.gd"))
     add_child(rooms)
     rooms.setup(self)
+    craft = Node.new()
+    craft.set_script(load("res://scripts/craft.gd"))
+    add_child(craft)
+    craft.setup(self)
     mine = Node3D.new()
     mine.set_script(load("res://scripts/mine.gd"))
     add_child(mine)
@@ -1605,9 +1610,18 @@ func shop_buy(it: Dictionary) -> String:
         "equip":
             if player.weapon == str(e.item):
                 return "ใส่ " + str(it.name) + " อยู่แล้ว"
-            player.weapon = str(e.item)
-            player.weapon_tier = int(e.get("tier", 0))
+            # ของใหม่ (คุณภาพขาว) สวมทันที · ของเดิมเข้ากระเป๋า
+            var ni: Dictionary = player.make_inst(str(e.item))
+            player.gear.append(ni)
+            player.equip(ni)
         "bag":
+            player.inv_add(str(e.item), 1)
+        "trade":
+            for k in e.cost:
+                if player.inv_count(str(k)) < int(e.cost[k]):
+                    return "ของไม่พอ: %s %d/%d" % [Items.item_name(str(k)), player.inv_count(str(k)), int(e.cost[k])]
+            for k in e.cost:
+                player.inv_take(str(k), int(e.cost[k]))
             player.inv_add(str(e.item), 1)
         "skill":
             if not player.learn_skill(str(e.skill)):
@@ -1659,8 +1673,9 @@ func _bag_ids() -> Array:
     return ids
 
 func _sell_price(sh: Dictionary, iid: String) -> int:
+    var alias := "ore" if iid == "gem" else iid  # เกม 2D เรียกเพชร (ก้อน) ว่า ore
     for it in sh.get("sell", []):
-        if it is Array and it.size() >= 3 and str(it[0]) == iid:
+        if it is Array and it.size() >= 3 and (str(it[0]) == iid or str(it[0]) == alias):
             return int(it[2])
     return 0
 
@@ -1763,6 +1778,11 @@ func open_shop(id: String) -> void:
         elif Items.BUY[iid].type == "equip" and player.weapon == str(Items.BUY[iid].item):
             tail = " · ใส่อยู่"
         var note := str(it.get("note", "")) if it.get("note") else ""
+        if ok and Items.BUY[iid].type == "trade":
+            var parts := []
+            for k in Items.BUY[iid].cost:
+                parts.append("%s %d (มี %d)" % [Items.item_name(str(k)), int(Items.BUY[iid].cost[k]), player.inv_count(str(k))])
+            note = "ใช้ " + " + ".join(parts)
         var item: Dictionary = it
         var b := Button.new()
         b.text = clean(nm + tail) + ("\n" + clean(note) if note != "" else "")
@@ -1920,7 +1940,35 @@ func refresh_bag() -> void:
     top.add_child(_nowrap(_lbl("เหรียญ %d" % player.coins, 18, Color(1.0, 0.85, 0.4), true)))
     top.add_child(_btn("ปิด X", true, func(): ui_bag.visible = false))
     ui_bag_body.add_child(top)
-    ui_bag_body.add_child(_lbl("อาวุธ: " + (Items.item_name(player.weapon) if player.weapon != "" else "มือเปล่า (ซื้อดาบที่ร้านอาวุธลุงเหล็ก)") + "  ·  ATK %d" % player.atk(), 17, Color(0.85, 0.92, 1.0)))
+    ui_bag_body.add_child(_lbl("ATK %d · DEF %d · เลือดสูงสุด %d" % [player.atk(), player.def(), player.max_hp], 17, Color(0.85, 0.92, 1.0), true))
+    # ของที่สวมอยู่
+    for sl in Items.SLOTS:
+        if not player.eq.has(sl):
+            continue
+        var it: Dictionary = player.eq[sl]
+        var ss: String = sl
+        var r := _row("%s: %s" % [Items.SLOT_NAMES[sl], Items.inst_name(it)], "คุณภาพ%s · %s %d" % [Items.QNAMES[int(it.q)], Items.stat_label(str(it.k)), Items.inst_stat(it)], [_btn("ถอด", true, func(): field.say_msg(player.unequip(ss)); refresh_bag())])
+        (r.get_child(0).get_child(0) as Label).add_theme_color_override("font_color", Items.QCOLORS[int(it.q)])
+        ui_bag_body.add_child(r)
+    if player.eq.is_empty():
+        ui_bag_body.add_child(_lbl("ยังไม่ได้สวมอะไร (ซื้อดาบที่ร้านอาวุธลุงเหล็ก หรือคราฟที่ทั่งตีเหล็ก)", 15, Color(0.75, 0.72, 0.65)))
+    # อุปกรณ์ในกระเป๋า
+    for it in player.gear:
+        var g: Dictionary = it
+        var tool: bool = not Items.SLOT_OF.has(str(g.k))
+        var btns := []
+        if not tool and not g.get("b", false):
+            btns.append(_btn("สวม", true, func(): field.say_msg(player.equip(g)); refresh_bag()))
+        var sub := "%s %d" % [Items.stat_label(str(g.k)), Items.inst_stat(g)]
+        if tool:
+            sub += " · ใช้จากกระเป๋าได้เลย"
+        else:
+            sub = "คุณภาพ%s · " % Items.QNAMES[int(g.q)] + sub
+        if g.get("b", false):
+            sub = "แตก — ซ่อมที่ทั่งตีเหล็กก่อนใส่ · " + sub
+        var r2 := _row(Items.inst_name(g), sub, btns)
+        (r2.get_child(0).get_child(0) as Label).add_theme_color_override("font_color", Color(1.0, 0.4, 0.35) if g.get("b", false) else Items.QCOLORS[int(g.q)])
+        ui_bag_body.add_child(r2)
     var ids := ["gel", "stone", "wood"]
     for k in player.inv.keys():
         ids.append(str(k))
@@ -2076,6 +2124,25 @@ func _test_ui(what: String) -> void:
             var d: Dictionary = mine.data[zi]
             player.position = mine.tile_w(zi, d.arena.x, d.arena.y + 7)
         return
+    if what.begins_with("stn:"):
+        # ทดสอบภาพ: stn:<ร้าน>:<ลำดับสถานี>[:enh] — ยืนข้างสถานีแล้วเปิด
+        var a := what.split(":")
+        rooms.enter(a[1])
+        player.position = rooms.station_pos(a[1], int(a[2])) + Vector3(1.6 if int(a[2]) == 0 else -1.6, 0, 0)
+        player.wood = 12
+        player.inv_add("iron", 8)
+        player.inv_add("coal", 3)
+        player.inv_add("ingot", 6)
+        player.inv_add("estone", 3)
+        player.coins = 500
+        var h: Dictionary = player.make_inst("helm1", 2)
+        h.e = 4
+        player.gear.append(h)
+        player.equip(h)
+        if a.size() > 3:
+            craft.anvil_tab = "enh"
+        rooms.interact_if_near()
+        return
     if what.begins_with("roomshop:"):
         # ทดสอบภาพ: เข้าร้าน ยืนหน้าเคาน์เตอร์ แล้วคุยเปิดหน้าร้าน (มีของในกระเป๋าให้เห็นช่องขาย)
         rooms.enter(what.substr(9))
@@ -2113,6 +2180,10 @@ func click_at(pos: Vector2) -> void:
         ui_dialog.visible = false
         if rooms.keeper_at(pos):
             rooms.walk_to_counter()
+            return
+        var si: int = rooms.station_at(pos)
+        if si >= 0:
+            rooms.walk_to_station(si)
             return
         var gr = _ground_at(pos)
         if gr != null and not blocked(gr.x, gr.z):

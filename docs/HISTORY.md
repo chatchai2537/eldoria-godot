@@ -248,3 +248,11 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - mob.gd: โมเดลจากรูปทรง (ไม่มีโมเดลสำเร็จ) · AI idle/chase/wu/strike/lunge/shoot + บอส slamWU(วงแดงเตือน)/charge/volley/summon · ไม่กระเด็น · มอนใช้ระบบตีเดียวกับสไลม์ผ่าน field.extra
 - จำนวนมอน: มือถือ 12 (เริ่ม 10) · คอม 20 (เริ่ม 16) — 2D ใช้ 28
 - ทดสอบภาพ `--shot=...,mine:<0-4>` / `mineboss:<0-4>`
+
+## 0.11-craft (Claude 2026-10-29)
+- เจ้าของ: "ต่อคับ" → งานถัดไปในใบงาน: คราฟ/ตีบวก (+ ที่ขุดแร่ระดับสูงจากคราฟ)
+- อ้างอิงเกม 2D: 015-core.js (TIERS KINDS SWATK ADEF NECKHP RINGATK MATKEY RECIPE) · 031-core.js 141-180 (SMELT burnCoal smeltX anvil craftGear) · 2206 (staff/bow recipe) · 2915 enhAtk/enhDef · 5704 ENHCFG v4.7 (ค่าใช้จ่าย) · 030-core.js RATE/CRAFT · fix31 (มอนไม่ดรอปแร่ · JUNK 15% · บอส ×3 + estone · เหรียญ ×0.45) · GAME_DESIGN.md (คุณภาพ 4 สี · ตีบวกแตก/กันแตก/ซ่อม)
+- v4.7 ของ 2D ตั้ง ALWAYS_SUCCESS แต่ GAME_DESIGN.md (เจ้าของสั่ง) ให้แตกได้ → ใช้ตามเจ้าของ · ตัวเลขที่เจ้าของยังไม่อนุมัติอยู่ใน HANDOFF หัวข้อ 7
+- player.gd: weapon/weapon_tier เป็น property (อ่าน/เขียนจาก eq.weapon) ให้โค้ด/เทสเก่าใช้ได้ · Items.RANGED เปลี่ยนเป็นตามชนิด (staff/bow)
+- ซ่อน gs146_opt111 / gs146_lock130 (สุ่มออปซ้ำ/ล็อคออป — เจ้าของเลิกแล้ว)
+- ทดสอบภาพ `--shot=...,stn:<ร้าน>:<ลำดับ>[:enh]`

@@ -137,7 +137,49 @@ func near_counter() -> bool:
     var p = town.player
     return abs(p.position.x - k.position.x) < 3.6 and p.position.z - k.position.z < 3.6
 
+## สถานีคราฟในร้าน: [ชนิด, ตำแหน่งหน่วยก่อนย่อ (x, z)] — ยืนใกล้แล้วกดตี/แตะ = เปิด
+const STATIONS := {"gear": [["furnace", Vector2(8.0, 18.0)], ["anvil", Vector2(44.0, 18.0)]], "potion": [["cauldron", Vector2(8.0, 18.0)]]}
+const STN_NAMES := {"furnace": "เตาหลอม", "anvil": "ทั่งตีเหล็ก (คราฟ / ตีบวก)", "cauldron": "หม้อปรุงยา"}
+var stn_pending := ""
+
+func station_pos(id: String, i: int) -> Vector3:
+    var v: Vector2 = STATIONS[id][i][1]
+    return origin(id) + Vector3(v.x * S, 0, v.y * S)
+
+func near_station() -> String:
+    if cur == "" or not STATIONS.has(cur):
+        return ""
+    var p = town.player
+    for i in STATIONS[cur].size():
+        var w := station_pos(cur, i)
+        if Vector2(p.position.x - w.x, p.position.z - w.z).length() < 2.5:
+            return str(STATIONS[cur][i][0])
+    return ""
+
+func station_at(screen: Vector2) -> int:
+    if cur == "" or not STATIONS.has(cur):
+        return -1
+    for i in STATIONS[cur].size():
+        var sp: Vector2 = town.cam.unproject_position(station_pos(cur, i) + Vector3(0, 1.0, 0))
+        if sp.distance_to(screen) < 70.0:
+            return i
+    return -1
+
+func walk_to_station(i: int) -> void:
+    var w := station_pos(cur, i)
+    var p = town.player
+    var side := -1.0 if p.position.x < w.x else 1.0
+    var dest := w + Vector3(side * 1.6, 0, 0)
+    if town.blocked(dest.x, dest.z):
+        dest = w + Vector3(0, 0, 1.7)
+    p.set_path(PackedVector3Array([dest]))
+    stn_pending = str(STATIONS[cur][i][0])
+
 func interact_if_near() -> void:
+    var st := near_station()
+    if st != "":
+        town.craft.open(st)
+        return
     if near_counter():
         interact()
     else:
@@ -213,7 +255,17 @@ func _process(_delta: float) -> void:
     if talk_pending and near_counter() and not p.has_path():
         talk_pending = false
         interact()
-    town.prompt.text = "กดตี / แตะเจ้าของร้าน = คุย" if near_counter() and not town.ui_shop.visible else ""
+    if stn_pending != "" and not p.has_path():
+        if near_station() == stn_pending:
+            town.craft.open(stn_pending)
+        stn_pending = ""
+    var st := near_station()
+    if town.ui_shop.visible:
+        town.prompt.text = ""
+    elif st != "":
+        town.prompt.text = "กดตี / แตะ = ใช้" + str(STN_NAMES[st])
+    else:
+        town.prompt.text = "กดตี / แตะเจ้าของร้าน = คุย" if near_counter() else ""
 
 # ---------- สร้างห้อง ----------
 func _build(id: String) -> void:
@@ -369,9 +421,18 @@ func _decor(id: String, root: Node3D, o: Vector3, kind: String) -> void:
                 var x := 3.0 + i * 3.0
                 town.box(root, Vector3(0.18, 2.4, 0.08), o + Vector3(x, 3.4, bz), metal, Vector3(0, 0, 0.15 * (i % 2 * 2 - 1)))
                 town.box(root, Vector3(0.9, 0.12, 0.12), o + Vector3(x, 2.3, bz), town.M(Color(0.85, 0.7, 0.3), 0.4))
-            for x in [8.0, 44.0]:
-                town.box(root, Vector3(1.6, 0.9, 1.0), o + Vector3(x, 0.45, 18.0), town.M(Color(0.25, 0.26, 0.3), 0.5))
-                _solid(id, int(x / TS0), 9)
+            # เตาหลอม (ซ้าย) · ทั่งตีเหล็ก (ขวา) — สถานีคราฟ (STATIONS)
+            var stone_m: Material = town.M(Color(0.42, 0.4, 0.38), 0.95)
+            town.box(root, Vector3(3.6, 2.6, 2.6), o + Vector3(8.0, 1.3, 18.0), stone_m)
+            town.box(root, Vector3(2.0, 1.1, 0.2), o + Vector3(8.0, 0.9, 19.32), town.M(Color(1.0, 0.45, 0.1), 0.3, 3.0))
+            town.box(root, Vector3(1.0, 2.2, 1.0), o + Vector3(8.0, 3.7, 17.6), stone_m)
+            town.box(root, Vector3(4.0, 0.25, 3.0), o + Vector3(8.0, 2.65, 18.0), town.M(Color(0.3, 0.28, 0.27), 0.9))
+            town.cyl(root, 0.9, 1.0, 1.0, o + Vector3(44.0, 0.5, 18.0), wood, 10)
+            town.box(root, Vector3(2.4, 0.55, 1.1), o + Vector3(44.0, 1.27, 18.0), town.M(Color(0.22, 0.23, 0.26), 0.35))
+            town.box(root, Vector3(1.2, 0.35, 0.7), o + Vector3(44.0, 0.85, 18.0), town.M(Color(0.22, 0.23, 0.26), 0.35))
+            town.box(root, Vector3(0.12, 0.12, 0.9), o + Vector3(44.6, 1.65, 18.0), metal, Vector3(0, 0, 0.5))
+            _solid(id, 4, 9)
+            _solid(id, 22, 9)
             town.cyl(root, 0.6, 0.6, 1.8, o + Vector3(46.0, 0.9, 12.0), dark, 10)
         "potions":
             for row in 3:

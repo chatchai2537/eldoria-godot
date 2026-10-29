@@ -3,6 +3,7 @@ extends SceneTree
 ## รัน: godot --headless --path source --script res://tests/all_systems.gd -- --mobile
 ## ผ่าน = บรรทัดสุดท้าย "ALL failures=0" · พัง = บรรทัด "FAIL: ..." บอกว่าระบบไหน
 const Mob = preload("res://scripts/mob.gd")
+const Items = preload("res://scripts/items.gd")
 var failures := 0
 var checks := 0
 
@@ -312,7 +313,7 @@ func _run() -> void:
                 stand_t = Vector2i(small.tx + o.x, small.ty + o.y)
         p.position = world.fw(stand_t.x + 0.5, stand_t.y + 0.5)
         p.heading = atan2(small.pos.x - p.position.x, small.pos.z - p.position.z)
-        p.inv.erase("axe0")
+        p.inv_add("axe0", -p.inv_count("axe0"))
         var hp_t: int = small.hp
         check(f.try_chop(p) and small.hp == hp_t, "ตัดไม้: ไม่มีขวานฟันต้นไม้ไม่ได้")
         p.inv_add("axe0", 1)
@@ -495,7 +496,7 @@ func _run() -> void:
     var ow: Vector3 = mn.tile_w(0, ore.tx, ore.ty)
     p.position = ow + Vector3(0, 0, 1.6)
     p.heading = PI
-    p.inv.erase("pick0")
+    p.inv_add("pick0", -p.inv_count("pick0"))
     check(mn.ore_in_front(p) == ore, "ขุดแร่: หันหน้าเข้าก้อนแร่")
     mn.try_mine(p)
     check(ore.hp == ore.max, "ขุดแร่: ไม่มีที่ขุดแร่ ขุดไม่ได้")
@@ -575,6 +576,139 @@ func _run() -> void:
     check(p.dead, "ตายในเหมือง")
     p._revive()
     check(mn.cur == -1 and p.position.distance_to(world.tw(7.5, 23.5)) < 0.1, "ตายในเหมืองแล้วฟื้นที่วิหารในเมือง")
+
+    # ---------- คราฟ · ตีบวก · ซ่อม · ปรุงยา ----------
+    var cr: Node = world.craft
+    p.dead = false
+    p.wood = 9
+    check(cr.burn_coal(-1).find("+4") >= 0 and p.inv_count("coal") >= 4 and p.wood == 1, "เตาหลอม: เผาไม้ 8 ได้ถ่าน 4")
+    p.inv_add("iron", 6 - p.inv_count("iron"))
+    var c0n: int = p.inv_count("coal")
+    cr.smelt(1, -1)
+    check(p.inv_count("ingot") >= 3 and p.inv_count("iron") == 0 and p.inv_count("coal") == c0n - 3, "เตาหลอม: แร่เหล็ก 6 + ถ่าน 3 = แท่งเหล็ก 3")
+    check(cr.smelt(1, 1).find("ไม่พอ") >= 0 or cr.smelt(1, 1).find("ถ่าน") >= 0, "เตาหลอม: แร่หมดหลอมไม่ได้")
+    check(cr.roll_quality("helm", 0.5) == 3 and cr.roll_quality("helm", 5.0) == 2 and cr.roll_quality("helm", 20.0) == 1 and cr.roll_quality("helm", 50.0) == 0, "คราฟ: สุ่มคุณภาพ แดง/ม่วง/เขียว/ขาว ตามโอกาส")
+    check(cr.roll_quality("pick", 0.5) == 0, "คราฟ: ขวาน/ที่ขุดไม่สุ่มคุณภาพ")
+    var q0 := {"k": "sword", "t": 1, "q": 0, "e": 0}
+    var q3 := {"k": "sword", "t": 1, "q": 3, "e": 0}
+    check(Items.inst_stat(q3) > Items.inst_stat(q0), "คราฟ: คุณภาพสูงสเตตัสสูงกว่า")
+    p.inv_add("ingot", 10)
+    p.wood = 10
+    var gear_n: int = p.gear.size()
+    var cm: String = cr.craft("pick", 1)
+    check(p.gear.size() == gear_n + 1 and p.inv_count("pick1") >= 1 and cm.find("สำเร็จ") >= 0, "ทั่ง: คราฟที่ขุดแร่เหล็ก")
+    cr.craft("helm", 1)
+    var helm: Dictionary = p.gear.back()
+    var dfa: int = p.def()
+    p.equip(helm)
+    check(p.eq.has("helm") and p.def() > dfa, "สวมหมวกแล้วป้องกันเพิ่ม")
+    cr.craft("neck", 1)
+    var hp0m: int = p.max_hp
+    p.equip(p.gear.back())
+    check(p.max_hp > hp0m, "สวมสร้อยแล้วเลือดสูงสุดเพิ่ม")
+    p.inv_add("ingot", -p.inv_count("ingot"))
+    check(cr.craft("chest", 1).find("ไม่พอ") >= 0, "ทั่ง: วัสดุไม่พอคราฟไม่ได้")
+    # ตีบวก
+    p.coins = 100000
+    p.inv_add("estone", 40)
+    var at0: int = Items.inst_stat(helm)
+    cr.enhance(helm, 0.0)
+    check(int(helm.e) == 1 and Items.inst_stat(helm) > at0 and p.coins == 100000 - 100, "ตีบวก: สำเร็จ +1 ค่าเพิ่ม เสีย 100 เหรียญ")
+    cr.enhance(helm, 99.9)
+    check(int(helm.e) == 1 and not helm.b, "ตีบวก: พลาดต่ำกว่า +5 ของไม่แตก")
+    helm.e = 5
+    p.inv_add("bless", 1)
+    cr.enhance(helm, 99.9)
+    check(int(helm.e) == 5 and not helm.b and p.inv_count("bless") == 0, "ตีบวก: พลาด +5 มีหินอวยพร ของไม่แตก")
+    cr.enhance(helm, 99.9)
+    check(helm.b and not p.eq.has("helm") and p.gear.has(helm), "ตีบวก: พลาด +5 ไม่มีหินอวยพร ของแตก ถอดเข้ากระเป๋า")
+    check(p.equip(helm).find("แตก") >= 0 and not p.eq.has("helm"), "ของแตกใส่ไม่ได้")
+    check(cr.enhance(helm, 0.0).find("แตก") >= 0, "ของแตกตีบวกไม่ได้")
+    p.inv_add("ingot", 1)
+    cr.repair(helm)
+    check(not helm.b and p.equip(helm).find("สวม") >= 0, "ซ่อมแล้วใส่ได้")
+    # ปรุงยา
+    p.inv_add("bottle", 1)
+    p.gel = 1
+    p.wood = 1
+    var hpp0: int = p.inv_count("hpp")
+    cr.brew("hpp")
+    check(p.inv_count("hpp") == hpp0 + 1 and p.gel == 0, "หม้อปรุงยา: ปรุงยาเลือด")
+    # สถานีในร้าน
+    world.ui_shop.visible = false
+    world.in_door = ""
+    world.rooms.enter("gear")
+    var fpos: Vector3 = world.rooms.station_pos("gear", 0)
+    p.position = fpos + Vector3(1.6, 0, 0)
+    p.stun = 0.0
+    p.dash_t = 0.0
+    p.attack()
+    check(world.ui_shop.visible and world.cur_shop == "stn_furnace", "ร้านอาวุธ: กดตีข้างเตาหลอม = เปิดเตาหลอม")
+    world.close_shop()
+    p.position = world.rooms.station_pos("gear", 1) + Vector3(-1.6, 0, 0)
+    p.attack()
+    check(world.ui_shop.visible and world.cur_shop == "stn_anvil", "ร้านอาวุธ: กดตีข้างทั่ง = เปิดทั่งตีเหล็ก")
+    world.craft.anvil_tab = "enh"
+    world.craft.open("anvil")
+    world.close_shop()
+    world.craft.anvil_tab = "craft"
+    world.rooms.leave()
+    world.rooms.enter("potion")
+    p.position = world.rooms.station_pos("potion", 0) + Vector3(1.6, 0, 0)
+    p.attack()
+    check(world.cur_shop == "stn_cauldron", "ร้านยา: กดตีข้างหม้อ = เปิดหม้อปรุงยา")
+    world.close_shop()
+    world.rooms.leave()
+    # กิลด์: แลกหินเสริมพลัง
+    p.inv_add("core", 2)
+    p.inv_add("dust", 2)
+    var es0: int = p.inv_count("estone")
+    var gx: Dictionary = {}
+    for it in world.shops_by_id["guild"].buy:
+        if it.id == "gx_estone":
+            gx = it
+    world.shop_buy(gx)
+    check(p.inv_count("estone") == es0 + 1 and p.inv_count("core") == 0, "กิลด์: แลกแกนหินเวท 2 + ผงวิญญาณ 2 = หินเสริมพลัง")
+    check(world.shop_buy(gx).find("ไม่พอ") >= 0, "กิลด์: ของไม่พอแลกไม่ได้")
+    # ที่ขุดเหล็กขุดทองแดงได้
+    mn.enter(1)
+    var cu2: Dictionary = {}
+    for o in mn.data[1].ores:
+        if o.kind == "copper" and o.alive:
+            cu2 = o
+            break
+    p.position = mn.tile_w(1, cu2.tx, cu2.ty) + Vector3(0, 0, 1.6)
+    p.heading = PI
+    mn.try_mine(p)
+    check(cu2.hp < cu2.max, "ที่ขุดแร่เหล็ก (คราฟ) ขุดทองแดงได้")
+    # บอสตาย = หินเสริมพลัง (fix31)
+    mn._process(0.2)
+    var nd: int = world.field.drops.size()
+    mn.mob_killed(mn.boss)
+    var got_es := false
+    for i in range(nd, world.field.drops.size()):
+        if world.field.drops[i].k == "estone":
+            got_es = true
+    check(got_es and mn.boss == null, "บอสเหมืองดรอปหินเสริมพลัง")
+    mn.leave(false)
+    # เซฟ/โหลดอุปกรณ์ + เซฟรุ่นเก่า
+    p.save_enabled = true
+    p.save_path = "user://test_save3.json"
+    p.save_game()
+    var eq_n: int = p.eq.size()
+    var g_n: int = p.gear.size()
+    var helm_e: int = int(p.eq.helm.e)
+    p.eq = {}
+    p.gear = []
+    p.load_game()
+    check(p.eq.size() == eq_n and p.gear.size() == g_n and int(p.eq.helm.e) == helm_e, "เซฟ/โหลด: อุปกรณ์ที่สวม + ในกระเป๋า + ระดับตีบวก")
+    var f3 := FileAccess.open("user://test_save3.json", FileAccess.WRITE)
+    f3.store_string(JSON.stringify({"v": 1, "lv": 3, "weapon": "sword0", "weapon_tier": 2, "inv": {"axe0": 1, "hpp": 1}}))
+    f3.close()
+    p.load_game()
+    check(p.weapon == "sword2" and p.weapon_tier == 2 and p.inv_count("axe0") == 1 and not p.best_tool("axe").is_empty(), "โหลดเซฟรุ่นเก่า: ดาบ/ขวานแปลงเป็นอุปกรณ์")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save3.json"))
+    p.save_enabled = false
 
     # ---------- มือถือ ----------
     if world.mobile != null:

@@ -29,8 +29,24 @@ var stone := 0
 var wood := 0
 const Items = preload("res://scripts/items.gd")
 var inv := {}          # ไอเท็มอื่นในกระเป๋า id -> จำนวน (เจล/หิน/ไม้ อยู่ในตัวแปรของมันเอง)
-var weapon := ""       # อาวุธที่ใส่ ("" = มือเปล่าแบบเริ่มเกม 2D)
-var weapon_tier := 0
+## อุปกรณ์ที่สวม: ช่อง -> ของ {k,t,q,e,b} · gear = อุปกรณ์ในกระเป๋า (รวมขวาน/ที่ขุดแร่ ที่ใช้จากกระเป๋าเลย)
+var eq := {}
+var gear: Array = []
+## ชื่ออาวุธที่ถือ (เช่น "sword0") — เขียนค่าลงไปได้ (= ใส่อาวุธใหม่ระดับขาว) ใช้กับร้าน/เทส/เซฟเก่า
+var weapon: String:
+    get:
+        return (str(eq.weapon.k) + str(eq.weapon.t)) if eq.has("weapon") else ""
+    set(v):
+        if v == "" or not Items.is_gear(v):
+            eq.erase("weapon")
+        else:
+            eq["weapon"] = make_inst(v)
+var weapon_tier: int:
+    get:
+        return int(eq.weapon.t) if eq.has("weapon") else 0
+    set(v):
+        if eq.has("weapon"):
+            eq.weapon.t = clampi(v, 0, 5)
 var skills := {}       # สกิลที่เรียนแล้ว id -> true
 var skill_cd := {}     # คูลดาวน์ที่เหลือ
 var buffs: Array = []  # [{stat, amt, t}] จากอาหาร
@@ -88,21 +104,61 @@ func stat_total(k: String) -> int:
     return v
 
 func is_ranged() -> bool:
-    return Items.RANGED.has(weapon)
+    return eq.has("weapon") and Items.RANGED.has(str(eq.weapon.k))
 
-## โจมตี: ดาบใช้ STR · คทาใช้ INT · ธนูใช้ AGI (ระดับอาวุธ +SWATK)
+func ranged_spec() -> Dictionary:
+    return Items.RANGED[str(eq.weapon.k)] if is_ranged() else {}
+
+## โจมตี: ดาบใช้ STR · คทาใช้ INT · ธนูใช้ AGI · + อาวุธ (SWATK+คุณภาพ+ตีบวก) + แหวน
 func atk() -> int:
-    var w: int = Items.SWATK[weapon_tier] if weapon != "" else 0
+    var w: int = Items.inst_stat(eq.weapon) if eq.has("weapon") else 0
+    if eq.has("ring"):
+        w += Items.inst_stat(eq.ring)
     var main := "str"
     if is_ranged():
-        main = str(Items.RANGED[weapon].stat)
+        main = str(ranged_spec().stat)
     return 1 + w + stat_total(main) + ((lv - 1) >> 1)
+
+# ---- อุปกรณ์ ----
+func make_inst(id: String, q: int = 0) -> Dictionary:
+    return {"k": Items.gear_kind(id), "t": Items.gear_tier(id), "q": q, "e": 0, "b": false}
+
+func equip(it: Dictionary) -> String:
+    var k := str(it.k)
+    if not Items.SLOT_OF.has(k):
+        return "ของชิ้นนี้ใช้จากกระเป๋าได้เลย ไม่ต้องสวม"
+    if it.get("b", false):
+        return Items.inst_name(it) + " แตกอยู่ — ซ่อมที่ทั่งตีเหล็กก่อน"
+    var slot: String = Items.SLOT_OF[k]
+    gear.erase(it)
+    if eq.has(slot):
+        gear.append(eq[slot])
+    eq[slot] = it
+    recalc_stats()
+    return "สวม " + Items.inst_name(it) + " แล้ว"
+
+func unequip(slot: String) -> String:
+    if not eq.has(slot):
+        return ""
+    var it: Dictionary = eq[slot]
+    eq.erase(slot)
+    gear.append(it)
+    recalc_stats()
+    return "ถอด " + Items.inst_name(it) + " เข้ากระเป๋า"
+
+## เครื่องมือที่ดีที่สุดในกระเป๋า (ไม่แตก) · ไม่มี = {}
+func best_tool(kind: String) -> Dictionary:
+    var best := {}
+    for it in gear:
+        if it.k == kind and not it.get("b", false) and (best.is_empty() or int(it.t) > int(best.t) or (int(it.t) == int(best.t) and int(it.e) > int(best.e))):
+            best = it
+    return best
 
 # ---- สเตตัส (js/031-core.js recalcStats / statAdd) ----
 const STAT_NAMES := {"str": "STR พลัง (โจมตี)", "vit": "VIT อึด (เลือด +12 · ป้องกัน)", "int": "INT ปัญญา (มานา +6)", "agi": "AGI ว่องไว (คริ +0.4%)", "end": "END ทนทาน"}
 
 func recalc_stats() -> void:
-    max_hp = 100 + (lv - 1) * 15 + stat_total("vit") * 12
+    max_hp = 100 + (lv - 1) * 15 + stat_total("vit") * 12 + (Items.inst_stat(eq.neck) if eq.has("neck") else 0)
     max_mp = 50 + (lv - 1) * 5 + stat_total("int") * 6
     hp = min(hp, float(max_hp))
     mp = min(mp, float(max_mp))
@@ -127,12 +183,12 @@ func crit_rate() -> float:
 var save_path := "user://eldoria_save.json"
 var save_enabled := true
 var _save_t := 0.0
-const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "weapon", "weapon_tier"]
+const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood"]
 
 func save_game() -> bool:
     if not save_enabled:
         return false
-    var d := {"v": 1, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate()}
+    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true)}
     for k in SAVE_KEYS:
         d[k] = get(k)
     var tmp := save_path + ".tmp"
@@ -176,7 +232,25 @@ func load_game() -> bool:
         for k in d.skills:
             if Items.SKILL.has(str(k)):
                 skills[str(k)] = true
-    weapon_tier = clampi(weapon_tier, 0, Items.SWATK.size() - 1)
+    # อุปกรณ์ (เซฟรุ่น 2) · เซฟรุ่นเก่า: weapon/weapon_tier + ขวาน/ที่ขุดใน inv → แปลงเป็นของชิ้น
+    gear = []
+    eq = {}
+    if d.get("gear") is Array:
+        for it in d.gear:
+            if it is Dictionary and Items.KINDS.has(str(it.get("k", ""))):
+                gear.append(_clean_inst(it))
+    if d.get("eq") is Dictionary:
+        for sl in d.eq.keys():
+            if d.eq[sl] is Dictionary and Items.SLOTS.has(str(sl)):
+                eq[str(sl)] = _clean_inst(d.eq[sl])
+    elif str(d.get("weapon", "")) != "":
+        weapon = str(d.weapon)
+        weapon_tier = int(d.get("weapon_tier", 0))
+    for k in inv.keys():
+        if Items.is_gear(str(k)):
+            for i in int(inv[k]):
+                gear.append(make_inst(str(k)))
+            inv.erase(k)
     var keep_hp := hp
     var keep_mp := mp
     recalc_stats()
@@ -184,12 +258,24 @@ func load_game() -> bool:
     mp = clamp(keep_mp, 0.0, float(max_mp))
     return true
 
+func _clean_inst(it: Dictionary) -> Dictionary:
+    return {"k": str(it.k), "t": clampi(int(it.get("t", 0)), 0, 5), "q": clampi(int(it.get("q", 0)), 0, 3), "e": clampi(int(it.get("e", 0)), 0, Items.MAXP), "b": bool(it.get("b", false))}
+
 func _notification(what: int) -> void:
     if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_GO_BACK_REQUEST:
         save_game()
 
 # ---- กระเป๋า ----
 func inv_count(id: String) -> int:
+    if Items.is_gear(id):
+        var n := 0
+        for it in gear:
+            if str(it.k) + str(it.t) == id:
+                n += 1
+        for sl in eq:
+            if str(eq[sl].k) + str(eq[sl].t) == id:
+                n += 1
+        return n
     match id:
         "gel": return gel
         "stone": return stone
@@ -197,6 +283,17 @@ func inv_count(id: String) -> int:
     return int(inv.get(id, 0))
 
 func inv_add(id: String, n: int) -> void:
+    if Items.is_gear(id):
+        if n > 0:
+            for i in n:
+                gear.append(make_inst(id))
+        else:
+            for i in -n:
+                for it in gear:
+                    if str(it.k) + str(it.t) == id:
+                        gear.erase(it)
+                        break
+        return
     match id:
         "gel": gel += n
         "stone": stone += n
@@ -275,10 +372,15 @@ func use_skill(id: String) -> String:
 
 ## แรงขวาน AXEDMG = 1 + (ระดับขวาน >> 1)  (js/015-core.js)
 func axe_dmg() -> int:
-    return 1
+    var a := best_tool("axe")
+    return Items.inst_stat(a) if not a.is_empty() else 1
 
 func def() -> int:
-    return (stat_total("vit") >> 1) + ((lv - 1) >> 2)
+    var d := (stat_total("vit") >> 1) + ((lv - 1) >> 2)
+    for sl in ["helm", "chest", "pants", "arm"]:
+        if eq.has(sl):
+            d += Items.inst_stat(eq[sl])
+    return d
 
 func need(l: int) -> int:
     return int(round((20 + l * l * 12) * (1.0 if l < 20 else 1.0 + (l - 20) / 40.0)))
@@ -387,14 +489,14 @@ func attack() -> void:
     at = 0.0
     queued = false
     path = PackedVector3Array()
-    var s = town.field.nearest_slime(position, 3.5 if not is_ranged() else float(Items.RANGED[weapon].range))
+    var s = town.field.nearest_slime(position, 3.5 if not is_ranged() else float(ranged_spec().range))
     if s != null:
         heading = atan2(s.position.x - position.x, s.position.z - position.z)
         body.rotation.y = heading
     cur_atk = town.field.new_attack()
     if is_ranged():
-        body.action("Spellcast_Shoot" if weapon == "staff0" else "1H_Ranged_Shoot", atk_dur)
-        town.field.shoot(self, Items.RANGED[weapon], 1.0)
+        body.action("Spellcast_Shoot" if str(eq.weapon.k) == "staff" else "1H_Ranged_Shoot", atk_dur)
+        town.field.shoot(self, ranged_spec(), 1.0)
         return
     body.action(ATTACK_ANIMATION, atk_dur)
     # ไม่มีสไลม์ใกล้ ๆ และหันหน้าเข้าต้นไม้ = ฟันต้นไม้ (ต้องมีขวาน)

@@ -530,33 +530,28 @@ func summon(b) -> void:
         m.st = "chase"
     town.field.say_msg(b.nm + " เรียกลูกน้องมาช่วย!", 2.5)
 
+## มอนตาย (mobKill + fix31): เหรียญ ×0.45 · ไม่ดรอปแร่/แท่งแร่ (ต้องขุดเอง) · ของเฉพาะตัว 15%
+## บอส: ของเฉพาะตัว ×3 + หินเสริมพลัง 1 · EXP ×0.8
+const JUNK := {"beetle": "shell", "bat": "wing", "golem": "core", "wolf": "pelt", "wisp": "dust", "dragon": "scale"}
+
 func mob_killed(m) -> void:
-    var Zd: Dictionary = ZONES[cur]
     var p = town.player
     var coin := int(round((3.0 + m.lv * 1.2) * (3.0 if m.elite else 1.0) * (30.0 if m.boss else 1.0)))
+    coin = int(round(coin * 0.45))
     p.coins += coin
     town.field.float_text("+%d เหรียญ" % coin, m.position + Vector3(0, 2.4 * m.sc, 0), Color(1.0, 0.85, 0.3), 1.3 if m.boss else 0.9)
-    for i in min(6, 2 + (m.lv >> 4)):
-        town.field._drop("coin", m.position)
+    var j := str(JUNK.get(m.f, ""))
     if m.boss:
-        for i in randi_range(3, 6):
-            _drop_item(str(Zd.ing), m.position)
-        for i in randi_range(3, 6):
-            _drop_item(str(Zd.raw), m.position)
-        if Zd.id == "diamond":
-            for i in 4:
-                _drop_item("gem", m.position)
-        town.field.say_msg("ปราบ " + m.nm + " สำเร็จ! บอสจะกลับมาอีกใน 3 นาที", 4.0)
+        for i in 3:
+            _drop_item(j, m.position)
+        _drop_item("estone", m.position)
+        town.field.say_msg("ปราบ " + m.nm + " สำเร็จ! ได้หินเสริมพลัง · บอสจะกลับมาอีกใน 3 นาที", 4.0)
         boss = null
         boss_t = 180.0
-    else:
-        if randf() < (1.0 if m.elite else 0.3):
-            for i in (2 if m.elite else 1):
-                _drop_item(str(Zd.raw), m.position)
-        if m.elite and randf() < 0.4:
-            _drop_item(str(Zd.ing), m.position)
+    elif j != "" and randf() < 0.15:
+        _drop_item(j, m.position)
     var xp: int = max(5, int(round(p.need(m.lv) / 20.0))) * (3 if m.elite else 1) * (15 if m.boss else 1)
-    p.gain_xp(xp)
+    p.gain_xp(max(1, int(round(xp * 0.8))))
 
 func _drop_item(kind: String, at: Vector3) -> void:
     town.field._drop(kind, at)
@@ -566,6 +561,15 @@ func _drop_item(kind: String, at: Vector3) -> void:
     for k in OREK:
         if OREK[k].drop == kind:
             c = OREK[k].c
+    if JUNK.values().has(kind) or kind in ["estone", "bless"]:
+        var sm := SphereMesh.new()
+        sm.radius = 0.2
+        sm.height = 0.3
+        sm.radial_segments = 6
+        sm.rings = 3
+        n.mesh = sm
+        n.material_override = town.M({"estone": Color(0.4, 0.8, 1.0), "core": Color(0.6, 0.58, 0.52), "dust": Color(0.9, 0.85, 1.0), "scale": Color(0.4, 0.9, 0.7)}.get(kind, Color(0.75, 0.65, 0.5)), 0.4, 0.8 if kind == "estone" else 0.1)
+        return
     if kind.begins_with("ing"):
         var bm := BoxMesh.new()
         bm.size = Vector3(0.5, 0.18, 0.26)
@@ -591,11 +595,8 @@ func shoot(src, dir: Vector3, speed: float, dmg: int, life: float) -> void:
 
 # ---------- ขุดแร่ (zMine) ----------
 func pick_tier() -> int:
-    var best := -1
-    for i in 6:
-        if town.player.inv_count("pick%d" % i) > 0:
-            best = i
-    return best
+    var b: Dictionary = town.player.best_tool("pick")
+    return -1 if b.is_empty() else int(b.t)
 
 func ore_in_front(p) -> Variant:
     if cur < 0:
@@ -631,7 +632,7 @@ func try_mine(p) -> bool:
         ore.shake = 0.2
         town.field.say_msg("ต้องใช้" + PICK_NAMES[int(K.req)] + "ขึ้นไป จึงจะขุด" + str(K.n) + "ได้")
         return true
-    var dm := 1 + (tier >> 1)
+    var dm: int = Items.inst_stat(p.best_tool("pick"))  # 1+(ระดับ>>1)+ตีบวก/3
     ore.hp -= dm
     ore.shake = 0.3
     town.field.float_text("-%d" % dm, w + Vector3(0, 1.8, 0), Color(0.9, 0.9, 1.0), 0.8)
