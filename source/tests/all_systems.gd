@@ -1181,5 +1181,44 @@ func _run() -> void:
     else:
         check(false, "ต้องรันด้วย --mobile เพื่อเทสปุ่มมือถือ")
 
+    # ---- ไอคอนไอเท็ม (ถ่ายจากโมเดล 3D) ----
+    var ic_miss := []
+    for ic_k in Items.ITEM.keys():
+        if world.icon_tex(str(ic_k)) == null:
+            ic_miss.append(str(ic_k))
+    for ic_k in Items.KIND_ORDER:
+        for ic_t in 6:
+            if world.icon_tex("%s%d" % [ic_k, ic_t]) == null:
+                ic_miss.append("%s%d" % [ic_k, ic_t])
+    check(ic_miss.is_empty(), "ไอคอน: ไอเท็มทุกชิ้น + อุปกรณ์ทุกชนิดทุกระดับมีรูป (ขาด %s)" % str(ic_miss))
+    var ic_buy_miss := []
+    for ic_b in Items.BUY.keys():
+        if Items.can_buy(str(ic_b)) and not Items.hidden(str(ic_b)) and world.icon_tex(world.buy_icon_id(str(ic_b))) == null:
+            ic_buy_miss.append(str(ic_b))
+    check(ic_buy_miss.is_empty(), "ไอคอน: ของในร้านที่ซื้อได้มีรูปครบ (ขาด %s)" % str(ic_buy_miss))
+    check(world.icon_tex("ไม่มีจริง") == null, "ไอคอน: id ที่ไม่มีคืน null ไม่พัง")
+    var ic_img: Image = world.icon_tex("sword3").get_image()
+    check(ic_img.get_width() == 96 and ic_img.get_pixel(0, 0).a < 0.05 and ic_img.get_pixel(48, 48).a > 0.5, "ไอคอน: 96×96 พื้นโปร่งใส มีรูปตรงกลาง")
+    world.player.inv_add("iron", 3)
+    world.open_shop("store")
+    await process_frame
+    var ic_cnt := 0
+    for ic_n in world.ui_shop_body.find_children("*", "Button", true, false):
+        if (ic_n as Button).icon != null:
+            ic_cnt += 1
+    check(ic_cnt >= 4, "ไอคอน: หน้าร้านแสดงรูปบนปุ่มของ (%d ปุ่ม)" % ic_cnt)
+    world.close_shop()
+    world.refresh_bag()
+    await process_frame
+    check(world.ui_bag_body.find_children("*", "TextureRect", true, false).size() >= 1, "ไอคอน: กระเป๋าแสดงรูปของ")
+    world.craft.open("furnace")
+    await process_frame
+    var ic_cf := 0
+    for ic_n in world.ui_shop_body.find_children("*", "Button", true, false):
+        if (ic_n as Button).icon != null:
+            ic_cf += 1
+    check(ic_cf >= 5, "ไอคอน: เตาหลอมแสดงรูปแท่งโลหะ (%d)" % ic_cf)
+    world.close_shop()
+
     print("ALL checks=%d failures=%d" % [checks, failures])
     quit(1 if failures > 0 else 0)

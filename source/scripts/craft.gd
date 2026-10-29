@@ -167,7 +167,7 @@ func _head(title: String, sub: String) -> void:
     top.add_child(xb)
     town.ui_shop_body.add_child(top)
 
-func _big(text: String, ok: bool, cb: Callable, col: Color = Color(0.95, 0.92, 0.85)) -> Button:
+func _big(text: String, ok: bool, cb: Callable, col: Color = Color(0.95, 0.92, 0.85), icon: String = "") -> Button:
     var b := Button.new()
     b.text = town.clean(text)
     b.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -177,6 +177,10 @@ func _big(text: String, ok: bool, cb: Callable, col: Color = Color(0.95, 0.92, 0
     b.add_theme_color_override("font_color", col)
     b.focus_mode = Control.FOCUS_NONE
     b.custom_minimum_size = Vector2(0, 40)
+    var tx: Texture2D = town.icon_tex(icon)
+    if tx != null:
+        b.icon = tx
+        b.add_theme_constant_override("icon_max_width", 36)
     if not ok:
         b.modulate = Color(1, 1, 1, 0.5)
     b.pressed.connect(cb)
@@ -204,7 +208,7 @@ func _furnace() -> void:
     _head("เตาหลอม", "แร่ต้องหลอมเป็นแท่งก่อนจึงจะคราฟของได้ · หลอมต้องใช้ถ่าน (เผาจากไม้) · ถ่าน %d · ไม้ %d" % [p.inv_count("coal"), p.wood])
     var mx: int = p.wood / 2
     var r := HBoxContainer.new()
-    var b1 := _big("เผาถ่าน  ไม้ 2 → ถ่าน 1", mx > 0, func(): _msg(burn_coal(1)); open("furnace"))
+    var b1 := _big("เผาถ่าน  ไม้ 2 → ถ่าน 1", mx > 0, func(): _msg(burn_coal(1)); open("furnace"), Color(0.95, 0.92, 0.85), "coal")
     b1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     r.add_child(b1)
     r.add_child(town._btn("ทั้งหมด ×%d" % mx, mx > 0, func(): _msg(burn_coal(-1)); open("furnace")))
@@ -214,7 +218,7 @@ func _furnace() -> void:
         var m := smelt_max(i)
         var ii := i
         var row := HBoxContainer.new()
-        var b := _big("หลอม%s  ·  %s %d (มี %d) + ถ่าน %d · มีแท่ง %d" % [Items.item_name(str(s[2])), Items.item_name(str(s[0])), int(s[1]), p.inv_count(str(s[0])), int(s[3]), p.inv_count(str(s[2]))], m > 0, func(): _msg(smelt(ii, 1)); open("furnace"))
+        var b := _big("หลอม%s  ·  %s %d (มี %d) + ถ่าน %d · มีแท่ง %d" % [Items.item_name(str(s[2])), Items.item_name(str(s[0])), int(s[1]), p.inv_count(str(s[0])), int(s[3]), p.inv_count(str(s[2]))], m > 0, func(): _msg(smelt(ii, 1)); open("furnace"), Color(0.95, 0.92, 0.85), str(s[2]))
         b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         row.add_child(b)
         row.add_child(town._btn("ทั้งหมด ×%d" % m, m > 0, func(): _msg(smelt(ii, -1)); open("furnace")))
@@ -246,7 +250,7 @@ func _anvil() -> void:
             var it := {"k": k, "t": anvil_tier, "q": 0, "e": 0}
             var own: int = p.inv_count(k + str(anvil_tier))
             var txt := "%s%s  ·  %s %d  ·  ใช้%s %d%s" % [Items.inst_name(it), (" (มี ×%d)" % own) if own > 0 else "", Items.stat_label(k), Items.inst_stat(it), Items.item_name(mk), int(r[0]), (" + ไม้ %d" % int(r[1])) if int(r[1]) > 0 else ""]
-            town.ui_shop_body.add_child(_big(txt, can_craft(k, anvil_tier), func(): _msg(craft(kk, anvil_tier)); open("anvil")))
+            town.ui_shop_body.add_child(_big(txt, can_craft(k, anvil_tier), func(): _msg(craft(kk, anvil_tier)); open("anvil"), Color(0.95, 0.92, 0.85), town.gear_icon_id(it)))
     else:
         var L := enh_list()
         if L.is_empty():
@@ -261,7 +265,7 @@ func _anvil() -> void:
                     worn = true
             var txt := "%s%s%s  ·  %s %d" % [Items.inst_name(it), " [สวมอยู่]" if worn else "", " [แตก]" if it.get("b", false) else "", Items.stat_label(str(it.k)), Items.inst_stat(it)]
             var col: Color = Color(1.0, 0.4, 0.35) if it.get("b", false) else Items.QCOLORS[int(it.q)]
-            town.ui_shop_body.add_child(_big(("▶ " if i == enh_sel else "") + txt, true, func(): enh_sel = ii; open("anvil"), col))
+            town.ui_shop_body.add_child(_big(("▶ " if i == enh_sel else "") + txt, true, func(): enh_sel = ii; open("anvil"), col, town.gear_icon_id(it)))
         if not L.is_empty():
             var it: Dictionary = L[enh_sel]
             var l := int(it.e)
@@ -286,4 +290,4 @@ func _cauldron() -> void:
         for k in need:
             if town.player.inv_count(str(k)) < int(need[k]):
                 ok = false
-        town.ui_shop_body.add_child(_big("ปรุง%s (มี ×%d)  ·  ใช้ %s" % [Items.item_name(c), town.player.inv_count(c), _need_text(need)], ok, func(): _msg(brew(cc)); open("cauldron")))
+        town.ui_shop_body.add_child(_big("ปรุง%s (มี ×%d)  ·  ใช้ %s" % [Items.item_name(c), town.player.inv_count(c), _need_text(need)], ok, func(): _msg(brew(cc)); open("cauldron"), Color(0.95, 0.92, 0.85), cc))
