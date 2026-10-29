@@ -7,6 +7,7 @@ const K := 2.0 / 32.0  # พิกเซลเกมเดิม -> หน่ว
 static var _meshes := {}
 static var _eye_material: StandardMaterial3D
 static var _shine_material: StandardMaterial3D
+static var _blush_material: StandardMaterial3D
 
 static func _sphere(key: String, r: float, h: float, segments: int, rings: int) -> SphereMesh:
     if not _meshes.has(key):
@@ -17,6 +18,70 @@ static func _sphere(key: String, r: float, h: float, segments: int, rings: int) 
         mesh.rings = rings
         _meshes[key] = mesh
     return _meshes[key]
+
+## ตัวสไลม์ทรงหยดน้ำ (0.5): ก้นแบนย้วยออกข้าง มีจุกบนหัวโค้งไปด้านหลัง
+## จุดกึ่งกลางอยู่ที่ (0,0,0) สูง h กว้างครึ่งหนึ่ง w ลึกครึ่งหนึ่ง d — เครื่องมือต้นแบบ: tools/make_slime.py
+static func _drop(key: String, w: float, h: float, d: float, nu: int, nv: int) -> ArrayMesh:
+    if _meshes.has(key):
+        return _meshes[key]
+    var raw := PackedVector3Array()
+    var ymin := INF
+    var ymax := -INF
+    var xmax := 0.0
+    var zmax := 0.0
+    for j in nv + 1:
+        var v := float(j) / nv * PI
+        var hh := (1.0 - cos(v)) * 0.5
+        var y := hh
+        if hh < 0.5:
+            y = max(0.5 - (0.5 - hh) * 0.55, 0.0)
+        var r := pow(sin(v), 0.6) * (1.0 + 0.12 * pow(1.0 - hh, 2.0))
+        var tip := smoothstep(0.86, 1.0, hh)
+        r *= 1.0 - 0.5 * tip
+        y += 0.16 * pow(tip, 1.6)
+        var zoff := -0.10 * tip * tip
+        for i in nu:
+            var u := float(i) / nu * TAU
+            var p := Vector3(r * cos(u) * 0.62, y * 1.12, r * sin(u) * 0.58 + zoff)
+            raw.append(p)
+            ymin = min(ymin, p.y)
+            ymax = max(ymax, p.y)
+            xmax = max(xmax, abs(p.x))
+            zmax = max(zmax, p.z)
+    var verts := PackedVector3Array()
+    verts.resize(raw.size())
+    for k in raw.size():
+        var p := raw[k]
+        verts[k] = Vector3(p.x / xmax * w, ((p.y - ymin) / (ymax - ymin) - 0.5) * h, p.z / zmax * d)
+    var idx := PackedInt32Array()
+    for j in nv:
+        for i in nu:
+            var a := j * nu + i
+            var b := j * nu + (i + 1) % nu
+            var c := a + nu
+            var e := b + nu
+            for n in [a, b, c, b, e, c]:
+                idx.append(n)
+    var nrm := PackedVector3Array()
+    nrm.resize(verts.size())
+    for ti in range(0, idx.size(), 3):
+        var fn := (verts[idx[ti + 2]] - verts[idx[ti]]).cross(verts[idx[ti + 1]] - verts[idx[ti]])
+        for q in 3:
+            nrm[idx[ti + q]] += fn
+    for k in nrm.size():
+        nrm[k] = nrm[k].normalized()
+    for i in nu:  # ขั้วล่าง/บน ให้ผิวเรียบ
+        nrm[i] = Vector3.DOWN
+        nrm[nv * nu + i] = Vector3.UP
+    var arr := []
+    arr.resize(Mesh.ARRAY_MAX)
+    arr[Mesh.ARRAY_VERTEX] = verts
+    arr[Mesh.ARRAY_NORMAL] = nrm
+    arr[Mesh.ARRAY_INDEX] = idx
+    var mesh := ArrayMesh.new()
+    mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+    _meshes[key] = mesh
+    return mesh
 
 var field
 var lv := 1
@@ -52,9 +117,11 @@ func setup(f, level: int, pos: Vector3) -> void:
     vis = Node3D.new()
     add_child(vis)
     body = MeshInstance3D.new()
-    var detail: int = 16 if field.town.is_mobile else 32
-    var sm := _sphere("body_%d_%d" % [lv, detail], radius, radius * 1.7, detail, 8 if field.town.is_mobile else 16)
-    body.mesh = sm
+    var mob: bool = field.town.is_mobile
+    var bw := radius * 1.12   # กว้างครึ่งหนึ่ง
+    var bh := radius * 1.75   # สูง
+    var bd := radius * 1.05   # ลึกครึ่งหนึ่ง
+    body.mesh = _drop("drop_%d_%s" % [lv, mob], bw, bh, bd, 24 if mob else 40, 14 if mob else 24)
     mat = ShaderMaterial.new()
     mat.shader = preload("res://shaders/slime.gdshader")
     var tint: Color = [Color(0.4, 0.72, 1.0), Color(0.45, 0.95, 0.55), Color(1.0, 0.85, 0.3), Color(1.0, 0.5, 0.3), Color(0.8, 0.45, 1.0)][clampi(lv - 1, 0, 4)]
@@ -62,29 +129,49 @@ func setup(f, level: int, pos: Vector3) -> void:
     mat.set_shader_parameter("top_col", tint)
     mat.set_shader_parameter("deep_col", deep)
     body.material_override = mat
-    body.position.y = radius * 0.85
+    body.position.y = bh * 0.5
     vis.add_child(body)
-    # ตา + จุดสะท้อนแสง
+    # หน้า: ตาโต + ประกายแสง 2 จุด + แก้มชมพู + ปาก (ตำแหน่งวัดจากผิวทรงหยดน้ำ)
     if _eye_material == null:
         _eye_material = StandardMaterial3D.new()
-        _eye_material.albedo_color = Color(0.03, 0.08, 0.2)
+        _eye_material.albedo_color = Color(0.03, 0.05, 0.14)
         _eye_material.roughness = 0.1
         _shine_material = StandardMaterial3D.new()
         _shine_material.albedo_color = Color(1, 1, 1)
         _shine_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        _blush_material = StandardMaterial3D.new()
+        _blush_material.albedo_color = Color(1.0, 0.55, 0.72)
+        _blush_material.roughness = 0.6
+    var eye_y := bh * 0.47
     for sx in [-1.0, 1.0]:
         var e := MeshInstance3D.new()
-        var es := _sphere("eye_%d" % lv, radius * 0.13, radius * 0.32, 8, 4)
-        e.mesh = es
+        e.mesh = _sphere("eye_%d" % lv, radius * 0.15, radius * 0.44, 10, 6)
         e.material_override = _eye_material
-        e.position = Vector3(sx * radius * 0.32, radius * 1.0, radius * 0.86)
+        e.position = Vector3(sx * bw * 0.234, eye_y, bd * 0.86)
+        e.scale = Vector3(1, 1, 0.6)
         vis.add_child(e)
         var hl := MeshInstance3D.new()
-        var hs := _sphere("shine_%d" % lv, radius * 0.045, radius * 0.09, 8, 4)
-        hl.mesh = hs
+        hl.mesh = _sphere("shine_%d" % lv, radius * 0.045, radius * 0.1, 8, 4)
         hl.material_override = _shine_material
-        hl.position = e.position + Vector3(radius * 0.04, radius * 0.08, radius * 0.1)
+        hl.position = e.position + Vector3(radius * 0.04, radius * 0.08, radius * 0.08)
         vis.add_child(hl)
+        var hl2 := MeshInstance3D.new()
+        hl2.mesh = _sphere("shine2_%d" % lv, radius * 0.02, radius * 0.04, 6, 3)
+        hl2.material_override = _shine_material
+        hl2.position = e.position + Vector3(-radius * 0.03, -radius * 0.07, radius * 0.08)
+        vis.add_child(hl2)
+        var ck := MeshInstance3D.new()
+        ck.mesh = _sphere("blush_%d" % lv, radius * 0.1, radius * 0.1, 10, 5)
+        ck.material_override = _blush_material
+        ck.position = Vector3(sx * bw * 0.468, bh * 0.355, bd * 0.86)
+        ck.scale = Vector3(1, 0.5, 0.35)
+        vis.add_child(ck)
+    var mo := MeshInstance3D.new()
+    mo.mesh = _sphere("mouth_%d" % lv, radius * 0.075, radius * 0.075, 10, 5)
+    mo.material_override = _eye_material
+    mo.position = Vector3(0, bh * 0.346, bd * 0.985)
+    mo.scale = Vector3(1, 0.5, 0.35)
+    vis.add_child(mo)
     shadow = MeshInstance3D.new()
     var q := QuadMesh.new()
     q.size = Vector2(radius * 2.2, radius * 2.2)
