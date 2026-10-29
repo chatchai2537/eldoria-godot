@@ -80,6 +80,7 @@ var classes: Node
 var story: Node
 var guild: Node
 var legend: Node
+var steed: Node3D
 var minimap: Control
 var fishing: Node
 var world_loaded := false
@@ -208,8 +209,14 @@ func _ready() -> void:
     legend.set_script(load("res://scripts/legend.gd"))
     add_child(legend)
     legend.setup(self)
+    steed = Node3D.new()
+    steed.set_script(load("res://scripts/steed.gd"))
+    add_child(steed)
+    steed.setup(self)
     # ผู้เล่นโหลดเซฟก่อนสร้างระบบเนื้อเรื่อง/อาชีพ → ใส่ค่าที่โหลดไว้ตอนนี้
     legend.load_state(player.pending_legend)
+    steed.load_state(player.pending_steed)
+    steed._sync()
     story.load_state(player.pending_story)
     guild.load_state(player.pending_guild)
     story.update_tracker()
@@ -1850,6 +1857,13 @@ func open_shop(id: String) -> void:
     xb.custom_minimum_size = Vector2(44, 34)
     top.add_child(xb)
     ui_shop_body.add_child(top)
+    if id == "st_farm":
+        ui_shop_body.add_child(_btn("สัตว์ขี่ & สัตว์เลี้ยง", true, func(): steed.open()))
+    if id == "gear":
+        var smb := _btn(craft.smith_label(), true, func(): craft.open_smith())
+        if craft.smith_avail():
+            smb.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+        ui_shop_body.add_child(smb)
     var cols := HBoxContainer.new()
     cols.add_theme_constant_override("separation", 12)
     ui_shop_body.add_child(cols)
@@ -2251,6 +2265,20 @@ func _test_ui(what: String) -> void:
             var d: Dictionary = mine.data[mine.cur]
             player.position = mine.tile_w(mine.cur, d.arena.x, d.arena.y + 5)
         return
+    if what.begins_with("ride:"):
+        # ทดสอบภาพ: ride:<สัตว์ขี่>:<สัตว์เลี้ยง>
+        var ra := what.split(":")
+        player.cls = "sword"
+        player.lv = 200
+        player.coins = 9999999
+        steed.buy("mount", ra[1])
+        if ra.size() > 2:
+            steed.buy("pet", ra[2])
+        player.position = field.portal_pos + Vector3(0, 0, 5.0)
+        steed.toggle()
+        steed._process(0.1)
+        cam_dist = 7.0
+        return
     if what.begins_with("lb:"):
         # ทดสอบภาพ: lb:<i> — ลานผนึกบอสตำนาน + วงเตือนท่าไม้ตาย
         var li := int(what.split(":")[1])
@@ -2423,6 +2451,7 @@ func _unhandled_input(e: InputEvent) -> void:
             KEY_SHIFT: player.dash(_key_dir())
             KEY_B, KEY_I: toggle_bag()
             KEY_C: toggle_char()
+            KEY_R: field.say_msg(steed.toggle())
             KEY_H:
                 var mh: String = player.use_item("hpp")
                 if mh != "": field.say_msg(mh)

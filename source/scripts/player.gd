@@ -54,6 +54,7 @@ var dg_max := 1        # ดันเจี้ยนชั้นสูงสุ�
 var pending_story = null
 var pending_guild = null   # เนื้อเรื่องที่โหลดก่อนระบบ story ถูกสร้าง
 var pending_legend = null
+var pending_steed = null
 var loaded_hp := -1.0      # อาชีพ: none / sword / mage / archer (skills.gd)
 var skill_cd := {}     # คูลดาวน์ที่เหลือ
 var buffs: Array = []  # [{stat, amt, t}] จากอาหาร
@@ -112,7 +113,16 @@ func stat_total(k: String) -> int:
         if b.stat == k:
             v += int(b.amt)
     v += int(set_b.get("st", {}).get(k, 0))
+    if town != null and town.get("steed") != null:
+        v += town.steed.pet_stat(k)
     return v
+
+## ตัวคูณความเร็วเดิน: อาชีพ × สัตว์ขี่ (รวมไม่เกิน ×2.05 ตาม fix7)
+func move_mult() -> float:
+    var m: float = town.classes.speed_mult(self) if town.classes != null else 1.0
+    if town.get("steed") != null:
+        m = min(m * town.steed.speed_mult(), town.steed.SPEED_CAP)
+    return m
 
 ## โบนัสชุด/สร้อย+แหวน (Items.set_info) — คิดใหม่ทุกครั้งที่ recalc_stats
 var set_b := {}
@@ -231,12 +241,14 @@ func crit_rate() -> float:
 var save_path := "user://eldoria_save.json"
 var save_enabled := true
 var _save_t := 0.0
-const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "cls", "dg_max"]
+const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "cls", "dg_max", "smith_u", "smith_q"]
+var smith_u := 0   # ตำราช่าง: ระดับสูงสุดที่คราฟได้ (craft.gd SMQ)
+var smith_q := 0   # ตำราที่รับเควสไว้
 
 func save_game() -> bool:
     if not save_enabled:
         return false
-    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true), "story": town.story.S.duplicate(true) if town.story != null else {}, "guild": town.guild.Q.duplicate(true) if town.guild != null else {}, "legend": town.legend.S.duplicate(true) if town.get("legend") != null else {}}
+    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true), "story": town.story.S.duplicate(true) if town.story != null else {}, "guild": town.guild.Q.duplicate(true) if town.guild != null else {}, "legend": town.legend.S.duplicate(true) if town.get("legend") != null else {}, "steed": town.steed.S.duplicate(true) if town.get("steed") != null else {}}
     for k in SAVE_KEYS:
         d[k] = get(k)
     var tmp := save_path + ".tmp"
@@ -300,9 +312,17 @@ func load_game() -> bool:
                 gear.append(make_inst(str(k)))
             inv.erase(k)
     update_gear_visual()
+    # เซฟเก่า (ยังไม่มีตำรา): ให้ตีได้ถึงระดับของที่มีอยู่แล้ว (js/031-core.js 4803)
+    for it in gear + eq.values():
+        if int(it.t) < Items.BOSS_T0:
+            smith_u = max(smith_u, int(it.t))
+    smith_u = clampi(smith_u, 0, 5)
     pending_story = d.get("story")
     pending_guild = d.get("guild")
     pending_legend = d.get("legend")
+    pending_steed = d.get("steed")
+    if town.get("steed") != null:
+        town.steed.load_state(pending_steed)
     if town.get("legend") != null:
         town.legend.load_state(pending_legend)
     if town.guild != null:
@@ -545,6 +565,9 @@ func set_attack_held(pressed: bool) -> void:
 func attack() -> void:
     if dead or stun > 0.0 or dash_t > 0.0:
         return
+    # ตี = ลงจากหลังสัตว์ขี่ก่อน (เกม 2D)
+    if town.get("steed") != null and town.steed.riding():
+        town.steed.dismount()
     # ในร้าน: ปุ่มตี = คุยกับเจ้าของร้านเมื่อยืนหน้าเคาน์เตอร์ (เหมือน E/⚔️ ในเกม 2D) · ไม่ฟันในร้าน
     if town.room != "":
         town.rooms.interact_if_near()
@@ -628,7 +651,7 @@ func drive(dir: Vector3, delta: float) -> void:
     path = PackedVector3Array()
     target_mob = null
     var amt: float = clamp(dir.length(), 0.0, 1.0)
-    var sm: float = town.classes.speed_mult(self) if town.classes != null else 1.0
+    var sm: float = move_mult()
     _try_move(dir.normalized() * speed * sm * amt * delta)
     _face(dir, delta)
     moving_speed = speed * amt
@@ -723,7 +746,7 @@ func _process(delta: float) -> void:
         if d.length() < 0.25:
             path.remove_at(0)
         else:
-            var step: float = min(d.length(), speed * (town.classes.speed_mult(self) if town.classes != null else 1.0) * delta)
+            var step: float = min(d.length(), speed * move_mult() * delta)
             var dir := d.normalized()
             if not _try_move(dir * step):
                 path = PackedVector3Array()

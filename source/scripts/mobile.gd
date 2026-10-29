@@ -20,6 +20,7 @@ var joy_knob: Panel
 var joy_hint: Label
 var atk: Panel
 var dash: Panel
+var ride: Panel   # ปุ่มขี่/ลงสัตว์ขี่ (เห็นเมื่อมีสัตว์ขี่)
 var rot_hint: Label
 var skill_btns := {}   # ปุ่มสกิล 4 ช่อง วงรอบปุ่มตี (ผังเดียวกับเกม 2D fix30/fix41) · ช่อง 3 = เยียวยา
 const SLOT_COLOR := [Color(0.15, 0.3, 0.45, 0.92), Color(0.5, 0.18, 0.08, 0.92), Color(0.35, 0.2, 0.45, 0.92), Color(0.1, 0.4, 0.2, 0.92)]
@@ -47,6 +48,9 @@ func setup(t) -> void:
     dash = _button("กลิ้ง", 52, Color(0.08, 0.18, 0.20, 0.93), 18)
     root.add_child(atk)
     root.add_child(dash)
+    ride = _button("ขี่", 44, Color(0.30, 0.18, 0.08, 0.93), 16)
+    ride.visible = false
+    root.add_child(ride)
     for i in 4:
         var b := _button("", 54, SLOT_COLOR[i], 12)
         b.visible = false
@@ -106,6 +110,7 @@ func _layout() -> void:
     atk.position = Vector2(vs.x - 76 - 14, vs.y - 76 - 14)
     dash.position = Vector2(vs.x - 76 - 14 - 52 - 14, vs.y - 52 - 10)
     joy_hint.position = Vector2(26, vs.y - 146)
+    ride.position = Vector2(vs.x * 0.45 - 44 - 10, vs.y - 44 - 12)  # กลางล่าง (ไม่ทับปุ่มสกิล/จอย)
     # วงรอบปุ่มตี: ซ้ายบน · บน · ซ้าย (คล้าย sk1-sk3 ของเกม 2D)
     var c := atk.position + atk.size * 0.5
     var offs := {0: Vector2(-98, -58), 1: Vector2(-40, -106), 2: Vector2(-152, -14), 3: Vector2(22, -132)}
@@ -130,6 +135,9 @@ func _process(delta: float) -> void:
     if _sk_tick >= 0.2:
         _sk_tick = 0.0
         refresh_skills()
+        if town.steed != null:
+            ride.visible = town.steed.S.mount != "" and town.room == "" and town.mine.cur < 0
+            (ride.get_child(0) as Label).text = "ลง" if town.steed.riding() else "ขี่"
 
 func _in(p: Panel, pos: Vector2, pad: float = 10.0) -> bool:
     var c := p.position + p.size * 0.5
@@ -170,6 +178,11 @@ func _input(e: InputEvent) -> void:
                     refresh_skills()
                     get_viewport().set_input_as_handled()
                     return
+            if ride.visible and _in(ride, pos, 4.0):
+                _press(ride)
+                town.field.say_msg(town.steed.toggle())
+                get_viewport().set_input_as_handled()
+                return
             if _in(dash, pos):
                 _press(dash)
                 town.player.dash(_world_dir())

@@ -598,6 +598,35 @@ func _run() -> void:
     var q0 := {"k": "sword", "t": 1, "q": 0, "e": 0}
     var q3 := {"k": "sword", "t": 1, "q": 3, "e": 0}
     check(Items.inst_stat(q3) > Items.inst_stat(q0), "คราฟ: คุณภาพสูงสเตตัสสูงกว่า")
+    # ตำราช่าง (SMQ): ต้องปลดล็อกระดับก่อนคราฟ
+    var sm_lv0: int = p.lv
+    p.smith_u = 0
+    p.smith_q = 0
+    var sm_ing0: int = p.inv_count("ingot")
+    p.inv_add("ingot", 10)
+    p.wood = 10
+    check(cr.craft("helm", 1).contains("ตำรา"), "ตำราช่าง: ยังไม่ได้ตำราเหล็ก คราฟเหล็กไม่ได้")
+    p.lv = 3
+    check(cr.smith_act().contains("Lv.5") and not cr.smith_avail(), "ตำราช่าง: เลเวลไม่ถึงยังไม่สอน")
+    p.lv = 6
+    check(cr.smith_avail() and cr.smith_label().begins_with("!"), "ตำราช่าง: ถึงเลเวลแล้วขึ้นเครื่องหมาย !")
+    check(cr.smith_act().contains("ปีกค้างคาว") and p.smith_q == 1, "ตำราช่าง: รับเควส (บอกของที่ต้องหา)")
+    check(cr.smith_act().contains("ยังขาด") and p.smith_u == 0, "ตำราช่าง: ของไม่ครบยังไม่ปลด")
+    p.inv_add("wing", 4)
+    var sm_ing: int = p.inv_count("ingot")
+    check(cr.smith_act().contains("เหล็กได้แล้ว") and p.smith_u == 1 and p.inv_count("ingot") == sm_ing - 6 and p.inv_count("wing") == 0, "ตำราช่าง: ส่งของครบ ปลดล็อกเหล็ก (ใช้แท่งเหล็ก 6 ปีก 4)")
+    world.open_shop("gear")
+    var sm_has := false
+    for sm_b in world.ui_shop_body.find_children("*", "Button", true, false):
+        if (sm_b as Button).text.contains("ตำราช่าง"):
+            sm_has = true
+    check(sm_has, "ตำราช่าง: ปุ่มในหน้าร้านอาวุธ")
+    cr.open_smith()
+    check(world.cur_shop == "altar" or world.ui_shop.visible, "ตำราช่าง: เปิดหน้าตำรา")
+    world.close_shop()
+    p.lv = sm_lv0
+    p.inv_take("ingot", p.inv_count("ingot"))
+    p.inv_add("ingot", sm_ing0)
     p.inv_add("ingot", 10)
     p.wood = 10
     var gear_n: int = p.gear.size()
@@ -1345,6 +1374,85 @@ func _run() -> void:
     for lg_sl in lg_eq0:
         lp.equip(lg_eq0[lg_sl])
     lp.lv = lg_lv0
+
+    # ---- สัตว์ขี่ / สัตว์เลี้ยง (ANIMS · MOUNTS · PET · fix7 · fix75) ----
+    var st_p = world.player
+    var st = world.steed
+    if world.mine.cur >= 0:
+        world.mine.leave(false)
+    if world.room != "":
+        world.rooms.leave()
+    var st_cls0: String = st_p.cls
+    var st_lv0: int = st_p.lv
+    st.load_state({})
+    check(st.toggle().contains("ยังไม่มี"), "สัตว์ขี่: ยังไม่มีขี่ไม่ได้")
+    st_p.cls = "none"
+    st_p.coins = 1000000
+    check(st.buy("mount", "horse").contains("เลือกอาชีพ"), "สัตว์ขี่: ยังไม่เลือกอาชีพ ลุงไม่ขาย")
+    st_p.cls = "sword"
+    st_p.lv = 20
+    check(st.buy("mount", "unicorn").contains("Lv.40") and st.buy("mount", "wolf").contains("ชั้น 100"), "สัตว์ขี่: เลเวลไม่ถึง/ยังไม่ปราบบอสสุดท้าย ซื้อไม่ได้")
+    check(st.buy("mount", "horse").contains("ได้ม้าศึก") and st_p.coins == 1000000 - 6000 and st.S.mount == "horse", "สัตว์ขี่: ซื้อม้าศึก 6000")
+    var st_m0: float = st_p.move_mult()
+    check(st.toggle().contains("ขี่") and st.riding() and absf(st_p.move_mult() - st_m0 * 1.3) < 0.01, "สัตว์ขี่: ขี่แล้วเร็วขึ้น ×1.3")
+    check(st.mount_node != null and st_p.body.riding and st_p.body.position.y > 0.5, "สัตว์ขี่: มีโมเดลสัตว์ใต้ตัว นั่งบนอาน")
+    var st_pos0: Vector3 = st_p.position
+    st_p.drive(Vector3(1, 0, 0), 0.1)
+    st_p.position = st_pos0
+    st_p.at = -1.0
+    st_p.stun = 0.0
+    st_p.dash_t = 0.0
+    st_p.attack()
+    check(not st.riding() and st_p.body.position.y == 0.0, "สัตว์ขี่: ตี = ลงจากหลัง")
+    st.toggle()
+    world.rooms.enter("store")
+    st._process(0.1)
+    check(not st.riding(), "สัตว์ขี่: เข้าร้านลงจากหลังอัตโนมัติ")
+    check(st.toggle().contains("อาคาร"), "สัตว์ขี่: ขี่ในอาคารไม่ได้")
+    world.rooms.leave()
+    st_p.lv = 200
+    st_p.coins = 2000000
+    st.buy("mount", "dgold")
+    st.toggle()
+    check(st_p.move_mult() <= 2.05 and st.mount_node.get_node_or_null("wingL") != null, "สัตว์ขี่: มังกรทองมีปีก · ความเร็วรวมไม่เกิน ×2.05")
+    check(st.use("mount", "horse").contains("ม้าศึก") and st.mount_key == "horse", "สัตว์ขี่: สลับตัวที่ขี่")
+    st.dismount()
+    # สัตว์เลี้ยง
+    var st_str0: int = st_p.stat_total("str")
+    check(st.buy("pet", "dog").contains("หมาชิบะ") and st.pet_node != null and st_p.stat_total("str") == st_str0 + 2, "สัตว์เลี้ยง: ซื้อหมาชิบะ ตามตัว + STR+2")
+    check(st.magnet() > 9.0, "สัตว์เลี้ยง: ดูดของดรอปจากไกลขึ้น")
+    st_p.position = Vector3(world.field.portal_pos.x, 0, world.field.portal_pos.z + 6.0)
+    st.pet_node.position = st_p.position + Vector3(8, 0, 0)
+    st._process(1.0)
+    check(st.pet_node.position.distance_to(st_p.position) < 8.0, "สัตว์เลี้ยง: เดินตามผู้เล่น")
+    st.buy("pet", "owl")
+    check(st.S.pet == "owl" and st_p.stat_total("str") == st_str0 and st_p.stat_total("int") >= 4, "สัตว์เลี้ยง: เปลี่ยนตัว โบนัสเปลี่ยนตาม")
+    st.use("pet", "owl")
+    check(st.S.pet == "" and st.magnet() < 5.0, "สัตว์เลี้ยง: ให้พักที่บ้าน")
+    # หน้าร้าน
+    world.open_shop("st_farm")
+    var st_has := false
+    for st_b in world.ui_shop_body.find_children("*", "Button", true, false):
+        if (st_b as Button).text.contains("สัตว์ขี่"):
+            st_has = true
+    check(st_has, "สัตว์ขี่: ปุ่มในแผงลุงขายผัก")
+    st.tab = "pet"
+    st.open()
+    check(world.cur_shop == "steed" and world.ui_shop_body.get_child_count() >= 9, "สัตว์เลี้ยง: หน้าร้านสัตว์ 7 ตัว")
+    world.close_shop()
+    # เซฟ/โหลด
+    st.use("pet", "dog")
+    st.toggle()
+    var st_sv: Dictionary = JSON.parse_string(JSON.stringify(st.S))
+    st.load_state({})
+    st.load_state(st_sv)
+    check(st.S.mounts.size() == 2 and st.S.pet == "dog" and st.riding(), "สัตว์ขี่: เซฟ/โหลด (ที่มี · ตัวที่ใช้ · กำลังขี่)")
+    st.load_state({"mounts": ["ม้าปลอม"], "mount": "ม้าปลอม", "pet": "x"})
+    st._sync()
+    check(st.S.mounts.is_empty() and not st.riding() and st.mount_node == null and st.pet_node == null, "สัตว์ขี่: เซฟเสียไม่พัง")
+    st_p.cls = st_cls0
+    st_p.lv = st_lv0
+    st_p.recalc_stats()
 
     # ---- ไอคอนไอเท็ม (ถ่ายจากโมเดล 3D) ----
     var ic_miss := []

@@ -11,6 +11,86 @@ var anvil_tier := 0
 var enh_sel := -1        # ของที่เลือกตีบวก (ลำดับใน _enh_list)
 var last_q := -1         # คุณภาพของที่คราฟล่าสุด (ไว้ให้เทสดู)
 
+## ตำราช่าง (js/031-core.js SMQ · smithQuest): คราฟระดับไหนได้ต้องรับตำราจากช่างหนวดเหล็ก (ร้านอาวุธ) ก่อน
+## ปลดทีละขั้น: ถึงเลเวล → รับเควส → เอาของมาส่ง → ปลดล็อก (player.smith_u = ระดับสูงสุดที่ตีได้)
+const SMQ := [{},
+    {"lv": 5, "n": "ตำราช่าง: ชุดเหล็ก", "need": {"ingot": 6, "wing": 4}, "w": "แร่เหล็กขุดได้ใน \"เหมืองเหล็กร้าง\" (ประตูมิติในทุ่งหญ้า) และดันเจี้ยนชั้นต้น · หลอมที่เตาหลอมในร้านข้า (ใช้ถ่านจากไม้) · ปีกค้างคาวดรอปจากค้างคาวเหมือง/ค้างคาวในดันเจี้ยน"},
+    {"lv": 20, "n": "ตำราช่าง: ชุดทองแดง", "need": {"ingCu": 8, "shell": 6}, "w": "แร่ทองแดงอยู่ใน \"ถ้ำทองแดงลาวา\" · เปลือกด้วงดรอปจากด้วงหินสนิม (เหมืองเหล็ก) และด้วงในดันเจี้ยน"},
+    {"lv": 40, "n": "ตำราช่าง: ชุดเงิน", "need": {"ingAg": 10, "pelt": 8}, "w": "แร่เงินอยู่บน \"ยอดเขาเงินหิมะ\" · หนังหมาป่าดรอปจากหมาป่าสำริด/หมาป่าหิมะ"},
+    {"lv": 60, "n": "ตำราช่าง: ชุดทอง", "need": {"ingAu": 12, "core": 8}, "w": "แร่ทองอยู่ใน \"สุสานทองคำ\" · แกนหินเวทดรอปจากโกเลมทุกชนิด"},
+    {"lv": 80, "n": "ตำราช่าง: ชุดเพชร", "need": {"ingDm": 12, "scale": 4}, "w": "แร่เพชรอยู่ใน \"เหมืองเพชรห้วงลึก\" · เกล็ดมังกรดรอปจากมังกร/ดันเจี้ยนชั้นลึก"}]
+var _sm_t := 0.0
+var _sm_note := 0
+
+func smith_next() -> int:
+    var u: int = town.player.smith_u
+    return u + 1 if u < 5 else 0
+
+func smith_avail() -> bool:
+    var n := smith_next()
+    return n > 0 and town.player.lv >= int(SMQ[n].lv)
+
+func smith_need_txt(n: int) -> String:
+    var a := []
+    for k in SMQ[n].need:
+        a.append("%s %d/%d" % [Items.item_name(str(k)), min(town.player.inv_count(str(k)), int(SMQ[n].need[k])), int(SMQ[n].need[k])])
+    return " · ".join(a)
+
+## คุยเรื่องตำรา (smithQuest): ครั้งแรก = รับเควส · ของครบ = ปลดล็อก · คืนข้อความที่ช่างพูด
+func smith_act() -> String:
+    var p = town.player
+    var n := smith_next()
+    if n == 0:
+        return "เจ้าปลดล็อกตำราครบทุกระดับแล้ว! ไม่มีอะไรที่ข้าสอนเจ้าได้อีก"
+    var Q: Dictionary = SMQ[n]
+    if p.lv < int(Q.lv):
+        return "ตำรา%sยังยากเกินไปสำหรับเจ้า กลับมาเมื่อถึง Lv.%d แล้วข้าจะสอนให้" % [Items.TNAMES[n], int(Q.lv)]
+    if p.smith_q != n:
+        p.smith_q = n
+        return "%s — ถ้าอยากตีชุด%s เอาของพวกนี้มาให้ข้าก่อน: %s" % [Q.n, Items.TNAMES[n], smith_need_txt(n)]
+    for k in Q.need:
+        if p.inv_count(str(k)) < int(Q.need[k]):
+            return "ยังขาดอยู่นะ: " + smith_need_txt(n)
+    for k in Q.need:
+        p.inv_take(str(k), int(Q.need[k]))
+    p.smith_u = n
+    p.smith_q = 0
+    p.save_game()
+    return "ฝีมือเจ้าใช้ได้! หลอมแร่เป็นแท่งที่เตาซ้ายมือ แล้วตีที่ทั่งขวามือ — ตอนนี้เจ้าตีของระดับ%sได้แล้ว" % Items.TNAMES[n]
+
+func smith_label() -> String:
+    var n := smith_next()
+    return ("! " if smith_avail() else "") + "ตำราช่าง" + ((" (%s)" % Items.TNAMES[n]) if n > 0 else " (ครบแล้ว)")
+
+func open_smith(say: String = "") -> void:
+    var p = town.player
+    var n := smith_next()
+    _head("ตำราช่าง — ช่างหนวดเหล็ก", "ตีของได้ถึงระดับ%s · คราฟระดับสูงขึ้นต้องรับตำราทีละขั้น" % Items.TNAMES[p.smith_u])
+    if say != "":
+        town.ui_shop_body.add_child(town._lbl("ช่าง: \"" + say + "\"", 15, Color(1.0, 0.9, 0.6)))
+    if n > 0:
+        var Q: Dictionary = SMQ[n]
+        town.ui_shop_body.add_child(town._lbl("%s (ต้อง Lv.%d)" % [Q.n, int(Q.lv)], 18, Color(0.95, 0.92, 0.85), true))
+        for k in Q.need:
+            town.ui_shop_body.add_child(town._row("%s %d/%d" % [Items.item_name(str(k)), min(p.inv_count(str(k)), int(Q.need[k])), int(Q.need[k])], "", [], str(k)))
+        town.ui_shop_body.add_child(town._lbl("หาของได้ที่: " + str(Q.w), 13, Color(0.8, 0.85, 0.95)))
+        var lbl := "รับตำรา" if p.smith_q != n else "ส่งของ / เรียนตำรา"
+        town.ui_shop_body.add_child(_big(lbl, p.lv >= int(Q.lv), func(): open_smith(smith_act()), Color(1.0, 0.88, 0.4)))
+    town.ui_shop_body.add_child(_big("กลับไปหน้าร้าน", true, func(): town.open_shop("gear")))
+    town.ui_shop.visible = true
+
+func _process(delta: float) -> void:
+    if town == null or town.player == null:
+        return
+    _sm_t += delta
+    if _sm_t < 3.0:
+        return
+    _sm_t = 0.0
+    var n := smith_next()
+    if smith_avail() and town.player.smith_q != n and _sm_note != n:
+        _sm_note = n
+        town.field.say_msg("ช่างหนวดเหล็กมีตำรา%sให้เจ้าแล้ว — ไปที่ร้านอาวุธ" % Items.TNAMES[n], 4.0)
+
 func setup(t) -> void:
     town = t
 
@@ -66,6 +146,8 @@ func craft(kind: String, tier: int) -> String:
     var p = town.player
     var r: Array = Items.RECIPE[kind]
     var mk: String = Items.MATKEY[tier]
+    if tier > p.smith_u:
+        return "ยังตี%sไม่เป็น — รับตำราจากช่างหนวดเหล็ก ร้านอาวุธ (Lv.%d)" % [Items.TNAMES[tier], int(SMQ[tier].lv)]
     if not can_craft(kind, tier):
         return "วัตถุดิบไม่พอ: ต้องใช้%s %d%s" % [Items.item_name(mk), int(r[0]), (" + ไม้ %d" % int(r[1])) if int(r[1]) > 0 else ""]
     p.inv_take(mk, int(r[0]))
@@ -243,6 +325,8 @@ func _anvil() -> void:
             tr.add_child(b)
         town.ui_shop_body.add_child(tr)
         var mk: String = Items.MATKEY[anvil_tier]
+        if anvil_tier > p.smith_u:
+            town.ui_shop_body.add_child(town._lbl("ยังตีระดับ%sไม่ได้ — คุยกับช่างหนวดเหล็ก → ตำราช่าง (ต้อง Lv.%d)" % [Items.TNAMES[anvil_tier], int(SMQ[anvil_tier].lv)], 15, Color(1.0, 0.55, 0.45), true))
         town.ui_shop_body.add_child(town._lbl("วัสดุ: %s มี %d · ไม้ มี %d · คุณภาพสุ่ม ขาว %d%% · เขียว %d%% · ม่วง %d%% · แดง %d%%" % [Items.item_name(mk), p.inv_count(mk), p.wood, Items.QCHANCE[0], Items.QCHANCE[1], Items.QCHANCE[2], Items.QCHANCE[3]], 14, Color(0.8, 0.85, 0.95)))
         for k in Items.KIND_ORDER:
             var kk: String = k
@@ -250,7 +334,7 @@ func _anvil() -> void:
             var it := {"k": k, "t": anvil_tier, "q": 0, "e": 0}
             var own: int = p.inv_count(k + str(anvil_tier))
             var txt := "%s%s  ·  %s %d  ·  ใช้%s %d%s" % [Items.inst_name(it), (" (มี ×%d)" % own) if own > 0 else "", Items.stat_label(k), Items.inst_stat(it), Items.item_name(mk), int(r[0]), (" + ไม้ %d" % int(r[1])) if int(r[1]) > 0 else ""]
-            town.ui_shop_body.add_child(_big(txt, can_craft(k, anvil_tier), func(): _msg(craft(kk, anvil_tier)); open("anvil"), Color(0.95, 0.92, 0.85), town.gear_icon_id(it)))
+            town.ui_shop_body.add_child(_big(txt, can_craft(k, anvil_tier) and anvil_tier <= p.smith_u, func(): _msg(craft(kk, anvil_tier)); open("anvil"), Color(0.95, 0.92, 0.85), town.gear_icon_id(it)))
     else:
         var L := enh_list()
         if L.is_empty():

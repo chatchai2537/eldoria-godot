@@ -999,7 +999,7 @@ func _process(delta: float) -> void:
             d.v = v
         else:
             var to: Vector3 = p.position + Vector3(0, 1.0, 0) - n.position
-            if to.length() < 4.5 and not p.dead:
+            if to.length() < (town.steed.magnet() if town.steed != null else 4.5) and not p.dead:
                 n.position += to.normalized() * min(to.length(), (6.0 + d.t * 6.0) * delta)
                 if to.length() < 0.5:
                     if d.k == "coin":

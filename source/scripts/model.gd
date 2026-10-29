@@ -19,6 +19,7 @@ var cur := ""
 var act_t := 0.0
 var idle_name := "Idle"
 var dead := false
+var riding := false   # นั่งบนสัตว์ขี่ (steed.gd) → ท่านั่งตลอด
 var roll_pivot: Node3D
 var base_scale := Vector3.ONE
 
@@ -118,6 +119,9 @@ func animate(delta: float, speed: float) -> void:
         return
     if act_t > 0.0:
         act_t -= delta
+        return
+    if riding:
+        _play("Sit_Chair_Idle", 0.2)
         return
     if speed > 4.5:
         _play("Running_A", 0.18, speed / 6.5)
