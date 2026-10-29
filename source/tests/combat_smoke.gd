@@ -23,7 +23,7 @@ func _run() -> void:
     for i in 45:
         p._process(1.0 / 30.0)
         check(p.body.cur == "1H_Melee_Attack_Slice_Diagonal", "every repeated attack uses normal slash")
-    check(p.cur_atk >= first_id + 3, "holding repeats attacks")
+    check(p.cur_atk >= first_id + 2, "holding repeats attacks")  # 0.7 วิ/ครั้ง (เจ้าของ 29 ต.ค.)
     check(p.position.is_equal_approx(start), "held attack stays in place")
     p.set_attack_held(false)
     for i in 20:
@@ -36,11 +36,11 @@ func _run() -> void:
     p.dash(Vector3.RIGHT)
     check(p.at < 0.0 and p.dash_t > 0.0, "roll can interrupt an attack")
     p._process(0.25)
-    check(p.position.x > start.x + 1.0 and p.position.x < start.x + 1.3, "roll moves smoothly over half a second")
-    check(p.body.roll_pivot.basis.y.y < -0.9, "roll visually turns body upside down halfway")
+    check(p.position.x > start.x + 1.3 and p.position.x < start.x + 2.0, "roll moves smoothly over half a second")
+    check(p.body.roll_pivot.basis.y.y < -0.8 and p.body.roll_pivot.position.y < 0.5, "roll curls forward low on the ground halfway")
     check(p.iframe > 0.0, "roll protects player")
-    p._process(0.25)
-    check(is_equal_approx(p.position.x, start.x + 2.3), "roll covers intended short distance")
+    p._process(0.35)
+    check(is_equal_approx(p.position.x, start.x + 3.8), "roll covers intended dodge distance")
     check(p.body.roll_pivot.transform.is_equal_approx(Transform3D.IDENTITY), "roll restores upright body")
     check(p.body.inst.position.is_zero_approx(), "roll restores model position")
     var slime: Node = world.field.slimes[0]
@@ -75,5 +75,5 @@ func _run() -> void:
     touch.pressed = false
     world.mobile._input(touch)
     check(not p.attack_held and world.mobile.attack_touch_id == -1, "touch release clears attack finger")
-    print("COMBAT failures=", failures, " attacks=", released_id, " roll_distance=2.3")
+    print("COMBAT failures=", failures, " attacks=", released_id, " roll_distance=3.8")
     quit(0 if failures == 0 else 1)

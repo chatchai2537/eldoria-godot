@@ -5,7 +5,7 @@ const VisualStyle = preload("res://scripts/visual_style.gd")
 const BAL := {"hp": 100, "mp": 50, "slime_dmg": 4, "combo_dmg": 8, "iframe": 0.8, "combo_win": 4.0, "kb": 55.0, "kb_heavy": 240.0, "stun": 0.28, "regen_delay": 6.0, "regen": 1.5, "mp_regen": 2.0}
 const K := 2.0 / 32.0
 const ATTACK_ANIMATION := "1H_Melee_Attack_Slice_Diagonal"
-const ATTACK_DURATION := 0.45
+const ATTACK_DURATION := 0.7   # เจ้าของ 29 ต.ค.: ตีธรรมดาเร็วเกิน (เกม 2D 0.45) → ช้าลงให้เห็นท่าฟันชัด
 
 var town
 var body: Node3D
@@ -71,12 +71,13 @@ var dead_t := 0.0
 # ฟันดาบ
 var at := -1.0
 var atk_dur := ATTACK_DURATION
+var slashed := false   # วาดรอยดาบแล้วในการฟันครั้งนี้
 var queued := false
 var attack_held := false
 var cur_atk := 0
 var target_mob = null
 # เก็บชื่อ dash() ไว้ให้ input เดิมเรียกได้ แต่เป็นกลิ้ง 0.5 วิ ไม่พุ่ง
-const ROLL := {"time": 0.5, "cd": 0.65, "distance": 2.3}
+const ROLL := {"time": 0.55, "cd": 0.7, "distance": 3.8}   # กลิ้งหลบติดพื้นไปข้างหน้า (ไม่ตีลังกา) · อมตะตลอดท่า
 var dash_t := 0.0
 var dash_cd := 0.0
 var dash_v := Vector3.ZERO
@@ -487,8 +488,12 @@ func use_item(id: String) -> String:
         target_mob = null
         if town.mine.cur >= 0:
             town.mine.leave(false)
+        if town.fx != null:
+            town.fx.warp(position, Color(0.55, 0.8, 1.0), false)
         position = town.tw(town.SPAWN.x, town.SPAWN.y)
-        if town.get("sfx") != null: town.sfx.play("warp")
+        if town.fx != null:
+            town.fx.warp(position, Color(0.55, 0.8, 1.0))
+        elif town.get("sfx") != null: town.sfx.play("warp")
         return "วาปกลับเมืองเอลโดเรียแล้ว"
     var only_hp: bool = (u.has("hp") or u.has("hpp")) and not (u.has("mp") or u.has("mpp") or u.has("buff"))
     var only_mp: bool = (u.has("mp") or u.has("mpp")) and not (u.has("hp") or u.has("hpp") or u.has("buff"))
@@ -646,6 +651,8 @@ func _revive() -> void:
         town.mine.leave(false)
     position = town.tw(7.5, 23.5)
     body.revive()
+    if town.fx != null:
+        town.fx.warp(position, Color(1.0, 0.95, 0.7))
     town.field.say_msg("ฟื้นที่วิหารแห่งแสง — เลือดเต็มแล้ว", 3.0)
 
 # ---- ตีธรรมดาท่าเดียว: แตะ = หนึ่งครั้ง / กดค้าง = ฟันซ้ำโดยยืนที่เดิม ----
@@ -683,6 +690,7 @@ func attack() -> void:
         return
     atk_dur = ATTACK_DURATION * (town.classes.atk_speed_mult(self) if town.classes != null else 1.0)
     at = 0.0
+    slashed = false
     queued = false
     path = PackedVector3Array()
     var s = town.field.nearest_slime(position, 3.5 if not is_ranged() else float(ranged_spec().range))
@@ -973,6 +981,8 @@ func _process(delta: float) -> void:
         iframe = max(iframe, 0.12)
         _try_move(dash_v * distance_step)
         position.y = town.ground_y(position.x, position.z)
+        if town.fx != null and int(progress * 10.0) != int(previous * 10.0) and progress < 0.85:
+            town.fx.dust(position, 2)
         body.animate(delta, 0.0)
         body.update_roll(progress)
         if dash_t <= 0.0:
@@ -998,6 +1008,9 @@ func _process(delta: float) -> void:
         if u > 0.2 and u < 0.7:
             if not is_ranged():
                 town.field.melee(self, false, cur_atk)
+                if not slashed and town.fx != null:
+                    slashed = true
+                    town.fx.slash(self)
         if u >= 1.0:
             at = -1.0
             if queued:

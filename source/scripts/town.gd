@@ -85,6 +85,7 @@ var mobile: CanvasLayer
 var mine: Node3D
 var craft: Node
 var sfx: Node   # ระบบเสียง (0.32)
+var fx: Node3D   # เอฟเฟกต์ต่อสู้/วาป (fx.gd)
 var classes: Node
 var story: Node
 var guild: Node
@@ -236,6 +237,12 @@ func _ready() -> void:
     sfx.set_script(load("res://scripts/sfx.gd"))
     add_child(sfx)
     sfx.setup(self)
+    fx = Node3D.new()
+    fx.set_script(load("res://scripts/fx.gd"))
+    add_child(fx)
+    fx.setup(self)
+    fx.build_ui(ui_shop.get_parent())
+    ui_shop.get_parent().move_child(fx.flash, 0)
     craft = Node.new()
     craft.set_script(load("res://scripts/craft.gd"))
     add_child(craft)
@@ -2704,6 +2711,37 @@ func _test_ui(what: String) -> void:
         if a.size() > 2:
             var d: Dictionary = mine.data[mine.cur]
             player.position = mine.tile_w(mine.cur, d.arena.x, d.arena.y + 5)
+        return
+    if what.begins_with("fxtest:"):
+        # ทดสอบภาพเอฟเฟกต์: fxtest:<เฟรมก่อนถ่าย>:<hit|roll|warp|skill>
+        var fa := what.split(":")
+        mine.enter(0)
+        for m in mine.mobs:
+            m.queue_free()
+        mine.mobs.clear()
+        player.heading = 0.0
+        player.body.rotation.y = 0.0
+        match fa[2]:
+            "hit":
+                for i in 2:
+                    var sl := Node3D.new()
+                    sl.set_script(load("res://scripts/slime.gd"))
+                    field.add_child(sl)
+                    sl.setup(field, 3 + i, player.position + Vector3(-0.8 + i * 1.6, 0, 1.6))
+                    field.slimes.append(sl)
+                    sl.hp = 40
+                    sl.max_hp = 40
+                    field.hit_slime(sl, player, 1.0)
+                    field.hit_slime(sl, player, 1.0)
+                fx.slash(player)
+            "roll":
+                player.dash(Vector3(1, 0, 0))
+            "warp":
+                fx.warp(player.position)
+            "skill":
+                fx.cast(player, Color(1.0, 0.75, 0.4))
+                fx.shock(player.position + Vector3(0, 0, 2.5), 3.0, Color(1.0, 0.6, 0.3))
+        shot_frames = int(fa[1])
         return
     if what.begins_with("ride:"):
         # ทดสอบภาพ: ride:<สัตว์ขี่>:<สัตว์เลี้ยง>

@@ -105,6 +105,7 @@ var bar_bg: MeshInstance3D
 var bar: MeshInstance3D
 var lbl: Label3D
 var radius := 0.6
+var blood := Color(0.4, 0.72, 1.0)   # สีเมือกที่กระเด็นตอนโดนตี (fx.blood)
 
 func setup(f, level: int, pos: Vector3) -> void:
     field = f
@@ -127,6 +128,7 @@ func setup(f, level: int, pos: Vector3) -> void:
     var tint: Color = [Color(0.4, 0.72, 1.0), Color(0.45, 0.95, 0.55), Color(1.0, 0.85, 0.3), Color(1.0, 0.5, 0.3), Color(0.8, 0.45, 1.0)][clampi(lv - 1, 0, 4)]
     var deep: Color = [Color(0.04, 0.2, 0.75), Color(0.04, 0.45, 0.2), Color(0.75, 0.45, 0.0), Color(0.7, 0.15, 0.05), Color(0.4, 0.08, 0.65)][clampi(lv - 1, 0, 4)]
     mat.set_shader_parameter("top_col", tint)
+    blood = tint
     mat.set_shader_parameter("deep_col", deep)
     body.material_override = mat
     body.position.y = bh * 0.5
@@ -219,13 +221,21 @@ func _bar(c: Color, w: float, z: float) -> MeshInstance3D:
     add_child(m)
     return m
 
+## แถบเลือดหันหาจอ (billboard) ไม่สนค่า scale → ย่อความกว้างเมชเองแล้วชิดซ้าย
+func _bar_frac(f: float) -> void:
+    var q: QuadMesh = bar.mesh
+    var w: float = bar.get_meta("w", q.size.x)
+    bar.set_meta("w", w)
+    q.size.x = max(0.001, w * f)
+    q.center_offset.x = -w * (1.0 - f) * 0.5
+
 func take_hit(dmg: int, _from: Vector3) -> void:
     hp -= dmg
     hurt = 0.25
     bar_bg.visible = true
     bar.visible = true
     var f: float = clamp(float(hp) / max_hp, 0.0, 1.0)
-    bar.scale.x = max(f, 0.001)
+    _bar_frac(f)
     if hp <= 0:
         dead = true
         die_t = 0.45

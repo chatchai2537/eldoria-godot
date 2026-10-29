@@ -81,8 +81,10 @@ func action(n: String, dur: float = 0.0) -> void:
     var spd := 1.0
     if dur > 0.0:
         spd = ln / dur
+    # เจ้าของ 29 ต.ค.: ท่าเร็วจนไม่สมจริง → เร่งได้ไม่เกิน ×1.6 ของความเร็วจริง (ท่ายาวเกินเวลา = ตัดตอนท้ายด้วยท่าต่อไป)
+    spd = min(spd, 1.6)
     cur = n
-    ap.play(n, 0.08, spd)
+    ap.play(n, 0.12, spd)
     ap.seek(0.0, true)
     act_t = dur if dur > 0.0 else ln
     if n.begins_with("Death"):
@@ -99,13 +101,18 @@ func begin_roll(duration: float) -> void:
     action("Dodge_Forward", duration)
     update_roll(0.0)
 
+## กลิ้งหลบ (เจ้าของแจ้ง 29 ต.ค.: เดิมลอยตีลังกากลางอากาศ ไม่เหมือนหลบ)
+## ท่า Dodge_Forward ของโมเดลเป็นแค่ย่อตัว 0.4 วิ → ย่อตัวกลม ๆ แล้วม้วนไปข้างหน้า 1 รอบ "ติดพื้น" (แกนหมุนที่เอว ไม่ยกตัว)
+## ช่วงต้น/ท้ายช้า กลางท่าเร็ว · ตัวเตี้ยลงตอนม้วน = ลอดใต้การโจมตี
+const ROLL_C := 0.42
 func update_roll(progress: float) -> void:
     var u := clampf(progress, 0.0, 1.0)
     var tuck := sin(u * PI)
-    roll_pivot.position.y = 0.75 + tuck * 0.25
-    roll_pivot.rotation.x = TAU * u
-    inst.position.y = -0.75
-    inst.scale = base_scale * Vector3(1.0, 1.0 - tuck * 0.3, 1.0)
+    var e := u * u * (3.0 - 2.0 * u)
+    roll_pivot.position = Vector3(0, ROLL_C * (1.0 - tuck * 0.15), 0)
+    roll_pivot.rotation = Vector3(TAU * e, 0, 0)
+    inst.position = Vector3(0, -ROLL_C, 0)
+    inst.scale = base_scale * Vector3(1.0 - tuck * 0.05, 1.0 - tuck * 0.28, 1.0 - tuck * 0.1)
 
 func end_roll() -> void:
     if roll_pivot == null:

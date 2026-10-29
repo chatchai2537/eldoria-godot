@@ -661,6 +661,13 @@ func hit_slime(s, p, mult: float, stun: float = 0.0) -> void:
     if cl != null and cl.lifesteal(p) > 0.0:
         p.hp = min(float(p.max_hp), p.hp + dm * cl.lifesteal(p))
     s.take_hit(dm, p.position)
+    if town.fx != null:
+        var hp_: Vector3 = s.position + Vector3(0, max(0.5, float(s.radius) * 1.3), 0)
+        var bc: Color = s.blood_col() if s.has_method("blood_col") else s.get("blood") if s.get("blood") != null else Color(0.7, 0.05, 0.05)
+        town.fx.hit(hp_, p.position, cr)
+        town.fx.blood(hp_, p.position, bc, 10 if cr else 6)
+        if s.dead:
+            town.fx.death(s.position, bc, s.get("boss") == true)
     if town.sfx != null:
         var hard: bool = str(s.get("f")) in ["golem", "skeleton", "beetle"]
         town.sfx.at("hit_metal" if hard else "hit_flesh", s.position + Vector3(0, 0.8, 0), 0.0 if cr else -3.0, 0.1, 30)
@@ -681,16 +688,8 @@ func aoe(p, radius: float, mult: float, at: Vector3 = Vector3.INF, stun: float =
         if Vector2(s.position.x - c.x, s.position.z - c.z).length() < radius + s.radius * 0.6:
             hit_slime(s, p, mult, stun)
             n += 1
-    var ring := MeshInstance3D.new()
-    var tm := TorusMesh.new()
-    tm.inner_radius = radius * 0.85
-    tm.outer_radius = radius
-    ring.mesh = tm
-    ring.material_override = town.M(col, 0.3, 2.0)
-    ring.position = c + Vector3(0, 0.3, 0)
-    ring.scale = Vector3(1, 0.15, 1)
-    add_child(ring)
-    projectiles.append({"n": ring, "fx": true, "t": 0.0})
+    if town.fx != null:
+        town.fx.shock(c, radius, col)
     return n
 
 ## ยิงไปข้างหน้า (ลูกไฟ · ลูกเวทคทา · ลูกธนู) ชนสไลม์ตัวแรก
@@ -734,6 +733,10 @@ func _update_projectiles(delta: float) -> void:
             continue
         var step: float = q.speed * delta
         n.position += q.dir * step
+        if town.fx != null:
+            q.tt = int(q.get("tt", 0)) + 1
+            if n.mesh is SphereMesh or q.tt % 2 == 0:
+                town.fx.trail(n.position, q.col if n.mesh is SphereMesh else Color(1, 1, 0.9))
         q.left -= step
         var hit = null
         for s in _targets():

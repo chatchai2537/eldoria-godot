@@ -249,6 +249,29 @@ func _bar(c: Color, w: float, pri: int, y: float) -> MeshInstance3D:
     return m
 
 # ---------- โดนตี ----------
+## แถบเลือดหันหาจอ (billboard ไม่สนค่า scale) → ย่อความกว้างเมชเองแล้วชิดซ้าย
+func _bar_frac(f: float) -> void:
+    var q: QuadMesh = bar.mesh
+    var w: float = bar.get_meta("w", q.size.x)
+    bar.set_meta("w", w)
+    q.size.x = max(0.001, w * f)
+    q.center_offset.x = -w * (1.0 - f) * 0.5
+
+## สีของที่กระเด็นตอนโดนตี: กระดูก/หิน/แสง/เปลือก/เลือด
+func blood_col() -> Color:
+    match f:
+        "skeleton":
+            return Color(0.92, 0.9, 0.82)
+        "golem":
+            return Color(0.55, 0.53, 0.5)
+        "wisp":
+            return Color(0.6, 0.95, 1.0)
+        "beetle":
+            return Color(0.45, 0.75, 0.25)
+        "zombie":
+            return Color(0.35, 0.45, 0.2)
+    return Color(0.7, 0.05, 0.05)
+
 func take_hit(dmg: int, _from: Vector3) -> void:
     hp -= dmg
     hurt = 0.18
@@ -257,7 +280,7 @@ func take_hit(dmg: int, _from: Vector3) -> void:
         st = "chase"
     bar_bg.visible = true
     bar.visible = true
-    bar.scale.x = max(clamp(float(hp) / max_hp, 0.0, 1.0), 0.001)
+    _bar_frac(clamp(float(hp) / max_hp, 0.0, 1.0))
     if hp <= 0 and not dead:
         dead = true
         die_t = 0.5
@@ -330,7 +353,7 @@ func _process(delta: float) -> void:
                     heading = atan2(wdir.x, wdir.z)
                 if boss and hp < max_hp:
                     hp = min(max_hp, hp + int(ceil(max_hp * 0.05 * delta)))
-                    bar.scale.x = max(float(hp) / max_hp, 0.001)
+                    _bar_frac(float(hp) / max_hp)
         "chase":
             heading = atan2(n.x, n.z)
             if boss:

@@ -490,6 +490,8 @@ func use_class(i: int) -> String:
     else:
         cd[i] = float(S.cd)
     _face_target(p)
+    if town.fx != null:
+        town.fx.cast(p, CLS[p.cls].col)
     call("_" + p.cls + str(i), p, st)
     if town.get("sfx") != null:
         var bs: String = base_of(p.cls)

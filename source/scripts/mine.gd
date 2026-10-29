@@ -491,6 +491,8 @@ func enter(zi: int) -> void:
         for k in n0:
             _spawn(false)
     town._update_sky()
+    if town.fx != null:
+        town.fx.warp(p.position, Color(0.85, 0.4, 1.0) if is_lb(zi) else Color(0.7, 0.55, 1.0))
     var Zd: Dictionary = zdef(zi)
     if is_lb(zi):
         pass
@@ -541,6 +543,8 @@ func leave(to_portal: bool = true) -> void:
         p.heading = 0.0
         p.body.rotation.y = 0.0
         town.field.say_msg("กลับมาที่ทุ่งหญ้าแล้ว", 2.5)
+        if town.fx != null:
+            town.fx.warp(p.position)
     town._update_sky()
 
 # ---------- มอน ----------

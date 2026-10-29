@@ -1770,5 +1770,52 @@ func _run() -> void:
         check((pair[0].get_faces().size() + pair[1].get_faces().size()) / 3 <= 5000, "ธรรมชาติ: งบสามเหลี่ยมต่อต้นไม่เกิน 5000")
     check(kit.rock() == kit.rock(), "ธรรมชาติ: แชร์ mesh แร่ระหว่างก้อน")
 
+    # ---- เอฟเฟกต์ต่อสู้ (fx.gd) · แถบเลือดลดจริง · ตีช้าลง (เจ้าของ 29 ต.ค.) ----
+    var fxp = world.player
+    var fxf = world.fx
+    if world.room != "":
+        world.rooms.leave()
+    if world.mine.cur >= 0:
+        world.mine.leave(false)
+    var fx_sl := Node3D.new()
+    fx_sl.set_script(load("res://scripts/slime.gd"))
+    world.field.add_child(fx_sl)
+    fx_sl.setup(world.field, 2, fxp.position + Vector3(0, 0, 1.5))
+    world.field.slimes.append(fx_sl)
+    fx_sl.hp = 100
+    fx_sl.max_hp = 100
+    var fx_w0: float = (fx_sl.bar.mesh as QuadMesh).size.x
+    for fx_i in 200:
+        fxf._process(1.0 / 30.0)
+    var fx_n0: int = fxf.parts.size() + fxf.fades.size()
+    world.field.hit_slime(fx_sl, fxp, 1.0)
+    var fx_w1: float = (fx_sl.bar.mesh as QuadMesh).size.x
+    check(fx_w1 < fx_w0 and (fx_sl.bar.mesh as QuadMesh).center_offset.x < 0.0, "แถบเลือด: โดนตีแล้วแถบสั้นลง (ชิดซ้าย)")
+    check(fxf.parts.size() + fxf.fades.size() > fx_n0 + 8, "เอฟเฟกต์: โดนตีมีประกาย + เลือดกระเด็น")
+    for fx_i in 60:
+        fxf._process(1.0 / 30.0)
+    check(fxf.splats.size() > 0 or fxf.parts.is_empty(), "เอฟเฟกต์: เลือดตกพื้นเป็นคราบ/หายไปเอง")
+    for fx_i in 200:
+        fxf._process(1.0 / 30.0)
+    check(fxf.parts.is_empty() and fxf.fades.is_empty() and fxf.splats.is_empty(), "เอฟเฟกต์: ล้างตัวเองหมด (ไม่ค้างกินเครื่อง)")
+    for fx_i in 400:
+        fxf.trail(fxp.position, Color(1, 0.5, 0.2))
+    check(fxf.parts.size() <= fxf.MAX_P, "เอฟเฟกต์: จำกัดอนุภาคพร้อมกัน (มือถือ)")
+    fx_sl.hp = 1
+    world.field.hit_slime(fx_sl, fxp, 1.0)
+    check(fx_sl.dead, "เอฟเฟกต์: มอนตายมีเอฟเฟกต์แตก")
+    var fx_mf: int = fxf.fades.size()
+    world.mine.enter(0)
+    check(fxf.fades.size() > fx_mf + 3 and fxf.flash.color.a > 0.2, "เอฟเฟกต์วาป: เข้าเหมืองมีเสาแสง + จอวาบ")
+    world.mine.leave(false)
+    check(fxp.ATTACK_DURATION >= 0.65, "ตีธรรมดา: ช้าลง (0.7 วิ/ครั้ง)")
+    fxp.dash_cd = 0.0
+    fxp.dash_t = 0.0
+    fxp.dash(Vector3.RIGHT)
+    fxp._process(0.27)
+    check(fxp.body.roll_pivot.position.y < 0.5 and absf(fxp.body.inst.position.y + fxp.body.ROLL_C) < 0.01, "กลิ้งหลบ: ม้วนตัวติดพื้น (ไม่ลอยตีลังกา)")
+    fxp._process(0.4)
+    check(fxp.body.roll_pivot.transform.is_equal_approx(Transform3D.IDENTITY), "กลิ้งหลบ: จบแล้วยืนตรง")
+
     print("ALL checks=%d failures=%d" % [checks, failures])
     quit(1 if failures > 0 else 0)
