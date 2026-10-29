@@ -308,3 +308,8 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 ## 0.21-icons (Claude 2026-10-29)
 - ไอคอนไอเท็มจากโมเดล 3D (เจ้าของห้ามภาพ AI วาด) · รันใหม่: `xvfb-run godot --path source --rendering-driver opengl3 --script res://tools/make_icons.gd` (ต้องมีจอเสมือน headless ถ่ายภาพไม่ได้) แล้ว `--headless --import`
 - `town.icon_tex(id)` · `gear_icon_id(g)` · `buy_icon_id(buy_id)` · `_row(..., icon)` · `_slot(..., icon)` · `craft._big(..., col, icon)`
+
+## 0.22-legend (Claude 2026-10-29)
+- บอสตำนาน: ตาราง LB ใน legend.gd (ค่าจาก fix62 LB62) · สีพื้นลานยกให้สว่างขึ้นจาก 2D (แสง 3D มือถือมืด) · ระยะ px×(2/32)
+- ยังไม่ทำ: ice ทำให้ช้า / fire-sun ติดไฟ (P.slowT/burnT ของ 2D) · ออปสุ่ม fix111 (เจ้าของเลิกระบบออปแล้ว) · พลังพิเศษเซ็ตนครวารี B101 (ไม่มีเซ็ตนี้)
+- ทดสอบภาพ: `--shot=name,1.5,0,14,0,0,lb:<i>`

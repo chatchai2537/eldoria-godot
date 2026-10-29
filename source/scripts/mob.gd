@@ -92,6 +92,7 @@ func setup(m, fam: String, name_: String, colors: Array, level: int, pos: Vector
     max_hp = s.x
     atk_v = s.y
     sc = (2.3 if boss else (1.3 if elite else 1.0)) * (1.0 + float(o.get("span", 0.0)) * 0.18) * float(F.sz)
+    sc *= float(o.get("scm", 1.0))  # บอสตำนาน: ขนาดตามตาราง (fix62 sc)
     radius = float(F.r) * K * sc
     position = pos
     home = pos

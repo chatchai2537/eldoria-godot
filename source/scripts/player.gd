@@ -53,6 +53,7 @@ var cls := "none"
 var dg_max := 1        # ดันเจี้ยนชั้นสูงสุดที่ลงได้
 var pending_story = null
 var pending_guild = null   # เนื้อเรื่องที่โหลดก่อนระบบ story ถูกสร้าง
+var pending_legend = null
 var loaded_hp := -1.0      # อาชีพ: none / sword / mage / archer (skills.gd)
 var skill_cd := {}     # คูลดาวน์ที่เหลือ
 var buffs: Array = []  # [{stat, amt, t}] จากอาหาร
@@ -110,7 +111,15 @@ func stat_total(k: String) -> int:
     for b in buffs:
         if b.stat == k:
             v += int(b.amt)
+    v += int(set_b.get("st", {}).get(k, 0))
     return v
+
+## โบนัสชุด/สร้อย+แหวน (Items.set_info) — คิดใหม่ทุกครั้งที่ recalc_stats
+var set_b := {}
+
+## ตัวคูณดาเมจจากการใส่ชุดครบ 7 ชิ้น
+func dmg_mult() -> float:
+    return 1.0 + float(set_b.get("dmg", 0.0))
 
 func is_ranged() -> bool:
     return eq.has("weapon") and Items.RANGED.has(str(eq.weapon.k))
@@ -133,7 +142,8 @@ func make_inst(id: String, q: int = 0) -> Dictionary:
     return {"k": Items.gear_kind(id), "t": Items.gear_tier(id), "q": q, "e": 0, "b": false}
 
 ## อุปกรณ์บนตัวละคร: ดาบ/คทา/หน้าไม้(ธนู) ในมือ · หมวก · ผ้าคลุม (เสื้อ) · โล่ (เกราะแขน) · สีตามระดับ เรืองแสงตามคุณภาพ
-const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff")]
+const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff"),
+    Color("#5a8a3a"), Color("#2a9a7a"), Color("#a8d8f0"), Color("#e0b030"), Color("#c81a2a"), Color("#5a3a8a")]
 
 func update_gear_visual() -> void:
     if body == null or body.inst == null:
@@ -145,7 +155,7 @@ func update_gear_visual() -> void:
     elif wk == "bow":
         body.borrow_item("rogue", "1H_Crossbow")
     var glow := func(it: Dictionary) -> float:
-        return [0.0, 0.0, 0.12, 0.25][int(it.get("q", 0))] + (0.15 if int(it.get("e", 0)) >= 7 else 0.0)
+        return [0.0, 0.0, 0.12, 0.25][int(it.get("q", 0))] + (0.15 if int(it.get("e", 0)) >= 7 else 0.0) + (0.2 if Items.is_boss_tier(int(it.get("t", 0))) else 0.0)
     body.show_item("1H_Sword", wk == "sword", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "sword" else 0.0)
     body.show_item("2H_Staff", wk == "staff", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "staff" else 0.0)
     body.show_item("1H_Crossbow", wk == "bow", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "bow" else 0.0)
@@ -161,6 +171,8 @@ func equip(it: Dictionary) -> String:
         return "ของชิ้นนี้ใช้จากกระเป๋าได้เลย ไม่ต้องสวม"
     if it.get("b", false):
         return Items.inst_name(it) + " แตกอยู่ — ซ่อมที่ทั่งตีเหล็กก่อน"
+    if lv < Items.req_lv(int(it.t)):
+        return Items.inst_name(it) + " ต้อง Lv.%d ขึ้นไป" % Items.req_lv(int(it.t))
     var slot: String = Items.SLOT_OF[k]
     gear.erase(it)
     if eq.has(slot):
@@ -192,7 +204,9 @@ func best_tool(kind: String) -> Dictionary:
 const STAT_NAMES := {"str": "STR พลัง (โจมตี)", "vit": "VIT อึด (เลือด +12 · ป้องกัน)", "int": "INT ปัญญา (มานา +6)", "agi": "AGI ว่องไว (คริ +0.4%)", "end": "END ทนทาน"}
 
 func recalc_stats() -> void:
+    set_b = Items.set_info(eq)
     max_hp = 100 + (lv - 1) * 15 + stat_total("vit") * 12 + (Items.inst_stat(eq.neck) if eq.has("neck") else 0)
+    max_hp = int(round(max_hp * (1.0 + float(set_b.get("hp", 0.0)))))
     max_mp = 50 + (lv - 1) * 5 + stat_total("int") * 6
     hp = min(hp, float(max_hp))
     mp = min(mp, float(max_mp))
@@ -222,7 +236,7 @@ const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood
 func save_game() -> bool:
     if not save_enabled:
         return false
-    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true), "story": town.story.S.duplicate(true) if town.story != null else {}, "guild": town.guild.Q.duplicate(true) if town.guild != null else {}}
+    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true), "story": town.story.S.duplicate(true) if town.story != null else {}, "guild": town.guild.Q.duplicate(true) if town.guild != null else {}, "legend": town.legend.S.duplicate(true) if town.get("legend") != null else {}}
     for k in SAVE_KEYS:
         d[k] = get(k)
     var tmp := save_path + ".tmp"
@@ -288,6 +302,9 @@ func load_game() -> bool:
     update_gear_visual()
     pending_story = d.get("story")
     pending_guild = d.get("guild")
+    pending_legend = d.get("legend")
+    if town.get("legend") != null:
+        town.legend.load_state(pending_legend)
     if town.guild != null:
         town.guild.load_state(pending_guild)
     if town.story != null:
@@ -303,7 +320,8 @@ func load_game() -> bool:
     return true
 
 func _clean_inst(it: Dictionary) -> Dictionary:
-    return {"k": str(it.k), "t": clampi(int(it.get("t", 0)), 0, 5), "q": clampi(int(it.get("q", 0)), 0, 3), "e": clampi(int(it.get("e", 0)), 0, Items.MAXP), "b": bool(it.get("b", false))}
+    var tmax: int = 5 if str(it.k) in ["axe", "pick"] else Items.TNAMES.size() - 1
+    return {"k": str(it.k), "t": clampi(int(it.get("t", 0)), 0, tmax), "q": clampi(int(it.get("q", 0)), 0, 3), "e": clampi(int(it.get("e", 0)), 0, Items.MAXP), "b": bool(it.get("b", false))}
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_GO_BACK_REQUEST:

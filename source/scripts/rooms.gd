@@ -97,6 +97,18 @@ func enter(id: String) -> void:
         bubble(str(greet[randi() % greet.size()]), 3.4)
     town.field.say_msg(town.clean(str(sh.get("name", id))) + " — เดินไปหน้าเคาน์เตอร์แล้วกดปุ่มตี คุยกับ" + town.clean(str(ow.get("name", ""))) + " · เดินชนทางออกด้านล่างเพื่อออก", 4.0)
 
+## ออกจากห้องเงียบ ๆ (ไม่ย้ายตัวละคร) — ใช้ตอนวาปจากห้องไปที่อื่น เช่น เข้าลานบอสตำนาน
+func exit_silent() -> void:
+    if cur == "":
+        return
+    built[cur].visible = false
+    cur = ""
+    town.room = ""
+    town.ui_dialog.visible = false
+    town.cam_yaw = _cam_saved.x
+    town.cam_dist = _cam_saved.y
+    town.cam_pitch = _cam_saved.z
+
 func leave() -> void:
     if cur == "":
         return
@@ -138,8 +150,8 @@ func near_counter() -> bool:
     return abs(p.position.x - k.position.x) < 3.6 and p.position.z - k.position.z < 3.6
 
 ## สถานีคราฟในร้าน: [ชนิด, ตำแหน่งหน่วยก่อนย่อ (x, z)] — ยืนใกล้แล้วกดตี/แตะ = เปิด
-const STATIONS := {"gear": [["furnace", Vector2(8.0, 18.0)], ["anvil", Vector2(44.0, 18.0)]], "potion": [["cauldron", Vector2(8.0, 18.0)]]}
-const STN_NAMES := {"furnace": "เตาหลอม", "anvil": "ทั่งตีเหล็ก (คราฟ / ตีบวก)", "cauldron": "หม้อปรุงยา"}
+const STATIONS := {"gear": [["furnace", Vector2(8.0, 18.0)], ["anvil", Vector2(44.0, 18.0)]], "potion": [["cauldron", Vector2(8.0, 18.0)]], "seal113": [["altar", Vector2(26.0, 18.0)]]}
+const STN_NAMES := {"furnace": "เตาหลอม", "anvil": "ทั่งตีเหล็ก (คราฟ / ตีบวก)", "cauldron": "หม้อปรุงยา", "altar": "แท่นผนึกอสูร (บอสตำนาน)"}
 var stn_pending := ""
 
 func station_pos(id: String, i: int) -> Vector3:
@@ -177,6 +189,9 @@ func walk_to_station(i: int) -> void:
 
 func interact_if_near() -> void:
     var st := near_station()
+    if st == "altar":
+        town.legend.open()
+        return
     if st != "":
         town.craft.open(st)
         return
@@ -207,10 +222,12 @@ func interact() -> void:
         town.guild.open()
     elif id == "bank":
         town.open_bank()
+    elif id == "seal113":
+        town.legend.open()
     elif (sh.get("buy", []) as Array).size() > 0 or (sh.get("sell", []) as Array).size() > 0:
         town.open_shop(id)
     else:
-        var extra := {"fashion": "ร้านแฟชั่นใช้เหรียญแฟชั่น — เร็ว ๆ นี้", "seal113": "แท่นผนึกอสูร — เร็ว ๆ นี้", "hall": "ภารกิจของพระราชา — เร็ว ๆ นี้"}
+        var extra := {"fashion": "ร้านแฟชั่นใช้เหรียญแฟชั่น — เร็ว ๆ นี้", "hall": "ภารกิจของพระราชา — เร็ว ๆ นี้"}
         if extra.has(id):
             town.field.say_msg(str(extra[id]))
 
@@ -261,7 +278,10 @@ func _process(_delta: float) -> void:
         interact()
     if stn_pending != "" and not p.has_path():
         if near_station() == stn_pending:
-            town.craft.open(stn_pending)
+            if stn_pending == "altar":
+                town.legend.open()
+            else:
+                town.craft.open(stn_pending)
         stn_pending = ""
     var st := near_station()
     if town.ui_shop.visible:

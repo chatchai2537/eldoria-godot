@@ -2,7 +2,9 @@ extends SceneTree
 ## สร้างไอคอนไอเท็มจากโมเดล 3D (ชิ้นส่วน KayKit + รูปทรง) → assets/icons/<id>.png (96×96 พื้นโปร่งใส)
 ## เจ้าของสั่ง: ใช้โมเดล 3D เท่านั้น ห้ามภาพที่ AI วาด · รัน: xvfb-run godot --path source --rendering-driver opengl3 --script res://tools/make_icons.gd
 const Items = preload("res://scripts/items.gd")
-const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff")]
+const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff"),
+    Color("#5a8a3a"), Color("#2a9a7a"), Color("#a8d8f0"), Color("#e0b030"), Color("#c81a2a"), Color("#5a3a8a")]
+const LBC := [["#5a8a3a", "#9aff6a"], ["#2a9a7a", "#6affc8"], ["#a8c8e0", "#bfe8ff"], ["#e0b030", "#ffe880"], ["#c81a2a", "#ffc040"], ["#3a2a5a", "#b07aff"]]
 const OUT := "res://assets/icons/"
 
 var vp: SubViewport
@@ -146,6 +148,12 @@ func build(id: String) -> Node3D:
             "ring":
                 _mesh(n, _torus(0.25, 0.33), tc, Vector3.ZERO, Vector3(1.0, 0, 0.3), Vector3.ONE, 0.1, 1.0, 0.3)
                 _mesh(n, _sph(0.13), Color(0.4, 0.8, 1.0), Vector3(0, 0.3, 0.05), Vector3.ZERO, Vector3.ONE, 0.6)
+        return n
+    if id.begins_with("lbm"):
+        var cc: Array = LBC[int(id.substr(3))]
+        _mesh(n, _cyl(0.48, 0.48, 0.14, 6), Color(cc[0]), Vector3.ZERO, Vector3(1.25, 0, 0), Vector3.ONE, 0.2, 1.0, 0.3)
+        _mesh(n, _cyl(0.3, 0.3, 0.16, 6), Color(cc[1]), Vector3(0, 0.03, 0.02), Vector3(1.25, 0, 0), Vector3.ONE, 1.2, 1.0, 0.3)
+        _mesh(n, _sph(0.12), Color(1, 1, 1), Vector3(0, 0.06, 0.12), Vector3.ZERO, Vector3.ONE, 1.5)
         return n
     match id:
         "gel":
@@ -325,9 +333,9 @@ func _run() -> void:
     for k in Items.ITEM.keys():
         ids.append(str(k))
     for k in Items.KIND_ORDER:
-        for t in 6:
+        for t in Items.TNAMES.size():
             var gid := "%s%d" % [k, t]
-            if not ids.has(gid):
+            if Items.is_gear(gid) and not ids.has(gid):
                 ids.append(gid)
     for k in ["hp", "mp", "beer", "soup", "rest", "skill"]:
         ids.append(k)

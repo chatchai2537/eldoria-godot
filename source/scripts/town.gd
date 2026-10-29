@@ -79,6 +79,7 @@ var craft: Node
 var classes: Node
 var story: Node
 var guild: Node
+var legend: Node
 var minimap: Control
 var fishing: Node
 var world_loaded := false
@@ -203,7 +204,12 @@ func _ready() -> void:
     classes.set_script(load("res://scripts/skills.gd"))
     add_child(classes)
     classes.setup(self)
+    legend = Node.new()
+    legend.set_script(load("res://scripts/legend.gd"))
+    add_child(legend)
+    legend.setup(self)
     # ผู้เล่นโหลดเซฟก่อนสร้างระบบเนื้อเรื่อง/อาชีพ → ใส่ค่าที่โหลดไว้ตอนนี้
+    legend.load_state(player.pending_legend)
     story.load_state(player.pending_story)
     guild.load_state(player.pending_guild)
     story.update_tracker()
@@ -1781,6 +1787,8 @@ func sell_gear(g: Dictionary) -> String:
     if not player.gear.has(g):
         return ""
     var pr := Items.gear_price(g)
+    if pr <= 0:
+        return "ร้านไม่รับซื้อชุดดรอปจากบอส"
     player.gear.erase(g)
     player.coins += pr
     return "ขาย %s ได้ %d เหรียญ" % [Items.inst_name(g), pr]
@@ -1965,6 +1973,8 @@ func open_shop(id: String) -> void:
         for it in player.gear:
             var g: Dictionary = it
             var pr3 := Items.gear_price(g)
+            if pr3 <= 0:
+                continue
             var gb := _slot("%s\n%d เหรียญ" % [Items.inst_name(g), pr3], func(): _shop_msg(sell_gear(g), "ขอบคุณที่อุดหนุนนะ!"), false, false, gear_icon_id(g))
             gb.add_theme_color_override("font_color", Items.QCOLORS[int(g.q)])
             rv.add_child(gb)
@@ -2071,6 +2081,8 @@ func refresh_bag() -> void:
             sub = "คุณภาพ%s · " % Items.QNAMES[int(g.q)] + sub
         if g.get("b", false):
             sub = "แตก — ซ่อมที่ทั่งตีเหล็กก่อนใส่ · " + sub
+        if Items.is_boss_tier(int(g.t)):
+            sub = "ชุดบอส [%s] ต้อง Lv.%d · " % [Items.RARITY[int(g.t) - Items.BOSS_T0][0], Items.req_lv(int(g.t))] + sub
         var r2 := _row(Items.inst_name(g), sub, btns, gear_icon_id(g))
         _row_label(r2).add_theme_color_override("font_color", Color(1.0, 0.4, 0.35) if g.get("b", false) else Items.QCOLORS[int(g.q)])
         ui_bag_body.add_child(r2)
@@ -2145,6 +2157,8 @@ func refresh_char() -> void:
     for ps in classes.PASSIVE.get(p.cls, []):
         pl.append(("[เปิด] " if p.lv >= int(ps.lv) else "[Lv.%d] " % int(ps.lv)) + str(ps.n) + " " + str(ps.d))
     ui_char_body.add_child(_lbl("อาชีพ: %s%s" % [C.n, ("  ·  " + " · ".join(pl)) if pl.size() > 0 else ""], 15, C.col))
+    for ln in p.set_b.get("lines", []):
+        ui_char_body.add_child(_lbl("โบนัส " + str(ln), 14, Color(1.0, 0.82, 0.45)))
     for k in ["str", "vit", "int", "agi", "end"]:
         var kk: String = k
         var bon: int = p.stat_total(k) - int(p.stats[k])
@@ -2236,6 +2250,20 @@ func _test_ui(what: String) -> void:
         if a.size() > 2:
             var d: Dictionary = mine.data[mine.cur]
             player.position = mine.tile_w(mine.cur, d.arena.x, d.arena.y + 5)
+        return
+    if what.begins_with("lb:"):
+        # ทดสอบภาพ: lb:<i> — ลานผนึกบอสตำนาน + วงเตือนท่าไม้ตาย
+        var li := int(what.split(":")[1])
+        player.lv = 120
+        player.coins = 99999
+        legend.S = {"cd": {}, "day": "", "n": {}}
+        rooms.enter("seal113")
+        legend.challenge(li)
+        var d: Dictionary = mine.data[mine.cur]
+        player.position = mine.tile_w(mine.cur, d.arena.x, d.arena.y + 8)
+        legend.aggro = true
+        legend._ult(mine.boss)
+        legend._tick_aoe(0.5)
         return
     if what.begins_with("mine:") or what.begins_with("mineboss:"):
         # ทดสอบภาพ: เข้าเหมือง (mineboss = ยืนหน้าลานบอส)

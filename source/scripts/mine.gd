@@ -58,17 +58,26 @@ var exit_ring: MeshInstance3D
 func setup(t) -> void:
     town = t
 
+const LB_BASE := 200   # ลานผนึกบอสตำนาน i = LB_BASE + i (legend.gd)
+
 func origin(zi: int) -> Vector3:
+    if zi >= LB_BASE:
+        return Vector3(7000.0, 0.0, 0.0)
     if zi >= DG_BASE:
         return Vector3(5000.0, 0.0, 0.0)  # ดันเจี้ยน: ทีละชั้น ใช้ที่เดียวกัน
     return Vector3(3000.0 + zi * 200.0, 0.0, 0.0)
 
 ## ข้อมูลแผนที่: เหมือง 0-4 = ZONES · ดันเจี้ยนชั้น f = DG_BASE + f
 func zdef(zi: int) -> Dictionary:
+    if zi >= LB_BASE:
+        return town.legend.zdef(zi - LB_BASE)
     return ZONES[zi] if zi < DG_BASE else dg_def(zi - DG_BASE)
 
 func is_dg(zi: int) -> bool:
-    return zi >= DG_BASE
+    return zi >= DG_BASE and zi < LB_BASE
+
+func is_lb(zi: int) -> bool:
+    return zi >= LB_BASE
 
 func tile_w(zi: int, x: float, y: float) -> Vector3:
     return origin(zi) + Vector3(x * TS + TS * 0.5, 0.0, y * TS + TS * 0.5)
@@ -122,6 +131,9 @@ func gen(zi: int) -> Dictionary:
         return data[zi]
     if is_dg(zi):
         return gen_dungeon(zi)
+    if is_lb(zi):
+        data[zi] = town.legend.gen_arena(zi - LB_BASE)
+        return data[zi]
     var Zd: Dictionary = zdef(zi)
     _rng.seed = 9137 * (zi + 1)
     var m := PackedByteArray()
@@ -390,8 +402,10 @@ func _build(zi: int) -> void:
     ex.material_override = town.M(Color(0.65, 0.45, 1.0), 0.3, 2.2)
     ex.position = exit_pos(zi) + Vector3(0, 0.04, 0)
     root.add_child(ex)
-    var lab: Label3D = town.label3d("วงเวทกลับทุ่งหญ้า", exit_pos(zi) + Vector3(0, 1.6, 0), 34)
+    var lab: Label3D = town.label3d("วงเวทออกจากลาน (ยอมแพ้)" if is_lb(zi) else "วงเวทกลับทุ่งหญ้า", exit_pos(zi) + Vector3(0, 1.6, 0), 34)
     lab.reparent(root)
+    if is_lb(zi):
+        town.legend.decorate(zi - LB_BASE, root)
     var bl: Label3D = town.label3d("ลานบอส: " + str(Zd.boss.n), tile_w(zi, d.arena.x, d.arena.y - 6) + Vector3(0, 2.0, 0), 38, Color(1.0, 0.6, 0.5))
     bl.reparent(root)
 
@@ -470,13 +484,18 @@ func enter(zi: int) -> void:
     if is_dg(zi):
         _dg_packs(zi - DG_BASE)
         town.guild.event("floor", zi - DG_BASE)
+    elif is_lb(zi):
+        boss_t = 0.0
+        town.legend.on_enter(zi - LB_BASE)
     else:
         var n0 := 10 if town.is_mobile else 16
         for k in n0:
             _spawn(false)
     town._update_sky()
     var Zd: Dictionary = zdef(zi)
-    if is_dg(zi):
+    if is_lb(zi):
+        pass
+    elif is_dg(zi):
         town.field.say_msg("ดันเจี้ยนชั้น %d — กำจัดบอสในห้องที่ไกลที่สุดเพื่อรับกล่องสมบัติ · วงเวทด้านล่าง = ขึ้นชั้นก่อนหน้า" % (zi - DG_BASE), 4.5)
     else:
         town.field.say_msg("%s (Lv.%d-%d) · บอสรออยู่ทางเหนือ · ออกได้ที่วงเวทด้านล่าง" % [Zd.n, Zd.lv[0], Zd.lv[1]], 4.0)
@@ -502,6 +521,16 @@ func leave(to_portal: bool = true) -> void:
         chest_node.queue_free()
         chest_node = null
     chest = {}
+    if is_lb(zi):
+        town.legend.on_leave()
+        # ลานผนึกใช้ที่เดียวกันทุกตัว → ไม่เก็บไว้
+        data[zi].root.queue_free()
+        data.erase(zi)
+        if to_portal:
+            # fix147: ออกจากลานกลับไปที่หอผนึกอสูร (ที่เข้ามา)
+            town._update_sky()
+            town.rooms.enter("seal113")
+            return
     if is_dg(zi):
         # ดันเจี้ยนชั้นอื่นไม่เก็บไว้ (ใช้ที่เดียวกัน)
         data[zi].root.queue_free()
@@ -556,6 +585,9 @@ func _spawn(far: bool) -> void:
     _mk(str(mb[0]), str(mb[1]), mb[2], L, s, {"elite": randf() < 0.08, "span": float(L - a) / float(b - a)})
 
 func _spawn_boss() -> void:
+    if is_lb(cur):
+        boss = town.legend.spawn_boss()
+        return
     var Zd: Dictionary = zdef(cur)
     var d: Dictionary = data[cur]
     var B: Dictionary = Zd.boss
@@ -569,6 +601,9 @@ func _spawn_boss() -> void:
 
 ## บอสเรียกลูกน้อง 2 ตัว (เลือดต่ำกว่า 50% และ 25%)
 func summon(b) -> void:
+    if is_lb(cur):
+        town.legend.summon(b)
+        return
     var Zd: Dictionary = zdef(cur)
     for i in 2:
         var mb: Array = Zd.mobs[i % Zd.mobs.size()]
@@ -589,8 +624,13 @@ func mob_killed(m) -> void:
     p.coins += coin
     town.field.float_text("+%d เหรียญ" % coin, m.position + Vector3(0, 2.4 * m.sc, 0), Color(1.0, 0.85, 0.3), 1.3 if m.boss else 0.9)
     var j := str(JUNK.get(m.f, ""))
-    if m.boss and is_dg(cur):
+    if m.boss and is_lb(cur):
+        boss = null
+        boss_t = 0.0
+        town.legend.on_won(m)
+    elif m.boss and is_dg(cur):
         _dg_cleared(m)
+        _boss_set_drop(m, 0.02)
     elif m.boss:
         for i in 3:
             _drop_item(j, m.position)
@@ -599,6 +639,7 @@ func mob_killed(m) -> void:
         boss = null
         boss_t = 180.0
         town.story.on_boss(str(zdef(cur).id))
+        _boss_set_drop(m, 0.03)
     elif j != "" and randf() < 0.15:
         _drop_item(j, m.position)
     var xp: int = max(5, int(round(p.need(m.lv) / 20.0))) * (3 if m.elite else 1) * (15 if m.boss else 1)
@@ -629,6 +670,11 @@ func _drop_item(kind: String, at: Vector3) -> void:
     else:
         n.mesh = town.field.stone_mesh
     n.material_override = town.M(c, 0.3, 0.3)
+
+## ชุดบอส (fix59): บอสทั่วไปดรอปชิ้นชุดบอสตามเลเวลบอส (เหมือง 3% · ดันเจี้ยน 2%) · บอสตำนานเป็นแหล่งหลัก
+func _boss_set_drop(m, ch: float) -> void:
+    if randf() < ch:
+        town.legend.drop_piece(town.legend.pick_set(int(m.lv)), "จากบอส")
 
 ## กระสุนมอน (ภูต · บอสยิงรอบตัว)
 func shoot(src, dir: Vector3, speed: float, dmg: int, life: float) -> void:
@@ -717,7 +763,7 @@ func _process(delta: float) -> void:
             normal += 1
     var cap := 12 if town.is_mobile else 20
     spawn_t -= delta
-    if normal < cap and spawn_t <= 0.0 and not is_dg(cur):
+    if normal < cap and spawn_t <= 0.0 and not is_dg(cur) and not is_lb(cur):
         _spawn(true)
         spawn_t = 5.0
     if chest_node != null:
@@ -744,6 +790,10 @@ func _process(delta: float) -> void:
                 ore.alive = true
                 ore.hp = ore.max
                 _ore_show(cur, ore, true)
+    if is_lb(cur):
+        town.legend.tick(delta)
+        if cur < 0:
+            return
     if p.position.distance_to(exit_pos(cur)) < 1.3 and not p.dead:
         if is_dg(cur) and cur - DG_BASE > 1:
             var f := cur - DG_BASE - 1
@@ -755,6 +805,8 @@ func _process(delta: float) -> void:
         return
     var Zd: Dictionary = zdef(cur)
     town.hud.text = "%s · Lv.%d-%d" % [Zd.n, Zd.lv[0], Zd.lv[1]]
+    if is_lb(cur):
+        town.hud.text = town.legend.hud_text()
     if is_dg(cur):
         town.hud.text += " · มอนเหลือ %d" % mobs.size()
     var o = ore_in_front(p)

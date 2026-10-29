@@ -4,7 +4,7 @@ extends RefCounted
 ## ไม่มีในตาราง BUY = ระบบนั้นยังไม่มี → ปุ่ม "เร็ว ๆ นี้" (ไม่ขายของที่ใช้ไม่ได้)
 ## ของที่ HIDE = ระบบที่เจ้าของเลิกแล้ว (ที่ดิน/ฟาร์ม) ไม่แสดงในร้าน
 
-const SWATK := [0, 2, 3, 5, 8, 12]  # js/015-core.js โจมตีดาบตามระดับ
+const SWATK := [0, 2, 3, 5, 8, 12, 4, 9, 15, 22, 30, 40]  # js/015-core.js โจมตีดาบตามระดับ · 6-11 = ชุดบอส fix59 (st[0])
 
 const BUY := {
     # ร้านอาวุธลุงเหล็ก
@@ -93,6 +93,13 @@ const ITEM := {
     "core": {"name": "แกนหินเวท"},
     "dust": {"name": "ผงวิญญาณ"},
     "scale": {"name": "เกล็ดมังกร"},
+    # ตราอสูร (fix62): ได้จากบอสตำนาน · 10 อันแลกชิ้นชุดบอสที่แท่นผนึกอสูร
+    "lbm0": {"name": "ตราอสูร: ราชาพฤกษาหนาม", "note": "สะสม 10 อันแลกชิ้นชุดหนามพงไพรที่แท่นผนึกอสูร"},
+    "lbm1": {"name": "ตราอสูร: นาคราชอสรพิษ", "note": "สะสม 10 อันแลกชิ้นชุดเกล็ดอสรพิษที่แท่นผนึกอสูร"},
+    "lbm2": {"name": "ตราอสูร: ราชันย์หมาป่าเหมันต์", "note": "สะสม 10 อันแลกชิ้นชุดเขี้ยวเหมันต์ที่แท่นผนึกอสูร"},
+    "lbm3": {"name": "ตราอสูร: ฟาโรห์อมตะสุริยัน", "note": "สะสม 10 อันแลกชิ้นชุดฟาโรห์สุริยันที่แท่นผนึกอสูร"},
+    "lbm4": {"name": "ตราอสูร: มังกรโลหิตโบราณ", "note": "สะสม 10 อันแลกชิ้นชุดมังกรโลหิตที่แท่นผนึกอสูร"},
+    "lbm5": {"name": "ตราอสูร: จักรพรรดิเงานิรันดร์", "note": "สะสม 10 อันแลกชิ้นชุดจักรพรรดิเงาที่แท่นผนึกอสูร"},
     "ingot": {"name": "แท่งเหล็ก"},
     "ingCu": {"name": "แท่งทองแดง"},
     "ingAg": {"name": "แท่งเงิน"},
@@ -139,11 +146,78 @@ const KIND_ORDER := ["sword", "staff", "bow", "axe", "pick", "helm", "chest", "p
 const SLOT_OF := {"sword": "weapon", "staff": "weapon", "bow": "weapon", "helm": "helm", "chest": "chest", "pants": "pants", "arm": "arm", "neck": "neck", "ring": "ring"}
 const SLOTS := ["weapon", "helm", "chest", "pants", "arm", "neck", "ring"]
 const SLOT_NAMES := {"weapon": "อาวุธ", "helm": "หมวก", "chest": "เสื้อ", "pants": "กางเกง", "arm": "แขน", "neck": "สร้อย", "ring": "แหวน"}
-const TNAMES := ["หินธรรมดา", "เหล็ก", "ทองแดง", "เงิน", "ทอง", "เพชร"]
-const ADEF := {"helm": [1, 2, 3, 4, 5, 7], "chest": [2, 3, 5, 6, 8, 11], "pants": [1, 2, 3, 4, 5, 7], "arm": [1, 1, 2, 3, 4, 6]}
-const NECKHP := [6, 12, 20, 30, 45, 70]
-const RINGATK := [0, 1, 2, 3, 4, 6]
-const MATKEY := ["ingSt", "ingot", "ingCu", "ingAg", "ingAu", "ingDm"]
+## ระดับ 0-5 = คราฟได้ · 6-11 = ชุดดรอปจากบอส (fix59 B59 · คราฟไม่ได้ · ขายร้านไม่ได้ · ต้องถึงเลเวลของชุด)
+const TNAMES := ["หินธรรมดา", "เหล็ก", "ทองแดง", "เงิน", "ทอง", "เพชร", "หนามพงไพร", "เกล็ดอสรพิษ", "เขี้ยวเหมันต์", "ฟาโรห์สุริยัน", "มังกรโลหิต", "จักรพรรดิเงา"]
+const ADEF := {"helm": [1, 2, 3, 4, 5, 7, 3, 5, 8, 11, 14, 19], "chest": [2, 3, 5, 6, 8, 11, 5, 8, 13, 18, 23, 30], "pants": [1, 2, 3, 4, 5, 7, 3, 5, 8, 11, 14, 19], "arm": [1, 1, 2, 3, 4, 6, 2, 4, 7, 10, 13, 17]}
+const NECKHP := [6, 12, 20, 30, 45, 70, 22, 50, 95, 150, 210, 310]
+const RINGATK := [0, 1, 2, 3, 4, 6, 2, 5, 8, 12, 17, 24]
+const MATKEY := ["ingSt", "ingot", "ingCu", "ingAg", "ingAu", "ingDm", "ingDm", "ingDm", "ingDm", "ingDm", "ingDm", "ingDm"]
+const BOSS_T0 := 6
+const BOSS_LV := [10, 25, 45, 65, 85, 110]
+const RARITY := [["ทั่วไป", "#c8c8d8"], ["ไม่ธรรมดา", "#7ad86a"], ["หายาก", "#5ab4ff"], ["ฮีโร่", "#c88aff"], ["ตำนาน", "#ffb03a"], ["ตำนาน", "#ffb03a"]]
+const BOSS_PIECES := ["sword", "staff", "bow", "helm", "chest", "pants", "arm", "neck", "ring"]
+
+static func is_boss_tier(t: int) -> bool:
+    return t >= BOSS_T0
+
+## เลเวลที่ต้องมีจึงสวมได้ (ชุดบอสเท่านั้น)
+static func req_lv(t: int) -> int:
+    return BOSS_LV[t - BOSS_T0] if t >= BOSS_T0 else 0
+
+## โบนัสชุด (js/031-core.js SETB · fix59 sb · fix111 นับ 7 ช่อง: 3 ชิ้น = ขั้น 1 · 5 ชิ้น = ขั้น 2 · 7 ชิ้น = ดาเมจ/เลือด +%)
+const SETB := [
+    [{"vit": 1}, {"end": 3}, "วิ่งได้นานขึ้น"], [{"vit": 2}, {"str": 2, "vit": 3}, "ถึกขึ้น"], [{"end": 3}, {"agi": 4, "end": 4}, "วิ่งไว วิ่งนาน"],
+    [{"int": 4}, {"str": 4, "agi": 3}, "ฟันแรง คริแรง"], [{"str": 3}, {"str": 6, "vit": 5}, "นักรบทองคำ"], [{"vit": 6}, {"str": 10, "vit": 10, "end": 8, "agi": 5}, "ชุดในตำนาน"],
+    [{"vit": 3}, {"vit": 5, "str": 3}, "ผู้พิทักษ์ป่า"], [{"agi": 5}, {"agi": 8, "str": 5}, "พิษอสรพิษ"], [{"vit": 6, "int": 4}, {"vit": 10, "str": 6, "agi": 6}, "ราชันย์หมาป่าน้ำแข็ง"],
+    [{"int": 8, "vit": 6}, {"int": 14, "str": 10, "vit": 10}, "บุตรแห่งดวงอาทิตย์"], [{"str": 12, "vit": 8}, {"str": 20, "vit": 16, "agi": 10}, "เลือดมังกรเดือด"], [{"str": 14, "int": 14}, {"str": 24, "vit": 22, "agi": 16, "int": 20}, "ผู้ครองห้วงเงา"]]
+
+## ระดับในเกม 2D (ใช้คิดค่าเต็มเซ็ต/สร้อย+แหวน): คราฟ 0-5 · ชุดบอส 11-16
+static func t2d(t: int) -> int:
+    return t if t < BOSS_T0 else 11 + (t - BOSS_T0)
+
+static func _addst(o: Dictionary, add: Dictionary) -> void:
+    for k in add:
+        o[k] = int(o.get(k, 0)) + int(add[k])
+
+## โบนัสจากของที่สวม: {st:{str..}, dmg, hp, lines:[ข้อความ]}
+static func set_info(eq: Dictionary) -> Dictionary:
+    var st := {}
+    var dmg := 0.0
+    var hp := 0.0
+    var lines := []
+    var c := {}
+    for sl in SLOTS:
+        if eq.has(sl):
+            var t := int(eq[sl].t)
+            c[t] = int(c.get(t, 0)) + 1
+    for t in c:
+        var n: int = c[t]
+        if n < 3:
+            continue
+        var S: Array = SETB[t]
+        _addst(st, S[0])
+        var ln := "ชุด%s %d/7: %s" % [TNAMES[t], n, _sttxt(S[0])]
+        if n >= 5:
+            _addst(st, S[1])
+            ln += " · %s (%s)" % [_sttxt(S[1]), S[2]]
+        if n >= 7:
+            var f: float = snappedf(0.03 + t2d(t) * 0.0025, 0.001)
+            dmg += f
+            hp += f
+            ln += " · ครบชุด ดาเมจ/เลือด +%.1f%%" % (f * 100.0)
+        lines.append(ln)
+    if eq.has("neck") and eq.has("ring") and int(eq.neck.t) == int(eq.ring.t):
+        var tt := t2d(int(eq.neck.t))
+        var nr := {"int": 2 + tt * 2, "agi": 1 + tt}
+        _addst(st, nr)
+        lines.append("สร้อย+แหวนชุดเดียวกัน: " + _sttxt(nr))
+    return {"st": st, "dmg": dmg, "hp": hp, "lines": lines}
+
+static func _sttxt(o: Dictionary) -> String:
+    var a := []
+    for k in o:
+        a.append("%s +%d" % [str(k).to_upper(), int(o[k])])
+    return " · ".join(a)
 const RECIPE := {"sword": [3, 1], "staff": [3, 2], "bow": [2, 3], "axe": [3, 2], "pick": [3, 2], "helm": [3, 0], "chest": [5, 0], "pants": [4, 0], "arm": [3, 0], "neck": [2, 0], "ring": [1, 0]}  # [แท่ง, ไม้]
 ## เตาหลอม: แร่ n ก้อน + ถ่าน c → แท่ง 1 · เผาถ่าน: ไม้ 2 → ถ่าน 1
 const SMELT := [["stone", 3, "ingSt", 1], ["iron", 2, "ingot", 1], ["copper", 2, "ingCu", 1], ["silver", 2, "ingAg", 1], ["gold", 2, "ingAu", 2], ["gem", 2, "ingDm", 2]]
@@ -158,17 +232,25 @@ const RATE := [100, 95, 90, 80, 70, 60, 50, 45, 40, 35, 30, 25, 20, 15, 10]
 const MAXP := 15
 const BREAK_FROM := 5
 
+## ไอดีอุปกรณ์ = ชนิด + ระดับ (ระดับ 0-11 · ชุดบอสเป็นเลขสองหลัก เช่น sword10)
+static func _split(id: String) -> int:
+    var i := id.length()
+    while i > 0 and id[i - 1] >= "0" and id[i - 1] <= "9":
+        i -= 1
+    return i
+
 static func is_gear(id: String) -> bool:
-    if id.length() < 2:
+    var i := _split(id)
+    if i == 0 or i == id.length() or not KINDS.has(id.substr(0, i)):
         return false
-    var k := id.substr(0, id.length() - 1)
-    return KINDS.has(k) and id.right(1).is_valid_int()
+    var t := int(id.substr(i))
+    return t >= 0 and t < TNAMES.size() and not (t >= BOSS_T0 and id.substr(0, i) in ["axe", "pick"])
 
 static func gear_kind(id: String) -> String:
-    return id.substr(0, id.length() - 1)
+    return id.substr(0, _split(id))
 
 static func gear_tier(id: String) -> int:
-    return int(id.right(1))
+    return int(id.substr(_split(id)))
 
 static func q_bonus(base: int, q: int) -> int:
     return q * max(1, int(round(base * 0.2))) if q > 0 else 0
@@ -177,6 +259,8 @@ static func q_bonus(base: int, q: int) -> int:
 const GP := [8, 24, 50, 100, 200, 420]
 const GK := {"sword": 1.0, "staff": 1.0, "bow": 1.0, "axe": 0.8, "pick": 0.8, "helm": 0.8, "chest": 1.4, "pants": 1.0, "arm": 0.7, "neck": 1.1, "ring": 0.9}
 static func gear_price(it: Dictionary) -> int:
+    if int(it.t) >= GP.size():
+        return 0  # ชุดบอส: ร้านไม่รับซื้อ (เกม 2D ไม่มีราคา)
     return max(1, int(round(round(GP[int(it.t)] * float(GK[it.k])) * 0.6)))
 
 static func enh_atk(l: int) -> int:

@@ -1181,6 +1181,171 @@ func _run() -> void:
     else:
         check(false, "ต้องรันด้วย --mobile เพื่อเทสปุ่มมือถือ")
 
+    # ---- ชุดบอส (fix59) · โบนัสชุด (fix111) · แท่นผนึกอสูร/บอสตำนาน (fix62/64/113/118) ----
+    var lp = world.player
+    var lg = world.legend
+    var lmn = world.mine
+    if lmn.cur >= 0:
+        lmn.leave(false)
+    if world.room != "":
+        world.rooms.leave()
+    check(Items.is_gear("sword10") and Items.gear_kind("sword10") == "sword" and Items.gear_tier("sword10") == 10 and Items.is_gear("ring6"), "ชุดบอส: ไอดีเลขสองหลัก sword10 อ่านถูก")
+    check(not Items.is_gear("axe7") and not Items.is_gear("pick11") and not Items.is_gear("sword12") and Items.is_gear("pick5"), "ชุดบอส: ไม่มีขวาน/ที่ขุดชุดบอส · ระดับเกินไม่นับ")
+    check(Items.inst_stat({"k": "sword", "t": 10, "q": 0, "e": 0}) == 30 and Items.inst_stat({"k": "neck", "t": 11, "q": 0, "e": 0}) == 310 and Items.inst_stat({"k": "chest", "t": 6, "q": 0, "e": 0}) == 5, "ชุดบอส: ค่าพลังตามเกม 2D (B59 st)")
+    check(Items.gear_price({"k": "sword", "t": 8, "q": 0, "e": 0}) == 0 and Items.req_lv(9) == 65 and Items.req_lv(3) == 0, "ชุดบอส: ขายร้านไม่ได้ · ต้องถึงเลเวลชุด")
+    check(Items.item_name("helm7") == "หมวกเกล็ดอสรพิษ" and Items.item_name("lbm2").contains("หมาป่าเหมันต์"), "ชุดบอส: ชื่อชิ้น + ตราอสูร")
+    var lg_lv0: int = lp.lv
+    lp.lv = 5
+    var lg_s = lp.make_inst("sword6")
+    lp.gear.append(lg_s)
+    check(lp.equip(lg_s).contains("Lv.10") and lp.gear.has(lg_s), "ชุดบอส: เลเวลไม่ถึงสวมไม่ได้")
+    lp.lv = 40
+    var lg_eq0: Dictionary = lp.eq.duplicate()
+    var lg_hp0: int = lp.max_hp
+    var lg_vit0: int = lp.stat_total("vit")
+    for lg_k in ["sword", "helm", "chest", "pants", "arm", "neck", "ring"]:
+        var lg_it = lg_s if lg_k == "sword" else lp.make_inst(lg_k + "6")
+        if lg_k != "sword":
+            lp.gear.append(lg_it)
+        lp.equip(lg_it)
+    check(lp.set_b.lines.size() == 2 and lp.stat_total("vit") == lg_vit0 + 8 and lp.dmg_mult() > 1.05, "โบนัสชุด: 7 ชิ้น = ขั้น 1+2 + ครบชุด · สร้อย+แหวนชุดเดียวกัน (VIT +8 · ดาเมจ +%)")
+    check(lp.max_hp > lg_hp0, "โบนัสชุด: เลือดสูงสุดเพิ่ม")
+    lp.unequip("ring")
+    lp.unequip("neck")
+    lp.unequip("arm")
+    check(lp.set_b.lines.size() == 1 and lp.dmg_mult() == 1.0 and lp.stat_total("vit") == lg_vit0 + 3, "โบนัสชุด: 4 ชิ้น = ขั้น 1 อย่างเดียว")
+    lp.unequip("pants")
+    lp.unequip("chest")
+    check(lp.set_b.lines.is_empty(), "โบนัสชุด: 2 ชิ้นไม่มีโบนัส")
+    # ห้องหอผนึก → แท่นผนึก
+    world.ui_shop.visible = false
+    world.in_door = ""
+    world.rooms.enter("seal113")
+    lp.position = world.rooms.station_pos("seal113", 0) + Vector3(1.6, 0, 0)
+    lp.stun = 0.0
+    lp.dash_t = 0.0
+    lp.attack()
+    check(world.ui_shop.visible and world.cur_shop == "altar", "แท่นผนึก: กดตีข้างแท่น = เปิดหน้าบอสตำนาน")
+    var lg_txt := ""
+    for lg_n in world.ui_shop_body.find_children("*", "Label", true, false):
+        lg_txt += (lg_n as Label).text + "|"
+    check(lg_txt.contains("ราชาพฤกษาหนาม") and lg_txt.contains("จักรพรรดิเงานิรันดร์") and lg_txt.contains("วันนี้ลงได้อีก 2/2"), "แท่นผนึก: แสดงบอส 6 ตัว + โควตาวันละ 2")
+    lp.lv = 10
+    check(lg.challenge(0).contains("Lv.20"), "แท่นผนึก: เลเวลไม่ถึงเข้าไม่ได้")
+    lp.lv = 30
+    lp.coins = 100
+    check(lg.challenge(0).contains("เหรียญไม่พอ"), "แท่นผนึก: เหรียญไม่พอเข้าไม่ได้")
+    lp.coins = 20000
+    lg.S = {"cd": {}, "day": "", "n": {}}
+    check(lg.challenge(0) == "" and lmn.cur == lmn.LB_BASE and world.room == "" and lp.coins == 17000, "บอสตำนาน: จ่ายค่าท้า 3000 เข้าลานผนึก")
+    var lg_b = lmn.boss
+    check(lg_b != null and lg_b.boss and lg_b.lv == 23 and lg_b.max_hp > 6 * 1000, "บอสตำนาน: บอส Lv.23 เลือด ×6")
+    check(lg.left_today(0) == 1, "บอสตำนาน: นับโควตาตอนจ่ายค่าท้า")
+    # วงเตือน: ยืนในวง = โดน % เลือดสูงสุด · กลิ้ง (อมตะ) = ไม่โดน
+    lp.position = lg_b.position + Vector3(0, 0, 8.0)
+    lp.hp = lp.max_hp
+    lp.iframe = 0.0
+    lg.aoe(lp.position, 46.0, 0.3, "thorn")
+    lg._tick_aoe(0.2)
+    check(lp.hp == lp.max_hp, "บอสตำนาน: ก่อนวงลงยังไม่โดน")
+    lg._tick_aoe(0.2)
+    check(lp.hp < lp.max_hp and lp.hp > lp.max_hp * 0.6, "บอสตำนาน: วงลงโดนประมาณ 25% เลือด")
+    var lg_h1: float = lp.hp
+    lp.iframe = 1.0
+    lg.aoe(lp.position, 46.0, 0.1, "fire")
+    lg._tick_aoe(0.2)
+    check(lp.hp == lg_h1, "บอสตำนาน: กลิ้งหลบ (อมตะ) ไม่โดนวง")
+    lp.iframe = 0.0
+    lg.aoe(lp.position + Vector3(10, 0, 0), 46.0, 0.1, "fire")
+    lg._tick_aoe(0.2)
+    check(lp.hp == lg_h1, "บอสตำนาน: ยืนนอกวงไม่โดน")
+    lg._clear_aoe()
+    # ท่าไม้ตายทุกตัว + เรียกสมุน + คลั่ง
+    lg.aggro = true
+    var lg_ok := true
+    for lg_i in 6:
+        lg.act = lg_i
+        lg._ult(lg_b)
+        lg._tick_aoe(1.3)
+        if lg.aoes.is_empty():
+            lg_ok = false
+        lg._clear_aoe()
+    lg.act = 0
+    check(lg_ok, "บอสตำนาน: ท่าไม้ตายครบ 6 แบบ (สร้างวงเตือน)")
+    lp.hp = lp.max_hp
+    var lg_n0: int = lmn.mobs.size()
+    lg.summon(lg_b)
+    check(lmn.mobs.size() > lg_n0, "บอสตำนาน: เรียกสมุน")
+    var lg_a0: int = lg_b.atk_v
+    lg_b.hp = int(lg_b.max_hp * 0.2)
+    lg.tick(0.1)
+    check(lg.rage and lg_b.atk_v > lg_a0 and lg.hud_text().contains("คลั่ง"), "บอสตำนาน: เลือด < 30% คลั่ง ตีแรงขึ้น")
+    # ชนะ
+    lg._clear_aoe()
+    lp.hp = lp.max_hp
+    lg_b.hp = 1
+    var lg_c0: int = lp.coins
+    world.field.hit_slime(lg_b, lp, 50.0)
+    check(lg_b.dead and lg.won == 1 and lp.inv_count("lbm0") >= 1 and lp.coins >= lg_c0 + 3600, "บอสตำนาน: ชนะได้ตราอสูร + เหรียญ ×1.2")
+    check(world.ui_shop.visible and world.cur_shop == "altar", "บอสตำนาน: ชนะแล้วขึ้นหน้าต่างรางวัล")
+    check(lg.cd_left(0) > 1700, "บอสตำนาน: ชนะแล้วพัก 30 นาที")
+    world.close_shop()
+    lp.position = lmn.exit_pos(lmn.cur)
+    lmn._process(0.1)
+    check(lmn.cur < 0 and world.room == "seal113" and lg.act < 0, "บอสตำนาน: เดินเข้าวงเวท = กลับหอผนึก (ที่เข้ามา)")
+    check(lg.challenge(0).contains("นาที"), "บอสตำนาน: ช่วงพักเข้าซ้ำไม่ได้")
+    lg.S.cd = {}
+    lg.S.n["0"] = 2
+    check(lg.challenge(0).contains("ครบ 2 ครั้ง"), "บอสตำนาน: เกินวันละ 2 ครั้งเข้าไม่ได้")
+    # หมดเวลา → ถูกส่งออก
+    lg.S.n = {}
+    lp.coins = 20000
+    world.rooms.leave()
+    world.rooms.enter("seal113")
+    lp.lv = 60
+    lg.challenge(1)
+    check(lmn.cur == lmn.LB_BASE + 1 and lmn.boss.f == "drake", "บอสตำนาน: ตัวที่ 2 นาคราช")
+    lg.el = 479.9
+    lg.tick(0.2)
+    check(lmn.cur < 0 and world.room == "seal113", "บอสตำนาน: หมดเวลา 8 นาที ถูกส่งกลับหอผนึก")
+    # ตาย/วาปออกจากลาน (ไม่กลับหอ) ล้างสถานะ
+    lp.coins = 20000
+    lg.S.n = {}
+    world.rooms.leave()
+    world.rooms.enter("seal113")
+    check(lg.challenge(2) == "" and lmn.cur == lmn.LB_BASE + 2, "บอสตำนาน: ตัวที่ 3 หมาป่าเหมันต์")
+    lg.S.n = {}
+    lmn.leave(false)
+    check(lmn.cur < 0 and lg.act < 0 and lg.aoes.is_empty(), "บอสตำนาน: ออกแบบตาย/วาป ล้างสถานะ")
+    # แลกตรา 10 อัน
+    lp.inv_add("lbm4", 10)
+    var lg_g0: int = lp.gear.size()
+    check(lg.trade(4, "chest").contains("เสื้อเกราะมังกรโลหิต") and lp.inv_count("lbm4") == 0 and lp.gear.size() == lg_g0 + 1 and int(lp.gear.back().t) == 10, "แลกตรา: 10 อัน = ชิ้นที่เลือก")
+    check(lg.trade(4, "ring").contains("ไม่พอ"), "แลกตรา: ตราไม่พอแลกไม่ได้")
+    world.rooms.leave()
+    world.rooms.enter("seal113")
+    lg.pick_piece(4)
+    check(world.cur_shop == "altar" and world.ui_shop_body.get_child_count() >= 10, "แลกตรา: หน้าเลือกชิ้น 9 ชนิด")
+    world.close_shop()
+    world.rooms.leave()
+    # บอสทั่วไปดรอปชุดบอสตามเลเวล
+    check(lg.pick_set(15) == 0 and lg.pick_set(55) == 2 and lg.pick_set(130) == 5, "ชุดบอส: บอสเลเวลไหนดรอปชุดไหน (pick59)")
+    var lg_g1: int = lp.gear.size()
+    lg.drop_piece(3, "ทดสอบ")
+    check(lp.gear.size() == lg_g1 + 1 and int(lp.gear.back().t) == 9, "ชุดบอส: ดรอปชิ้นเข้ากระเป๋าทันที")
+    # เซฟ/โหลดสถานะแท่นผนึก + ของชุดบอส
+    lg.S = {"cd": {"3": 123}, "day": "2026-10-29", "n": {"1": 2}}
+    var lg_sv: Dictionary = lg.S.duplicate(true)
+    lg.load_state(JSON.parse_string(JSON.stringify(lg_sv)))
+    check(int(lg.S.cd["3"]) == 123 and int(lg.S.n["1"]) == 2, "แท่นผนึก: เซฟ/โหลดคูลดาวน์ + โควตา")
+    check(int(lp._clean_inst({"k": "sword", "t": 11}).t) == 11 and int(lp._clean_inst({"k": "pick", "t": 9}).t) == 5, "ชุดบอส: โหลดเซฟเก็บระดับชุดบอสได้")
+    lg.S = {"cd": {}, "day": "", "n": {}}
+    for lg_sl in lp.eq.keys():
+        lp.unequip(str(lg_sl))
+    for lg_sl in lg_eq0:
+        lp.equip(lg_eq0[lg_sl])
+    lp.lv = lg_lv0
+
     # ---- ไอคอนไอเท็ม (ถ่ายจากโมเดล 3D) ----
     var ic_miss := []
     for ic_k in Items.ITEM.keys():
