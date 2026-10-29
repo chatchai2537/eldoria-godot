@@ -48,6 +48,7 @@ var weapon_tier: int:
         if eq.has("weapon"):
             eq.weapon.t = clampi(v, 0, 5)
 var skills := {}       # สกิลที่เรียนแล้ว id -> true
+var cls := "none"      # อาชีพ: none / sword / mage / archer (skills.gd)
 var skill_cd := {}     # คูลดาวน์ที่เหลือ
 var buffs: Array = []  # [{stat, amt, t}] จากอาหาร
 var bank := {}         # ของที่ฝากธนาคาร id -> จำนวน
@@ -98,6 +99,8 @@ func setup(t, pos: Vector3) -> void:
 # ---- ค่าพลัง (สูตรเดียวกับ js/030-core.js) ----
 func stat_total(k: String) -> int:
     var v: int = int(stats.get(k, 0))
+    if town != null and town.classes != null:
+        v += town.classes.stat_bonus(self, k)
     for b in buffs:
         if b.stat == k:
             v += int(b.amt)
@@ -177,13 +180,13 @@ func stat_add(k: String, n: int = 1) -> int:
     return n
 
 func crit_rate() -> float:
-    return 0.08 + stat_total("agi") * 0.004
+    return 0.08 + stat_total("agi") * 0.004 + (town.classes.crit_bonus(self) if town != null and town.classes != null else 0.0)
 
 # ---- เซฟเกม (ในเครื่อง · เซฟเองทุก 10 วิ และตอนออก/สลับแอป) ----
 var save_path := "user://eldoria_save.json"
 var save_enabled := true
 var _save_t := 0.0
-const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood"]
+const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood", "cls"]
 
 func save_game() -> bool:
     if not save_enabled:
@@ -251,6 +254,8 @@ func load_game() -> bool:
             for i in int(inv[k]):
                 gear.append(make_inst(str(k)))
             inv.erase(k)
+    if not ["none", "sword", "mage", "archer"].has(cls):
+        cls = "none"
     var keep_hp := hp
     var keep_mp := mp
     recalc_stats()
@@ -389,6 +394,7 @@ func gain_xp(n: int) -> void:
     xp += n
     town.field.float_text("+%d EXP" % n, position + Vector3(0, 2.6, 0), Color(0.6, 1.0, 0.5), 0.7)
     var ups := 0
+    var l0 := lv
     while xp >= need(lv) and lv < 99:
         xp -= need(lv)
         lv += 1
@@ -400,6 +406,8 @@ func gain_xp(n: int) -> void:
         mp = max_mp
         town.field.say_msg("เลเวลอัป! Lv.%d ได้แต้มสเตตัส +3" % lv, 3.5)
         town.field.float_text("LEVEL UP!", position + Vector3(0, 3.2, 0), Color(1.0, 0.85, 0.3), 1.5)
+        if town.classes != null:
+            town.classes.on_level(self, l0)
 
 # ---- โดนสไลม์ตี (hurtPlayer เดิม) ----
 func hurt_by(sl) -> void:
@@ -600,7 +608,7 @@ func _process(delta: float) -> void:
     since_hit += delta
     if since_hit > BAL.regen_delay:
         hp = min(float(max_hp), hp + BAL.regen * delta)
-    mp = min(float(max_mp), mp + BAL.mp_regen * delta)
+    mp = min(float(max_mp), mp + BAL.mp_regen * delta * (town.classes.mp_regen_mult(self) if town.classes != null else 1.0))
     if kx != 0.0 or kz != 0.0:
         _try_move(Vector3(kx, 0, kz) * delta)
         var dd := pow(0.02, delta)

@@ -59,6 +59,7 @@ var t := 0.0
 var summoned := 0
 var tg := Vector3.ZERO
 var heading := 0.0
+var stun_t := 0.0   # มึนงงจากสกิล (บอสโดน 35%)
 
 var vis: Node3D
 var parts := {}
@@ -258,6 +259,15 @@ func _process(delta: float) -> void:
         return
     if mine.cur < 0:
         return
+    if stun_t > 0.0:
+        stun_t -= delta
+        ring.visible = false
+        if st.ends_with("WU"):
+            st = "chase"
+        vis.rotation.z = sin(t * 20.0) * 0.08
+        t += delta
+        return
+    vis.rotation.z = 0.0
     var p = mine.town.player
     var to := Vector3(p.position.x - position.x, 0, p.position.z - position.z)
     var dist: float = max(to.length(), 0.01)

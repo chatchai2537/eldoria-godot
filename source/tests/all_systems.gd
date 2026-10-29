@@ -398,7 +398,8 @@ func _run() -> void:
         world.shop_buy(it)
     check(p.skills.size() == 3 and p.coins == 1000 - 60 - 80 - 100, "ร้านสกิล: เรียนครบ 3 สกิลราคาถูก")
     check(world.shop_buy(sk_shop.buy[0]).find("แล้ว") >= 0 and p.coins == 760, "เรียนซ้ำไม่เสียเงิน")
-    check(world.mobile == null or world.mobile.skill_btns["fireball"].visible, "มือถือ: ปุ่มสกิลขึ้นหลังเรียน")
+    world.mobile.refresh_skills() if world.mobile != null else null
+    check(world.mobile == null or world.mobile.skill_btns[1].visible, "มือถือ: ปุ่มสกิลขึ้นหลังเรียน")
     p.position = stand
     p.heading = 0.0
     p.mp = 50.0
@@ -709,6 +710,93 @@ func _run() -> void:
     check(p.weapon == "sword2" and p.weapon_tier == 2 and p.inv_count("axe0") == 1 and not p.best_tool("axe").is_empty(), "โหลดเซฟรุ่นเก่า: ดาบ/ขวานแปลงเป็นอุปกรณ์")
     DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save3.json"))
     p.save_enabled = false
+
+    # ---------- อาชีพ (Lv.10) · สกิลอาชีพ · พาสซีฟ ----------
+    var cl: Node = world.classes
+    p.dead = false
+    p.cls = "none"
+    p.lv = 9
+    p.coins = 1000
+    check(cl.pick("sword").find("Lv.10") >= 0 and p.cls == "none", "อาชีพ: ต่ำกว่า Lv.10 เลือกไม่ได้")
+    p.lv = 10
+    var cvit0: int = p.stat_total("vit")
+    var cstr0: int = p.stat_total("str")
+    cl.pick("sword")
+    check(p.cls == "sword" and p.coins == 1000, "อาชีพ: เลือกนักดาบครั้งแรกฟรี")
+    check(p.stat_total("vit") == cvit0 + 5 and p.stat_total("str") == cstr0 + 2 + 3, "นักดาบ: VIT +2+Lv/3 · STR +Lv/5 · พาสซีฟ Lv.10 STR +3")
+    world.close_shop()
+    check(cl.slot_name(p, 0) == "กระทืบปฐพี" and cl.slot_name(p, 1) == "", "นักดาบ Lv.10: ปลดล็อกสกิลที่ 1 (Lv.5) ยังไม่ปลดสกิลที่ 2 (Lv.15)")
+    # ในเมืองใช้ไม่ได้ · ต้องถืออาวุธประจำสาย
+    p.position = world.tw(22, 20)
+    p.weapon = "staff0"
+    check(cl.use_class(0).find("ต้องถือดาบ") >= 0, "สกิลอาชีพ: ต้องถืออาวุธประจำสาย")
+    p.weapon = "sword0"
+    check(cl.use_class(0).find("ในเมือง") >= 0, "สกิลอาชีพ: ใช้ในเมืองไม่ได้")
+    # ในทุ่ง: กระทืบปฐพีโดนสไลม์ + มึนงง
+    p.position = world.fw(20.5, 20.5)
+    var sl2 := Node3D.new()
+    sl2.set_script(load("res://scripts/slime.gd"))
+    world.field.add_child(sl2)
+    sl2.setup(world.field, 1, p.position + Vector3(1.5, 0, 0))
+    sl2.hp = 999
+    sl2.max_hp = 999
+    world.field.slimes.append(sl2)
+    p.mp = p.max_mp
+    p.stun = 0.0
+    p.dash_t = 0.0
+    var mp0: float = p.mp
+    check(cl.use_class(0) == "กระทืบปฐพี" and p.mp == mp0 - 15 and cl.cd[0] > 0.0, "นักดาบ: กระทืบปฐพี ใช้มานา 15 + คูลดาวน์")
+    check(sl2.hp < 999 and sl2.stun_t > 1.0, "นักดาบ: กระทืบปฐพีโดนรอบตัว + มึนงง")
+    var sx0: Vector3 = sl2.position
+    sl2._process(0.5)
+    check(sl2.position == sx0, "สไลม์มึนงงแล้วไม่ขยับ")
+    check(cl.use_class(0).find("ยังไม่พร้อม") >= 0, "สกิลอาชีพ: ติดคูลดาวน์ใช้ซ้ำไม่ได้")
+    # เปลี่ยนเป็นนักเวท 500 · สกิลสามจังหวะ
+    cl.pick("mage")
+    check(p.cls == "mage" and p.coins == 500, "เปลี่ยนอาชีพเสีย 500 เหรียญ")
+    world.close_shop()
+    p.lv = 15
+    p.recalc_stats()
+    p.weapon = "staff0"
+    p.mp = 999
+    p.max_mp = 999
+    cl.cd = [0.0, 0.0, 0.0]
+    cl.step = 0
+    cl.use_class(1)
+    check(cl.step == 1 and cl.cd[1] == 0.0, "เวทธาตุสามสาย: จังหวะที่ 1")
+    cl.use_class(1)
+    cl.use_class(1)
+    check(cl.step == 0 and cl.cd[1] > 0.0, "เวทธาตุสามสาย: ครบ 3 จังหวะแล้วติดคูลดาวน์")
+    cl.use_class(0)
+    check(cl.pers.size() > 0, "วงแหวนเพลิง: มีวงไฟต่อเนื่อง")
+    var hpw: int = sl2.hp
+    sl2.position = p.position + Vector3(1.0, 0, 0)
+    sl2.stun_t = 5.0
+    cl._process(0.6)
+    check(sl2.hp < hpw, "วงแหวนเพลิง: เผาศัตรูในวงต่อเนื่อง")
+    cl.pers.clear()
+    check(p.crit_rate() < 0.2, "นักเวทไม่ได้คริของนักธนู")
+    sl2.queue_free()
+    world.field.slimes.erase(sl2)
+    # เซฟอาชีพ
+    p.save_enabled = true
+    p.save_path = "user://test_save4.json"
+    p.save_game()
+    p.cls = "none"
+    p.load_game()
+    check(p.cls == "mage", "เซฟ/โหลด: อาชีพ")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save4.json"))
+    p.save_enabled = false
+    # ปรมาจารย์อาชีพ: คุยแล้วเปิดเมนู
+    for n in world.npcs:
+        if n.npc_name == "ปรมาจารย์อาชีพ":
+            world._talk(n)
+    check(world.ui_shop.visible and world.cur_shop == "class", "คุยกับปรมาจารย์อาชีพแล้วเปิดเมนูเลือกอาชีพ")
+    world.close_shop()
+    world.ui_dialog.visible = false
+    p.cls = "none"
+    p.lv = 1
+    p.recalc_stats()
 
     # ---------- มือถือ ----------
     if world.mobile != null:

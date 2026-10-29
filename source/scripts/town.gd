@@ -76,6 +76,7 @@ var test_lv := 0  # ทดสอบหาต้นเหตุจอดำ: ?t=1
 var mobile: CanvasLayer
 var mine: Node3D
 var craft: Node
+var classes: Node
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -175,6 +176,10 @@ func _ready() -> void:
     rooms.set_script(load("res://scripts/rooms.gd"))
     add_child(rooms)
     rooms.setup(self)
+    classes = Node.new()
+    classes.set_script(load("res://scripts/skills.gd"))
+    add_child(classes)
+    classes.setup(self)
     craft = Node.new()
     craft.set_script(load("res://scripts/craft.gd"))
     add_child(craft)
@@ -2035,9 +2040,15 @@ func refresh_char() -> void:
     top.add_child(_btn("ปิด X", true, func(): ui_char.visible = false))
     ui_char_body.add_child(top)
     ui_char_body.add_child(_lbl("เลือด %d · มานา %d · ATK %d · DEF %d · คริ %.1f%%" % [p.max_hp, p.max_mp, p.atk(), p.def(), p.crit_rate() * 100.0], 17, Color(0.85, 0.92, 1.0)))
+    var C: Dictionary = classes.CLS[p.cls]
+    var pl := []
+    for ps in classes.PASSIVE.get(p.cls, []):
+        pl.append(("[เปิด] " if p.lv >= int(ps.lv) else "[Lv.%d] " % int(ps.lv)) + str(ps.n) + " " + str(ps.d))
+    ui_char_body.add_child(_lbl("อาชีพ: %s%s" % [C.n, ("  ·  " + " · ".join(pl)) if pl.size() > 0 else ""], 15, C.col))
     for k in ["str", "vit", "int", "agi", "end"]:
         var kk: String = k
-        ui_char_body.add_child(_row("%s : %d" % [p.STAT_NAMES[k], int(p.stats[k])], "", [
+        var bon: int = p.stat_total(k) - int(p.stats[k])
+        ui_char_body.add_child(_row("%s : %d%s" % [p.STAT_NAMES[k], int(p.stats[k]), (" (+%d)" % bon) if bon > 0 else ""], "", [
             _btn("+1", p.sp > 0, func():
                 p.stat_add(kk, 1)
                 refresh_char()),
@@ -2085,6 +2096,8 @@ func _talk(n) -> void:
     n.face_to(player.global_position)
     if STALL_SHOP.has(n.npc_name):
         open_shop(STALL_SHOP[n.npc_name])
+    elif n.npc_name == "ปรมาจารย์อาชีพ":
+        classes.open_menu()
 
 func _npc_at(screen: Vector2):
     var best = null
@@ -2123,6 +2136,20 @@ func _test_ui(what: String) -> void:
         if what.begins_with("mineboss:"):
             var d: Dictionary = mine.data[zi]
             player.position = mine.tile_w(zi, d.arena.x, d.arena.y + 7)
+        return
+    if what.begins_with("cls:"):
+        # ทดสอบภาพ: cls:<อาชีพ>:<เลเวล>[:ช่องสกิล] — มีอาชีพ + อาวุธประจำสาย + ปุ่มสกิลครบ แล้วกดสกิล
+        var a := what.split(":")
+        player.lv = int(a[2])
+        player.cls = a[1]
+        player.weapon = {"sword": "sword1", "mage": "staff1", "archer": "bow1"}[a[1]]
+        player.skills["heal"] = true
+        player.recalc_stats()
+        player.mp = player.max_mp
+        if mobile != null:
+            mobile.refresh_skills()
+        if a.size() > 3:
+            classes.use_slot(int(a[3]))
         return
     if what.begins_with("stn:"):
         # ทดสอบภาพ: stn:<ร้าน>:<ลำดับสถานี>[:enh] — ยืนข้างสถานีแล้วเปิด
@@ -2237,10 +2264,10 @@ func _unhandled_input(e: InputEvent) -> void:
             KEY_F6: time_of_day = 0.48
             KEY_F7: time_of_day = 0.72
             KEY_F8: time_of_day = 0.95
-            KEY_1, KEY_2, KEY_3:
-                var sid: String = Items.SKILL_ORDER[e.keycode - KEY_1]
-                var ms: String = player.use_skill(sid)
-                if ms != "" and ms != Items.SKILL[sid].name: field.say_msg(ms)
+            KEY_1, KEY_2, KEY_3, KEY_4:
+                var si: int = e.keycode - KEY_1
+                var ms: String = classes.use_slot(si)
+                if ms != "" and ms != classes.slot_name(player, si): field.say_msg(ms)
             KEY_F: time_scale = 20.0 if time_scale < 20.0 else 1.0
             KEY_G: _set_quality(1 if quality == 2 else 2)
             KEY_J, KEY_SPACE: player.attack()

@@ -256,3 +256,10 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - player.gd: weapon/weapon_tier เป็น property (อ่าน/เขียนจาก eq.weapon) ให้โค้ด/เทสเก่าใช้ได้ · Items.RANGED เปลี่ยนเป็นตามชนิด (staff/bow)
 - ซ่อน gs146_opt111 / gs146_lock130 (สุ่มออปซ้ำ/ล็อคออป — เจ้าของเลิกแล้ว)
 - ทดสอบภาพ `--shot=...,stn:<ร้าน>:<ลำดับ>[:enh]`
+
+## 0.12-classes (Claude 2026-10-29)
+- เจ้าของ: "ต่อยาว ๆ เลย" → ใบงานข้อ 4 อาชีพ
+- อ้างอิง js/031-core.js: CLS 1940 · CSKILLS 1979 · openClassMenu/pickClass 2129 · CLASS_LV/NEEDW/useSkill 2223 · PASSIVE 2253 · calcBonus/critCh
+- 3D ทำ 3 สายหลักก่อน (fix25 มีอีก 8 สาย — ยังไม่ทำ) · ท่าสกิลใช้ field.aoe/shoot ที่ขยายให้มีจุดศูนย์กลาง/มึนงง/ทะลุ/ระเบิด · ผลต่อเนื่อง (พายุดาบ วงไฟ อุกกาบาต ฝนธนู) อยู่ใน skills.gd `pers`
+- มอนไม่กระเด็นตามกฎเจ้าของ (2D มี kb ในสกิล) · มึนงงบอสโดน 35% ตาม 2D
+- ทดสอบภาพ `--shot=...,cls:<อาชีพ>:<เลเวล>[:ช่อง]`

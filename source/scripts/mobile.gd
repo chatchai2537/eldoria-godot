@@ -21,9 +21,9 @@ var joy_hint: Label
 var atk: Panel
 var dash: Panel
 var rot_hint: Label
-var skill_btns := {}   # สกิลที่เรียนแล้ว: ปุ่มวงรอบปุ่มตี (ผังเดียวกับเกม 2D fix30/fix41)
-const SKILL_LABEL := {"whirl": "วงพายุ", "fireball": "ลูกไฟ", "heal": "เยียวยา"}
-const SKILL_COLOR := {"whirl": Color(0.15, 0.3, 0.45, 0.92), "fireball": Color(0.5, 0.18, 0.08, 0.92), "heal": Color(0.1, 0.4, 0.2, 0.92)}
+var skill_btns := {}   # ปุ่มสกิล 4 ช่อง วงรอบปุ่มตี (ผังเดียวกับเกม 2D fix30/fix41) · ช่อง 3 = เยียวยา
+const SLOT_COLOR := [Color(0.15, 0.3, 0.45, 0.92), Color(0.5, 0.18, 0.08, 0.92), Color(0.35, 0.2, 0.45, 0.92), Color(0.1, 0.4, 0.2, 0.92)]
+var _sk_tick := 0.0
 
 func setup(t) -> void:
     town = t
@@ -47,11 +47,12 @@ func setup(t) -> void:
     dash = _button("กลิ้ง", 52, Color(0.08, 0.18, 0.20, 0.93), 18)
     root.add_child(atk)
     root.add_child(dash)
-    for id in SKILL_LABEL.keys():
-        var b := _button(SKILL_LABEL[id], 54, SKILL_COLOR[id], 13)
+    for i in 4:
+        var b := _button("", 54, SLOT_COLOR[i], 12)
         b.visible = false
+        (b.get_child(0) as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         root.add_child(b)
-        skill_btns[id] = b
+        skill_btns[i] = b
     refresh_skills()
     _layout()
     get_viewport().size_changed.connect(_layout)
@@ -107,14 +108,28 @@ func _layout() -> void:
     joy_hint.position = Vector2(26, vs.y - 146)
     # วงรอบปุ่มตี: ซ้ายบน · บน · ซ้าย (คล้าย sk1-sk3 ของเกม 2D)
     var c := atk.position + atk.size * 0.5
-    var offs := {"whirl": Vector2(-78, -48), "fireball": Vector2(-22, -92), "heal": Vector2(-130, -6)}
+    var offs := {0: Vector2(-98, -58), 1: Vector2(-40, -106), 2: Vector2(-152, -14), 3: Vector2(22, -132)}
     for id in skill_btns.keys():
         var b: Panel = skill_btns[id]
         b.position = c + offs[id] - b.size * 0.5
 
 func refresh_skills() -> void:
-    for id in skill_btns.keys():
-        skill_btns[id].visible = town.player != null and town.player.skills.has(id)
+    if town.player == null or town.classes == null:
+        return
+    for i in skill_btns.keys():
+        var nm: String = town.classes.slot_name(town.player, i)
+        var b: Panel = skill_btns[i]
+        b.visible = nm != ""
+        var c: float = town.classes.slot_cd(town.player, i)
+        var l := b.get_child(0) as Label
+        l.text = nm if c <= 0.0 else "%s\n%d" % [nm, int(ceil(c))]
+        b.modulate = Color(1, 1, 1, 1.0 if c <= 0.0 else 0.6)
+
+func _process(delta: float) -> void:
+    _sk_tick += delta
+    if _sk_tick >= 0.2:
+        _sk_tick = 0.0
+        refresh_skills()
 
 func _in(p: Panel, pos: Vector2, pad: float = 10.0) -> bool:
     var c := p.position + p.size * 0.5
@@ -149,9 +164,10 @@ func _input(e: InputEvent) -> void:
                 var sb: Panel = skill_btns[sid]
                 if sb.visible and _in(sb, pos, 4.0):
                     _press(sb)
-                    var m: String = town.player.use_skill(sid)
-                    if m != "" and m != town.Items.SKILL[sid].name:
+                    var m: String = town.classes.use_slot(sid)
+                    if m != "" and m != town.classes.slot_name(town.player, sid):
                         town.field.say_msg(m)
+                    refresh_skills()
                     get_viewport().set_input_as_handled()
                     return
             if _in(dash, pos):

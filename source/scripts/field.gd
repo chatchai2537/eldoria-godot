@@ -659,7 +659,9 @@ func melee(p, spin: bool, id: int) -> void:
             hit_slime(s, p, 1.0)
 
 ## ดาเมจหนึ่งครั้ง (ใช้ร่วม: ฟัน · สกิล · ยิงไกล)
-func hit_slime(s, p, mult: float) -> void:
+func hit_slime(s, p, mult: float, stun: float = 0.0) -> void:
+    if stun > 0.0 and "stun_t" in s:
+        s.stun_t = max(float(s.stun_t), stun * (0.35 if s.get("boss") == true else 1.0))
     var cr: bool = randf() < p.crit_rate()
     var dm: int = max(1, int(round(p.atk() * mult * randf_range(0.9, 1.1) * (1.8 if cr else 1.0))))
     s.take_hit(dm, p.position)
@@ -671,21 +673,22 @@ func hit_slime(s, p, mult: float) -> void:
             _killed(s)
 
 ## สกิลฟันรอบตัว
-func aoe(p, radius: float, mult: float) -> int:
+func aoe(p, radius: float, mult: float, at: Vector3 = Vector3.INF, stun: float = 0.0, col: Color = Color(0.7, 0.9, 1.0)) -> int:
     var n := 0
+    var c: Vector3 = p.position if at == Vector3.INF else at
     for s in _targets():
         if not is_instance_valid(s) or s.dead:
             continue
-        if Vector2(s.position.x - p.position.x, s.position.z - p.position.z).length() < radius + s.radius * 0.6:
-            hit_slime(s, p, mult)
+        if Vector2(s.position.x - c.x, s.position.z - c.z).length() < radius + s.radius * 0.6:
+            hit_slime(s, p, mult, stun)
             n += 1
     var ring := MeshInstance3D.new()
     var tm := TorusMesh.new()
     tm.inner_radius = radius * 0.85
     tm.outer_radius = radius
     ring.mesh = tm
-    ring.material_override = town.M(Color(0.7, 0.9, 1.0), 0.3, 2.0)
-    ring.position = p.position + Vector3(0, 0.3, 0)
+    ring.material_override = town.M(col, 0.3, 2.0)
+    ring.position = c + Vector3(0, 0.3, 0)
     ring.scale = Vector3(1, 0.15, 1)
     add_child(ring)
     projectiles.append({"n": ring, "fx": true, "t": 0.0})
@@ -693,8 +696,9 @@ func aoe(p, radius: float, mult: float) -> int:
 
 ## ยิงไปข้างหน้า (ลูกไฟ · ลูกเวทคทา · ลูกธนู) ชนสไลม์ตัวแรก
 var projectiles: Array = []
+## spec: range speed kind · ตัวเลือก: yaw (องศาเบี่ยง rad) · pierce (ทะลุ) · boom (รัศมีระเบิด) · stun · col
 func shoot(p, spec: Dictionary, mult: float) -> void:
-    var dir := Vector3(sin(p.heading), 0, cos(p.heading))
+    var dir := Vector3(sin(p.heading), 0, cos(p.heading)).rotated(Vector3.UP, float(spec.get("yaw", 0.0)))
     var m := MeshInstance3D.new()
     var kind := str(spec.get("kind", "bolt"))
     if kind == "arrow":
@@ -704,16 +708,19 @@ func shoot(p, spec: Dictionary, mult: float) -> void:
         cm.height = 0.9
         m.mesh = cm
         m.material_override = town.M(Color(0.85, 0.75, 0.55), 0.6)
-        m.rotation = Vector3(PI / 2.0, p.heading, 0)
+        m.rotation = Vector3(PI / 2.0, p.heading + float(spec.get("yaw", 0.0)), 0)
     else:
         var sm := SphereMesh.new()
         sm.radius = 0.28 if kind == "fire" else 0.2
         sm.height = sm.radius * 2.0
         m.mesh = sm
-        m.material_override = town.M(Color(1.0, 0.45, 0.1) if kind == "fire" else Color(0.55, 0.75, 1.0), 0.3, 3.0)
+        if spec.has("col"):
+            sm.radius = float(spec.get("size", 0.25))
+            sm.height = sm.radius * 2.0
+        m.material_override = town.M(spec.get("col", Color(1.0, 0.45, 0.1) if kind == "fire" else Color(0.55, 0.75, 1.0)), 0.3, 3.0)
     m.position = p.position + Vector3(0, 1.1, 0) + dir * 0.8
     add_child(m)
-    projectiles.append({"n": m, "dir": dir, "speed": float(spec.speed), "left": float(spec.range), "mult": mult, "p": p})
+    projectiles.append({"n": m, "dir": dir, "speed": float(spec.speed), "left": float(spec.range), "mult": mult, "p": p, "pierce": spec.get("pierce", false), "boom": float(spec.get("boom", 0.0)), "stun": float(spec.get("stun", 0.0)), "hit": {}, "col": spec.get("col", Color(1.0, 0.6, 0.2))})
 
 func _update_projectiles(delta: float) -> void:
     for i in range(projectiles.size() - 1, -1, -1):
@@ -731,12 +738,21 @@ func _update_projectiles(delta: float) -> void:
         q.left -= step
         var hit = null
         for s in _targets():
-            if is_instance_valid(s) and not s.dead and Vector2(s.position.x - n.position.x, s.position.z - n.position.z).length() < s.radius + 0.35:
+            if is_instance_valid(s) and not s.dead and not q.hit.has(s.get_instance_id()) and Vector2(s.position.x - n.position.x, s.position.z - n.position.z).length() < s.radius + 0.35:
                 hit = s
                 break
         if hit != null:
-            hit_slime(hit, q.p, q.mult)
-        if hit != null or q.left <= 0.0:
+            q.hit[hit.get_instance_id()] = true
+            if q.boom > 0.0:
+                aoe(q.p, q.boom, q.mult, n.position, q.stun, q.col)
+            else:
+                hit_slime(hit, q.p, q.mult, q.stun)
+            if q.pierce:
+                hit = null
+        var wall: bool = town.mine != null and town.mine.cur >= 0 and town.mine.blocked(n.position.x, n.position.z)
+        if wall and q.boom > 0.0 and hit == null:
+            aoe(q.p, q.boom, q.mult, n.position, q.stun, q.col)
+        if hit != null or q.left <= 0.0 or wall:
             n.queue_free()
             projectiles.remove_at(i)
 

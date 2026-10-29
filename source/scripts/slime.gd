@@ -30,6 +30,7 @@ var cool := 0.0
 var last_atk := -1
 var dead := false
 var die_t := 0.0
+var stun_t := 0.0   # มึนงงจากสกิล
 
 var body: MeshInstance3D
 var mat: ShaderMaterial
@@ -154,6 +155,13 @@ func _process(delta: float) -> void:
         if die_t <= 0.0:
             queue_free()
         return
+    if stun_t > 0.0:
+        stun_t -= delta
+        hurt = max(0.0, hurt - delta)
+        mat.set_shader_parameter("hurt", hurt / 0.25)
+        vis.rotation.z = sin(stun_t * 25.0) * 0.1
+        return
+    vis.rotation.z = 0.0
     var p: Node3D = field.town.player
     var prev := fmod(t, 0.9)
     t += delta
