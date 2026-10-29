@@ -203,6 +203,8 @@ func interact() -> void:
         bubble(str(lines[i % lines.size()]), 3.2)
     if id == "hall":
         town.story.king_talk()
+    elif id == "guild":
+        town.guild.open()
     elif id == "bank":
         town.open_bank()
     elif (sh.get("buy", []) as Array).size() > 0 or (sh.get("sell", []) as Array).size() > 0:

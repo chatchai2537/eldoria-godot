@@ -277,3 +277,8 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - mine.gd รองรับแผนที่ขนาดต่างกัน (d.W/d.H) · ผนังที่ห่างพื้นเกิน 2 ช่องไม่สร้าง + พื้นมืดใต้แผนที่
 - ห้องในดันอ้างด้วยเลขลำดับ (ถ้าเก็บห้องเป็น Dictionary อ้างกันไปมา Godot จะวนไม่จบตอนเทียบ/แฮช)
 - ทดสอบภาพ `--shot=...,dg:<ชั้น>[:boss]`
+
+## 0.15-guild (Claude 2026-10-29)
+- บอร์ดเควสกิลด์ตาม 031-core.js (QST QT qGen qRefresh questEv openGuild qTake qClaim) · ไม่รวมเควสตกปลา
+- เวลาเปลี่ยนบอร์ดใช้นาฬิกาเครื่อง (เกม 3D ยังออฟไลน์ — 2D ใช้ srvNow)
+- บทเรียน: ตัวแปร `var x := i` ใน for ที่วนจากค่า Variant → Parse Error ทั้งไฟล์ แล้วเทสค้างจนหมดเวลา 600 วิ — ใช้ `var x: int = i`

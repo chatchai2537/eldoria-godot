@@ -469,6 +469,7 @@ func enter(zi: int) -> void:
     chest = {}
     if is_dg(zi):
         _dg_packs(zi - DG_BASE)
+        town.guild.event("floor", zi - DG_BASE)
     else:
         var n0 := 10 if town.is_mobile else 16
         for k in n0:
@@ -574,6 +575,7 @@ const JUNK := {"beetle": "shell", "bat": "wing", "golem": "core", "wolf": "pelt"
 
 func mob_killed(m) -> void:
     var p = town.player
+    town.guild.event("boss" if m.boss else "kill", m.f)
     var coin := int(round((3.0 + m.lv * 1.2) * (3.0 if m.elite else 1.0) * (30.0 if m.boss else 1.0)))
     coin = int(round(coin * 0.45))
     p.coins += coin
@@ -685,6 +687,7 @@ func try_mine(p) -> bool:
         for k in n:
             _drop_item(str(K.drop), w)
         town.field.say_msg("ขุด%sแตก! ได้%s +%d" % [K.n, Items.item_name(str(K.drop)), n])
+        town.guild.event("mine")
         p.gain_xp(int(K.xp) * (1 + cur))
     else:
         town.field.say_msg("ขุด%s... ความคืบหน้า %d%%" % [K.n, int(round((1.0 - float(ore.hp) / ore.max) * 100.0))])

@@ -931,6 +931,50 @@ func _run() -> void:
     DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save6.json"))
     p.save_enabled = false
 
+    # ---------- กิลด์: บอร์ดเควส ----------
+    var gd: Node = world.guild
+    gd.load_state({})
+    world.story.reset()
+    p.lv = 5
+    world.rooms.enter("guild")
+    var gk: Node3D = world.rooms.keepers["guild"]
+    p.position = Vector3(gk.position.x, 0, gk.position.z + 2.2)
+    p.attack()
+    check(world.cur_shop == "quest" and gd.Q.offer.size() == 4, "กิลด์: คุยกับเจ้าหน้าที่แล้วเปิดบอร์ดเควส 4 เควส")
+    world.close_shop()
+    world.rooms.leave()
+    gd.Q.offer[0] = {"t": "kill", "k": "slime", "d": "กำจัดสไลม์ 2 ตัว", "n": 2, "c": 0, "coin": 60, "xp": 10, "es": 1}
+    gd.Q.offer[1] = {"t": "item", "k": "gel", "d": "ส่งเจลสไลม์ 3 ชิ้น", "n": 3, "c": 0, "coin": 60, "xp": 10, "es": 0}
+    gd.Q.offer[2] = {"t": "mine", "k": "", "d": "ขุดแร่ 1 ก้อน", "n": 1, "c": 0, "coin": 60, "xp": 10, "es": 0}
+    gd.take(0)
+    gd.take(0)
+    gd.take(0)
+    check(gd.take(0).find("สูงสุด") >= 0 and gd.Q.act.size() == 3, "กิลด์: รับเควสได้สูงสุด 3")
+    gd.event("kill", "slime")
+    gd.event("kill", "bat")
+    check(int(gd.Q.act[0].c) == 1 and not gd.is_ok(gd.Q.act[0]), "เควสฆ่า: นับเฉพาะมอนที่ตรง")
+    gd.event("kill", "slime")
+    var cq: int = p.coins
+    var es0q: int = p.inv_count("estone")
+    gd.claim(0)
+    check(p.coins == cq + 60 and p.inv_count("estone") == es0q + 1 and int(gd.Q.done) == 1 and int(world.story.S.guild) == 1, "เควส: รับรางวัล เหรียญ+หินเสริมพลัง + นับเนื้อเรื่องบท 6")
+    p.gel = 2
+    check(gd.claim(0).find("ยังไม่") >= 0, "เควสส่งของ: ของไม่ครบรับรางวัลไม่ได้")
+    p.gel = 5
+    gd.claim(0)
+    check(p.gel == 2 and int(gd.Q.done) == 2, "เควสส่งของ: ส่งแล้วของหายจากกระเป๋า")
+    gd.event("mine")
+    check(gd.is_ok(gd.Q.act[0]), "เควสขุดแร่: ขุดแตกแล้วนับ")
+    p.save_enabled = true
+    p.save_path = "user://test_save7.json"
+    p.save_game()
+    gd.load_state({})
+    p.load_game()
+    check(int(gd.Q.done) == 2 and gd.Q.act.size() == 1, "เซฟ/โหลด: เควสกิลด์")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save7.json"))
+    p.save_enabled = false
+    world.story.reset()
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

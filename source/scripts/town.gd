@@ -78,6 +78,7 @@ var mine: Node3D
 var craft: Node
 var classes: Node
 var story: Node
+var guild: Node
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -182,12 +183,17 @@ func _ready() -> void:
     add_child(story)
     story.setup(self)
     story.build_ui(ui_shop.get_parent())
+    guild = Node.new()
+    guild.set_script(load("res://scripts/guild.gd"))
+    add_child(guild)
+    guild.setup(self)
     classes = Node.new()
     classes.set_script(load("res://scripts/skills.gd"))
     add_child(classes)
     classes.setup(self)
     # ผู้เล่นโหลดเซฟก่อนสร้างระบบเนื้อเรื่อง/อาชีพ → ใส่ค่าที่โหลดไว้ตอนนี้
     story.load_state(player.pending_story)
+    guild.load_state(player.pending_guild)
     story.update_tracker()
     player.recalc_stats()
     if player.loaded_hp > 0.0:
