@@ -1641,5 +1641,21 @@ func _run() -> void:
     check(ic_cf >= 5, "ไอคอน: เตาหลอมแสดงรูปแท่งโลหะ (%d)" % ic_cf)
     world.close_shop()
 
+    # ภาพธรรมชาติ: ตรวจต้นไม้ที่ผูกกับฉากจริงและ mesh ที่ใช้ล้ม
+    var nature_species := {}
+    for tree_info in f.trees:
+        nature_species[int(tree_info.get("species", -1))] = true
+    check(nature_species.has(0) and nature_species.has(1) and nature_species.has(2) and not nature_species.has(-1), "ธรรมชาติ: ต้นไม้ในทุ่งมีโอ๊ก สน เบิร์ช ครบสามแบบ")
+    var tree_info: Dictionary = f.trees[0]
+    var falling_visual: Node3D = f._falling_tree(tree_info)
+    check(falling_visual.get_child(0).mesh == tree_info.parts[0][0].mesh, "ธรรมชาติ: ต้นล้มใช้รูปทรงเดียวกับต้นที่ยืน")
+    falling_visual.free()
+    var kit = load("res://scripts/nature_kit.gd")
+    for species in 3:
+        var pair: Array = kit.tree(species)
+        check(pair[0] == kit.tree(species)[0] and pair[1] == kit.tree(species)[1], "ธรรมชาติ: แชร์ mesh ต้นไม้ ไม่สร้างซ้ำทุกต้น")
+        check((pair[0].get_faces().size() + pair[1].get_faces().size()) / 3 <= 5000, "ธรรมชาติ: งบสามเหลี่ยมต่อต้นไม่เกิน 5000")
+    check(kit.rock() == kit.rock(), "ธรรมชาติ: แชร์ mesh แร่ระหว่างก้อน")
+
     print("ALL checks=%d failures=%d" % [checks, failures])
     quit(1 if failures > 0 else 0)

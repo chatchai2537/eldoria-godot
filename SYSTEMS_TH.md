@@ -60,3 +60,5 @@
 | อุปกรณ์บนตัว/ขายอุปกรณ์ | player.gd `update_gear_visual` `TIER_COL` · model.gd `show_item` `borrow_item` `_item_nodes` · town.gd `sell_gear` · items.gd `gear_price` `GP` `GK` | ธนูใช้หน้าไม้ของ KayKit (ไม่มีโมเดลธนู) · ขายได้เฉพาะของในกระเป๋า (ไม่รวมที่สวม) | "ถือคทา" "สวมหมวก" "ร้านอาวุธรับซื้อ" |
 | แผนที่เล็ก | minimap.gd `_overworld` `_grid` `_use` `_to_px` `_draw` · town.gd `minimap` | 1 พิกเซล = 1 ช่อง (2 หน่วย) · ภาพสร้างครั้งเดียวต่อพื้นที่ · วาดจุด 5 ครั้ง/วิ | "แผนที่เล็ก" |
 | ตกปลา | fishing.gd `FISHES` `try_start` `water_ahead` `pick_fish` `press` `catch` `stop` `_process` (bob/สาย/แถบดึง) · player.gd `attack` · items.gd rod/rod2/ปลา | js/031-core.js 2148-2185 · ขยับ 0.4 หน่วย = เลิก · ทุ่นกระตุก 0.9 วิ · ดึงไม่เกิน 8 วิ | "ตกปลา" |
+
+| ธรรมชาติ 3D รุ่นภาพใหม่ | nature_kit.gd `tree` `bark_material` `foliage_material` `rock` `ore_material` · field.gd `_build_trees` `_falling_tree` · mine.gd `_build` | 3 ชนิดต้นไม้ / สายแร่ในผิวหิน 6 แบบ; mesh cache; MultiMesh ต่อพื้นที่/ชนิด; ของ/HP/การเกิดใหม่เดิม | "ธรรมชาติ:" |

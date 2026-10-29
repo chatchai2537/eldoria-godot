@@ -1,4 +1,5 @@
 extends Node3D
+const NatureKit = preload("res://scripts/nature_kit.gd")
 ## เหมือง 5 แห่งผ่านประตูมิติ (js/031-core.js ZONES · genZone · zMine · enterZone · mobKill)
 ## แผนที่ 62×44 ช่อง (fix ขยายจาก 46×34) · วางไกลทางตะวันออก x = 3000 + ลำดับ×200 · ช่องละ 2 หน่วย
 
@@ -333,11 +334,7 @@ func _build(zi: int) -> void:
     town.box(root, Vector3(100, WALL_H, H), o + Vector3(-50, WALL_H / 2, H / 2), om)
     town.box(root, Vector3(100, WALL_H, H), o + Vector3(W + 50, WALL_H / 2, H / 2), om)
     # ก้อนแร่: MultiMesh ต่อชนิด (หิน + ผลึกสีแร่)
-    var rock := SphereMesh.new()
-    rock.radius = 0.85
-    rock.height = 1.3
-    rock.radial_segments = 7
-    rock.rings = 4
+    var rock := NatureKit.rock()
     var cry := CylinderMesh.new()
     cry.top_radius = 0.0
     cry.bottom_radius = 0.3
@@ -369,16 +366,17 @@ func _build(zi: int) -> void:
                 var ang := a + k * 2.1
                 var tilt := Basis(Vector3.UP, ang) * Basis(Vector3.RIGHT, 0.45)
                 var cx := Transform3D(tilt, p + Vector3(cos(ang) * 0.3, 0.85 + k * 0.05, sin(ang) * 0.3))
+                cx.basis = cx.basis.scaled(Vector3.ONE * (0.32 if kd == "diamond" else 0.001))
                 cmm.set_instance_transform(i * 3 + k, cx)
                 ore.xf.append(cx)
         var rmi := MultiMeshInstance3D.new()
         rmi.multimesh = rmm
-        rmi.material_override = town.M(Color(0.5, 0.5, 0.53).lerp(OREK[kd].c, 0.3), 0.9)
+        rmi.material_override = NatureKit.ore_material(str(kd))
         root.add_child(rmi)
         var cmi := MultiMeshInstance3D.new()
         cmi.multimesh = cmm
         var oc: Color = OREK[kd].c
-        cmi.material_override = town.M(oc, 0.25, 1.2 if kd in ["diamond", "gold", "silver"] else 0.5)
+        cmi.material_override = town.M(Color(0.72, 0.83, 0.88) if kd == "diamond" else oc, 0.2, 0.0)
         root.add_child(cmi)
         d.mm[kd] = [rmm, cmm]
     # วงบอส + วงเวททางออก

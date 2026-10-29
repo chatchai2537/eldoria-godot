@@ -3,6 +3,7 @@ extends Node3D
 ## กติกาตามเกมเดิม: สไลม์สูงสุด 16 ตัว เกิดใหม่ทุก 6 วิ · ดรอปเจล 1-2 + เหรียญ 1-3(+เลเวล/2) · EXP = 5×เลเวล
 
 const MAX_SLIMES := 16
+const NatureKit = preload("res://scripts/nature_kit.gd")
 
 var town
 var slimes: Array = []
@@ -212,20 +213,6 @@ var wood_mesh: Mesh
 var wood_mat: StandardMaterial3D
 
 func _build_trees() -> void:
-    var cm := CylinderMesh.new()
-    cm.top_radius = 0.6
-    cm.bottom_radius = 1.0
-    cm.height = 1.0
-    cm.radial_segments = 7
-    var blob := SphereMesh.new()
-    blob.radius = 1.0
-    blob.height = 2.0
-    blob.radial_segments = 12 if not town.is_mobile else 8
-    blob.rings = 7 if not town.is_mobile else 4
-    var bark := StandardMaterial3D.new()
-    bark.vertex_color_use_as_albedo = true
-    bark.roughness = 0.95
-    var leaf: Material = town._foliage(0.25)
     var q := QuadMesh.new()
     q.size = Vector2(1, 1)
     q.orientation = PlaneMesh.FACE_Y
@@ -236,7 +223,6 @@ func _build_trees() -> void:
     shm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     # รวบรวมชิ้นส่วนต่อก้อนพื้นที่ (32 หน่วย) เหมือน town._mm_chunks แต่จำตำแหน่งไว้ซ่อนตอนต้นไม้ล้ม
     var chunks := {}
-    var n_blobs := 4 if not town.is_mobile else 3
     for t in town.FD.trees:
         var tx := int(t[0])
         var ty := int(t[1])
@@ -246,28 +232,37 @@ func _build_trees() -> void:
         p.y = town.ground_y(p.x, p.z)
         var tr := {"tx": tx, "ty": ty, "sz": sz, "hp": TREE_HP[sz], "max": TREE_HP[sz], "wood": TREE_WOOD[sz], "alive": true,
             "border": tx == 0 or ty == 0 or tx == town.FW - 1 or ty == town.FH - 1, "regrow": -1.0, "parts": [], "pos": p, "sc": sc}
-        var key := Vector2i(floori(p.x / 32.0), floori(p.z / 32.0))
+        var species := (tx + ty) % 3
+        tr["species"] = species
+        var key := Vector3i(floori(p.x / 32.0), floori(p.z / 32.0), species)
         if not chunks.has(key):
-            chunks[key] = {"t": [[], []], "b": [[], []], "s": [[], []], "refs": []}
+            chunks[key] = {"t": [[], []], "b": [[], []], "s": [[], []], "refs": [], "species": species}
         var ch: Dictionary = chunks[key]
-        var hue := randf_range(0.27, 0.33)
-        var g := Color.from_hsv(hue, randf_range(0.55, 0.7), randf_range(0.42, 0.55))
-        ch.t[0].append(town._xf(p + Vector3(0, 1.2 * sc, 0), Vector3(0.28 * sc, 2.4 * sc, 0.28 * sc), randf() * TAU))
-        ch.t[1].append(Color(0.36, 0.25, 0.15))
-        ch.refs.append([tr, "t", ch.t[0].size() - 1])
-        for k in n_blobs:
-            var off := Vector3(randf_range(-0.7, 0.7), randf_range(0.0, 0.9) + (0.6 if k == 2 else 0.0), randf_range(-0.7, 0.7)) * sc
-            var r := randf_range(1.0, 1.35) * sc
-            ch.b[0].append(town._xf(p + Vector3(0, 3.0 * sc, 0) + off, Vector3(r, r * 0.88, r), randf() * TAU))
-            ch.b[1].append(g.lightened(randf_range(-0.06, 0.1)))
-            ch.refs.append([tr, "b", ch.b[0].size() - 1])
+        # Preserve the existing seeded world RNG sequence (positions, spawns, drops).
+        randf_range(0.27, 0.33)
+        randf_range(0.55, 0.7)
+        randf_range(0.42, 0.55)
+        var xf: Transform3D = town._xf(p, Vector3.ONE * sc, randf() * TAU)
+        for old_blob in (4 if not town.is_mobile else 3):
+            randf_range(-0.7, 0.7)
+            randf_range(0.0, 0.9)
+            randf_range(-0.7, 0.7)
+            randf_range(1.0, 1.35)
+            randf()
+            randf_range(-0.06, 0.1)
+        tr["visual_xf"] = xf
+        for part in ["t", "b"]:
+            ch[part][0].append(xf)
+            ch[part][1].append(Color.WHITE)
+            ch.refs.append([tr, part, ch[part][0].size() - 1])
         ch.s[0].append(town._xf(Vector3(p.x + 0.5, p.y + 0.04, p.z + 0.4), Vector3(2.6 * sc, 1, 2.6 * sc), 0.0))
         ch.s[1].append(Color(0, 0, 0, 0.32))
         ch.refs.append([tr, "s", ch.s[0].size() - 1])
         trees.append(tr)
         tree_at[ty * town.FW + tx] = tr
     for ch in chunks.values():
-        var mms := {"t": _mm_one(cm, ch.t[0], ch.t[1], bark, true), "b": _mm_one(blob, ch.b[0], ch.b[1], leaf, true), "s": _mm_one(q, ch.s[0], ch.s[1], shm, false)}
+        var kit := NatureKit.tree(int(ch.species))
+        var mms := {"t": _mm_one(kit[0], ch.t[0], ch.t[1], NatureKit.bark_material(int(ch.species)), true), "b": _mm_one(kit[1], ch.b[0], ch.b[1], NatureKit.foliage_material(), true), "s": _mm_one(q, ch.s[0], ch.s[1], shm, false)}
         for ref in ch.refs:
             var mm: MultiMesh = mms[ref[1]]
             ref[0].parts.append([mm, ref[2], mm.get_instance_transform(ref[2])])
@@ -373,24 +368,13 @@ func _falling_tree(tr: Dictionary) -> Node3D:
     var root := Node3D.new()
     root.position = tr.pos
     add_child(root)
-    var sc: float = tr.sc
-    var trunk := MeshInstance3D.new()
-    var cm := CylinderMesh.new()
-    cm.top_radius = 0.17 * sc
-    cm.bottom_radius = 0.28 * sc
-    cm.height = 2.4 * sc
-    trunk.mesh = cm
-    trunk.material_override = town.M(Color(0.36, 0.25, 0.15), 0.95)
-    trunk.position.y = 1.2 * sc
-    root.add_child(trunk)
-    var leaf := MeshInstance3D.new()
-    var sp := SphereMesh.new()
-    sp.radius = 1.3 * sc
-    sp.height = 2.3 * sc
-    leaf.mesh = sp
-    leaf.material_override = town.M(Color(0.3, 0.5, 0.2), 0.9)
-    leaf.position.y = 3.2 * sc
-    root.add_child(leaf)
+    var kit := NatureKit.tree(int(tr.get("species", 0)))
+    for i in 2:
+        var part := MeshInstance3D.new()
+        part.mesh = kit[i]
+        part.material_override = NatureKit.bark_material(int(tr.get("species", 0))) if i == 0 else NatureKit.foliage_material()
+        part.basis = tr.visual_xf.basis
+        root.add_child(part)
     return root
 
 func _update_trees(delta: float) -> void:
