@@ -1,16 +1,24 @@
 extends Node
-## อาชีพ 3 สายหลัก (js/031-core.js CLS · CSKILLS · PASSIVE · CLASS_LV · NEEDW · useSkill · pickClass)
-## เลือกที่ปรมาจารย์อาชีพ (จัตุรัส) ตั้งแต่ Lv.10 · ครั้งแรกฟรี เปลี่ยนสาย 500 เหรียญ
+## อาชีพ 4 สายหลัก + เลื่อนขั้น (0.27 · docs/PLAN_4CLASS_TH.md)
+## สายหลัก Lv.10: อัศวิน sword · นักหน้าไม้ archer · นักเวท mage · โจร rogue — แต่ละสายใช้โมเดล KayKit ของตัวเอง (MODEL)
+## เลื่อนขั้น Lv.40 (ADV): สายย่อย 2 สายต่อสายหลัก ใช้สกิลชุดเดิมของ 8 อาชีพ fix25
+## เลือกที่ปรมาจารย์อาชีพ (จัตุรัส) · ครั้งแรก/เลื่อนขั้นครั้งแรกฟรี · เปลี่ยนสาย 500 เหรียญ
 ## สกิลอาชีพปลดล็อกเองตามเลเวล (5 / 15 / 30) · ต้องถืออาวุธประจำสาย · สกิลที่ 2 กดต่อกัน 3 จังหวะภายใน 1.8 วิ
 ## เยียวยา (สกิลพื้นฐาน) ใช้ได้ทุกอาชีพ · ฟันวงพายุ/ลูกไฟ ใช้ได้เฉพาะตอนยังไม่มีอาชีพ
 
 const CLASS_LV := 10
+const ADV_LV := 40
 const CHANGE_COST := 500
+const BASES := ["sword", "archer", "mage", "rogue"]
+const ADV := {"sword": ["paladin", "dragoon"], "archer": ["sniper", "summoner"], "mage": ["cleric", "necro"], "rogue": ["ninja", "monk"]}
+## โมเดลตัวละครตามอาชีพ (model.gd FILES) · สายย่อยใช้โมเดลสายหลัก ยกเว้นอัศวินมังกร = คนเถื่อน
+const MODEL := {"none": "knight", "sword": "knight", "archer": "hooded", "mage": "mage", "rogue": "rogue", "dragoon": "barbarian"}
 const CLS := {
     "none": {"n": "ผู้ฝึกหัด", "col": Color(0.8, 0.8, 0.8), "d": "ยังไม่ได้เลือกอาชีพ"},
-    "sword": {"n": "นักดาบ", "col": Color(1.0, 0.54, 0.42), "w": "sword", "d": "ต่อสู้ระยะประชิด ถึก เลือดเยอะ · ดาเมจจาก STR", "pas": "VIT +2+Lv/3 · STR +Lv/5"},
+    "sword": {"n": "อัศวิน", "col": Color(1.0, 0.54, 0.42), "w": "sword", "d": "ดาบกับโล่ ประชิดตัว ถึก เลือดเยอะ · ดาเมจจาก STR", "pas": "VIT +2+Lv/3 · STR +Lv/5"},
     "mage": {"n": "นักเวท", "col": Color(0.7, 0.55, 1.0), "w": "staff", "d": "ยิงเวทระยะไกล สกิลวงกว้างรุนแรง · ดาเมจจาก INT · มานาฟื้นเร็ว", "pas": "INT +4+Lv/2 · มานาฟื้นเร็ว ×2.5"},
-    "archer": {"n": "นักธนู", "col": Color(0.49, 1.0, 0.54), "w": "bow", "d": "ยิงธนูไกลและเร็ว คริติคอลสูง · ดาเมจจาก AGI", "pas": "AGI +3+Lv/3 · คริ +10%"},
+    "archer": {"n": "นักหน้าไม้", "col": Color(0.49, 1.0, 0.54), "w": "bow", "d": "ยิงหน้าไม้ไกลและเร็ว คริติคอลสูง · ดาเมจจาก AGI", "pas": "AGI +3+Lv/3 · คริ +10%"},
+    "rogue": {"n": "โจร", "col": Color("#c9a0ff"), "w": "sword", "d": "มีดคู่ ไม่มีโล่ คล่องแคล่ว ตีรัว · ดาเมจจาก STR+AGI", "pas": "STR +1+Lv/5 · AGI +2+Lv/4 · คริ +6%"},
     # 8 อาชีพเพิ่ม (js/056-fix25.js NC25)
     "ninja": {"n": "นินจา", "col": Color("#8a9aff"), "w": "sword", "d": "เร็ว ลอบสังหาร คริติคอลสูง วาร์ปไปหลังศัตรู · ดาเมจจาก AGI+STR", "pas": "AGI +3+Lv/3 · คริ +12% · เดินเร็ว +15%"},
     "sniper": {"n": "สไนเปอร์", "col": Color("#ffd23a"), "w": "bow", "d": "ยิงไกลที่สุดในเกม นัดเดียวแรงมาก คริแรง · ดาเมจจาก AGI", "pas": "AGI +4+Lv/3 · คริ +8% · ดาเมจคริ +60%"},
@@ -19,11 +27,15 @@ const CLS := {
     "necro": {"n": "เนโครแมนเซอร์", "col": Color("#7affb0"), "w": "staff", "d": "ปลุกโครงกระดูกเป็นกองทัพ สาปศัตรู ดูดเลือด · ดาเมจจาก INT", "pas": "INT +4+Lv/3 · ดูดเลือด 4% ของดาเมจ"},
     "monk": {"n": "มังค์", "col": Color("#ffb46a"), "w": "sword", "d": "หมัดมวยวัดตีเร็วต่อเนื่อง คอมโบรัว · ดาเมจจาก STR+AGI", "pas": "STR +2+Lv/4 · AGI +2+Lv/4 · ตีเร็วขึ้น 25%"},
     "dragoon": {"n": "อัศวินมังกร", "col": Color("#ff6a5a"), "w": "sword", "d": "ทวนยาวระยะไกล กระโดดแทงจากฟ้า ลมหายใจมังกร · ดาเมจจาก STR", "pas": "STR +3+Lv/3 · VIT +Lv/6 · ระยะฟันยาวขึ้น"},
-    "summoner": {"n": "ผู้อัญเชิญสัตว์", "col": Color("#9adf6a"), "w": "staff", "d": "เรียกหมาป่า หมี อินทรี มาสู้แทน · ดาเมจจาก INT", "pas": "INT +3+Lv/3 · สัตว์อัญเชิญแรงขึ้น 30%"},
+    "summoner": {"n": "พรานอสูร", "col": Color("#9adf6a"), "w": "bow", "d": "พรานหน้าไม้ เรียกหมาป่า หมี อินทรี มาสู้แทน · ดาเมจจาก AGI", "pas": "AGI +3+Lv/3 · สัตว์อัญเชิญแรงขึ้น 30%"},
 }
-const CLASS_ORDER := ["sword", "mage", "archer", "ninja", "sniper", "paladin", "cleric", "necro", "monk", "dragoon", "summoner"]
+const CLASS_ORDER := ["sword", "archer", "mage", "rogue", "paladin", "dragoon", "sniper", "summoner", "cleric", "necro", "ninja", "monk"]
 const WNAME := {"sword": "ดาบ", "staff": "คทา", "bow": "ธนู"}
 const SK := {
+    "rogue": [
+        {"n": "มีดพิษคู่", "lv": 5, "mp": 12, "cd": 5.0, "d": "แทงมีดคู่ด้านหน้า 2 ครั้ง ครั้งละ ×1.2"},
+        {"n": "ใบมีดสามจังหวะ", "lv": 15, "mp": [8, 10, 16], "cd": 9.0, "steps": 3, "d": "① พุ่งแทง ×1.5 → ② ฟันไขว้รอบตัว ×1.5 → ③ ปามีด 3 เล่มทะลุ ×2.2 + มึนงง"},
+        {"n": "พายุมีดบิน", "lv": 30, "mp": 40, "cd": 22.0, "d": "ปามีด 12 เล่มรอบตัว 2 ระลอก ครั้งละ ×1.2 · หลบได้ 0.8 วิ"}],
     "sword": [
         {"n": "กระทืบปฐพี", "lv": 5, "mp": 15, "cd": 7.0, "d": "กระทืบพื้น คลื่นกระแทกรอบตัว ×1.8 + มึนงง 1.6 วิ"},
         {"n": "ดาบสามจังหวะ", "lv": 15, "mp": [8, 10, 16], "cd": 9.0, "steps": 3, "d": "① พุ่งฟัน ×1.4 → ② ฟันเสย ×1.6 → ③ คลื่นดาบพุ่งไกล ×2.4 (กดซ้ำภายใน 1.8 วิ)"},
@@ -70,6 +82,7 @@ const SK := {
         {"n": "ราชสีห์วิญญาณ", "lv": 30, "mp": 50, "cd": 30.0, "d": "อัญเชิญราชสีห์วิญญาณทอง 25 วิ + คลื่นคำราม ×2.0"}],
 }
 const PASSIVE := {
+    "rogue": [{"lv": 10, "n": "มือไว", "d": "AGI +4", "st": {"agi": 4}}, {"lv": 20, "n": "จุดอ่อน", "d": "คริติคอล +5%", "crit": 0.05}, {"lv": 35, "n": "เงาเร้น", "d": "AGI +8 · STR +4", "st": {"agi": 8, "str": 4}}, {"lv": 50, "n": "มีดเทวดา", "d": "STR +10 · คริ +6%", "st": {"str": 10}, "crit": 0.06}],
     "none": [{"lv": 5, "n": "ผู้ฝึกหัดอดทน", "d": "END +2", "st": {"end": 2}}],
     "sword": [{"lv": 10, "n": "จิตวิญญาณนักรบ", "d": "STR +3", "st": {"str": 3}}, {"lv": 20, "n": "ผิวเหล็ก", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "สายเลือดนักรบ", "d": "ฟื้นเลือด 1%/วิ", "regen": 0.01}, {"lv": 50, "n": "โทสะ", "d": "STR +12", "st": {"str": 12}}],
     "mage": [{"lv": 10, "n": "สมาธิ", "d": "INT +4", "st": {"int": 4}}, {"lv": 20, "n": "กระแสมานา", "d": "มานาฟื้นเร็วขึ้น 50%", "mpr": 0.5}, {"lv": 35, "n": "จิตแกร่ง", "d": "INT +10 · VIT +4", "st": {"int": 10, "vit": 4}}, {"lv": 50, "n": "อาร์คเมจ", "d": "INT +15", "st": {"int": 15}}],
@@ -81,7 +94,7 @@ const PASSIVE := {
     "necro": [{"lv": 10, "n": "กลิ่นอายความตาย", "d": "INT +5", "st": {"int": 5}}, {"lv": 20, "n": "กระดูกแกร่ง", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "ดูดวิญญาณ", "d": "INT +12", "st": {"int": 12}}, {"lv": 50, "n": "จ้าวกระดูก", "d": "INT +14 · VIT +6", "st": {"int": 14, "vit": 6}}, {"lv": 80, "n": "ราชันมรณะ", "d": "INT +24", "st": {"int": 24}}, {"lv": 120, "n": "อมตะ", "d": "INT +30 · VIT +16", "st": {"int": 30, "vit": 16}}],
     "monk": [{"lv": 10, "n": "หมัดเหล็ก", "d": "STR +4 · AGI +2", "st": {"str": 4, "agi": 2}}, {"lv": 20, "n": "ลมปราณ", "d": "ฟื้นเลือด 0.8%/วิ", "regen": 0.008}, {"lv": 35, "n": "มวยวัด", "d": "STR +8 · AGI +8", "st": {"str": 8, "agi": 8}}, {"lv": 50, "n": "จิตไร้ขอบเขต", "d": "คริติคอล +6%", "crit": 0.06}, {"lv": 80, "n": "ปรมาจารย์", "d": "STR +16 · AGI +14", "st": {"str": 16, "agi": 14}}, {"lv": 120, "n": "อรหันต์", "d": "STR +24 · AGI +20 · VIT +10", "st": {"str": 24, "agi": 20, "vit": 10}}],
     "dragoon": [{"lv": 10, "n": "เลือดมังกร", "d": "STR +5", "st": {"str": 5}}, {"lv": 20, "n": "เกล็ดมังกร", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "ทวนเพลิง", "d": "STR +12", "st": {"str": 12}}, {"lv": 50, "n": "วิญญาณมังกร", "d": "STR +12 · VIT +8", "st": {"str": 12, "vit": 8}}, {"lv": 80, "n": "จ้าวนภา", "d": "STR +24", "st": {"str": 24}}, {"lv": 120, "n": "ราชันมังกร", "d": "STR +30 · VIT +18", "st": {"str": 30, "vit": 18}}],
-    "summoner": [{"lv": 10, "n": "สหายป่า", "d": "INT +5", "st": {"int": 5}}, {"lv": 20, "n": "ภาษาสัตว์", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "จ้าวฝูง", "d": "INT +10 · AGI +6", "st": {"int": 10, "agi": 6}}, {"lv": 50, "n": "วิญญาณป่า", "d": "INT +14", "st": {"int": 14}}, {"lv": 80, "n": "ผู้นำเผ่า", "d": "INT +22 · VIT +10", "st": {"int": 22, "vit": 10}}, {"lv": 120, "n": "จ้าวสรรพสัตว์", "d": "INT +30 · VIT +16", "st": {"int": 30, "vit": 16}}],
+    "summoner": [{"lv": 10, "n": "สหายป่า", "d": "AGI +5", "st": {"agi": 5}}, {"lv": 20, "n": "ภาษาสัตว์", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "จ้าวฝูง", "d": "AGI +10 · VIT +6", "st": {"agi": 10, "vit": 6}}, {"lv": 50, "n": "วิญญาณป่า", "d": "AGI +14", "st": {"agi": 14}}, {"lv": 80, "n": "ผู้นำเผ่า", "d": "AGI +22 · VIT +10", "st": {"agi": 22, "vit": 10}}, {"lv": 120, "n": "จ้าวสรรพสัตว์", "d": "AGI +30 · VIT +16", "st": {"agi": 30, "vit": 16}}],
 }
 
 var town
@@ -147,15 +160,20 @@ func stat_bonus(p, k: String) -> int:
             elif k == "vit":
                 b += L / 6
         "summoner":
-            if k == "int":
+            if k == "agi":
                 b += 3 + L / 3
+        "rogue":
+            if k == "agi":
+                b += 2 + L / 4
+            elif k == "str":
+                b += 1 + L / 5
     for ps in passives_on(p):
         if ps.has("st"):
             b += int(ps.st.get(k, 0))
     return b
 
 func crit_bonus(p) -> float:
-    var c: float = {"archer": 0.1, "ninja": 0.12, "sniper": 0.08}.get(p.cls, 0.0)
+    var c: float = {"archer": 0.1, "ninja": 0.12, "sniper": 0.08, "rogue": 0.06}.get(p.cls, 0.0)
     for ps in passives_on(p):
         c += float(ps.get("crit", 0.0))
     return c
@@ -203,6 +221,8 @@ func on_level(p, l0: int) -> void:
     var msg := ""
     if l0 < CLASS_LV and p.lv >= CLASS_LV and p.cls == "none":
         msg = "Lv.%d แล้ว! ไปเลือกอาชีพกับปรมาจารย์อาชีพที่จัตุรัสได้เลย" % CLASS_LV
+    if l0 < ADV_LV and p.lv >= ADV_LV and BASES.has(p.cls):
+        msg = "Lv.%d แล้ว! ไปเลื่อนขั้นอาชีพกับปรมาจารย์อาชีพได้เลย" % ADV_LV
     if p.cls != "none":
         for s in SK[p.cls]:
             if l0 < int(s.lv) and p.lv >= int(s.lv):
@@ -216,15 +236,35 @@ func on_level(p, l0: int) -> void:
         town.mobile.refresh_skills()
 
 # ---------- เลือกอาชีพ ----------
+## สายหลักของอาชีพ k (สายย่อย → สายหลัก)
+func base_of(k: String) -> String:
+    for b in ADV.keys():
+        if (ADV[b] as Array).has(k):
+            return b
+    return k
+
+func model_of(k: String) -> String:
+    return str(MODEL.get(k, MODEL.get(base_of(k), "knight")))
+
+## เลือกสายหลัก (Lv.10) หรือเลื่อนขั้นเป็นสายย่อย (Lv.40 ต้องเป็นสายหลักเดียวกัน)
 func pick(k: String) -> String:
     var p = town.player
     if not CLS.has(k) or k == "none":
         return ""
-    if p.lv < CLASS_LV:
-        return "เลือกอาชีพได้ตั้งแต่ Lv.%d — ไปฟาร์มเก็บเลเวลก่อนนะ" % CLASS_LV
     if p.cls == k:
         return "เป็น%sอยู่แล้ว" % CLS[k].n
-    var cost := 0 if p.cls == "none" else CHANGE_COST
+    var adv: bool = not BASES.has(k)
+    var cost := 0
+    if adv:
+        if base_of(p.cls) != base_of(k):
+            return "%s เป็นสายเลื่อนขั้นของ%s — ต้องเป็น%sก่อน" % [CLS[k].n, CLS[base_of(k)].n, CLS[base_of(k)].n]
+        if p.lv < ADV_LV:
+            return "เลื่อนขั้นได้ตั้งแต่ Lv.%d (ตอนนี้ Lv.%d)" % [ADV_LV, p.lv]
+        cost = 0 if BASES.has(p.cls) else CHANGE_COST
+    else:
+        if p.lv < CLASS_LV:
+            return "เลือกอาชีพได้ตั้งแต่ Lv.%d — ไปฟาร์มเก็บเลเวลก่อนนะ" % CLASS_LV
+        cost = 0 if p.cls == "none" else CHANGE_COST
     if p.coins < cost:
         return "เหรียญไม่พอ (ต้องใช้ %d)" % cost
     p.coins -= cost
@@ -232,9 +272,33 @@ func pick(k: String) -> String:
     step = 0
     cd = [0.0, 0.0, 0.0]
     p.recalc_stats()
+    if p.has_method("refresh_model"):
+        p.refresh_model()
     if town.mobile != null:
         town.mobile.refresh_skills()
+    if adv:
+        return "เลื่อนขั้นเป็น%sแล้ว! สกิลใหม่ 3 ท่าพร้อมใช้" % CLS[k].n
     return "คุณกลายเป็น%sแล้ว! อย่าลืมคราฟ%sที่ทั่งตีเหล็ก เพื่อใช้สกิลอาชีพ" % [CLS[k].n, WNAME[CLS[k].w]]
+
+func _class_btn(k: String, tag: String) -> Button:
+    var C: Dictionary = CLS[k]
+    var sk := []
+    for s in SK[k]:
+        sk.append("%s (Lv.%d)" % [s.n, s.lv])
+    var b := Button.new()
+    b.text = "%s%s\n%s\nติดตัว: %s · อาวุธ: %s\nสกิล: %s" % [C.n, tag, C.d, C.pas, WNAME[C.w], " · ".join(sk)]
+    b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+    b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    b.add_theme_font_override("font", town.font_b)
+    b.add_theme_font_size_override("font_size", 14)
+    b.add_theme_color_override("font_color", C.col)
+    b.focus_mode = Control.FOCUS_NONE
+    b.pressed.connect(func():
+        var m := pick(k)
+        if m != "":
+            town.field.say_msg(m, 4.0)
+        open_menu())
+    return b
 
 func open_menu() -> void:
     var p = town.player
@@ -244,7 +308,7 @@ func open_menu() -> void:
     var top := HBoxContainer.new()
     var hv := VBoxContainer.new()
     hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    hv.add_child(town._nowrap(town._lbl("ปรมาจารย์อาชีพ — เลือกสายอาชีพ", 22, Color(0.85, 0.75, 1.0), true)))
+    hv.add_child(town._nowrap(town._lbl("ปรมาจารย์อาชีพ — 4 สำนัก", 22, Color(0.85, 0.75, 1.0), true)))
     var sub := "อาชีพปัจจุบัน: %s · " % CLS[p.cls].n + ("เลือกครั้งแรกฟรี" if p.cls == "none" else "เปลี่ยนสาย %d เหรียญ" % CHANGE_COST)
     if p.lv < CLASS_LV:
         sub += " · ต้อง Lv.%d ขึ้นไป (ตอนนี้ Lv.%d)" % [CLASS_LV, p.lv]
@@ -254,29 +318,15 @@ func open_menu() -> void:
     xb.custom_minimum_size = Vector2(44, 34)
     top.add_child(xb)
     town.ui_shop_body.add_child(top)
-    for k in CLASS_ORDER:
-        var kk: String = k
-        var C: Dictionary = CLS[k]
-        var sk := []
-        for s in SK[k]:
-            sk.append("%s (Lv.%d)" % [s.n, s.lv])
-        var pas := []
-        for ps in PASSIVE[k]:
-            pas.append("%s Lv.%d" % [ps.n, ps.lv])
-        var b := Button.new()
-        b.text = "%s%s\n%s\nติดตัว: %s · อาวุธ: %s\nสกิล: %s" % [C.n, "  ✓ ปัจจุบัน" if p.cls == k else "", C.d, C.pas, WNAME[C.w], " · ".join(sk)]
-        b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-        b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-        b.add_theme_font_override("font", town.font_b)
-        b.add_theme_font_size_override("font_size", 14)
-        b.add_theme_color_override("font_color", C.col)
-        b.focus_mode = Control.FOCUS_NONE
-        b.pressed.connect(func():
-            var m := pick(kk)
-            if m != "":
-                town.field.say_msg(m, 4.0)
-            open_menu())
-        town.ui_shop_body.add_child(b)
+    var base: String = base_of(p.cls)
+    if ADV.has(base):
+        var head := "เลื่อนขั้น (Lv.%d)" % ADV_LV + (" — ครั้งแรกฟรี" if BASES.has(p.cls) else " — สลับสายย่อย %d เหรียญ" % CHANGE_COST)
+        town.ui_shop_body.add_child(town._lbl(head, 17, Color(1.0, 0.9, 0.5), true))
+        for k in ADV[base]:
+            town.ui_shop_body.add_child(_class_btn(k, "  ✓ ปัจจุบัน" if p.cls == k else ("" if p.lv >= ADV_LV else "  (Lv.%d)" % ADV_LV)))
+        town.ui_shop_body.add_child(town._lbl("สายหลัก (เปลี่ยนแล้วกลับเป็นสายหลัก ต้องเลื่อนขั้นใหม่)", 15, Color(0.8, 0.85, 0.95)))
+    for k in BASES:
+        town.ui_shop_body.add_child(_class_btn(k, "  ✓ สายของคุณ" if base == k else ""))
     town.ui_shop.visible = true
 
 # ---------- ปุ่มสกิล 4 ช่อง ----------
@@ -449,6 +499,34 @@ func _archer1(p, st: int) -> void:
 
 func _archer2(p, _st: int) -> void:
     pers.append({"k": "rain", "t": 0.0, "l": 3.0, "tick": 0.25, "acc": 0.0, "at": p.position + _fwd(p) * 5.0})
+
+# ---------- โจร (0.27) ----------
+func _rogue0(p, _st: int) -> void:
+    p.body.action("Dualwield_Melee_Attack_Stab", 0.35)
+    for k in 2:
+        town.field.aoe(p, 1.8, 1.2, p.position + _fwd(p) * 1.6, 0.0, Color(0.75, 0.6, 1.0))
+
+func _rogue1(p, st: int) -> void:
+    match st:
+        0:
+            p.body.action("Dualwield_Melee_Attack_Stab", 0.35)
+            for k in 6:
+                _blink(p, p.position + _fwd(p) * 0.5)
+            town.field.aoe(p, 2.0, 1.5, p.position + _fwd(p) * 1.0, 0.0, Color(0.75, 0.6, 1.0))
+        1:
+            p.body.action("Dualwield_Melee_Attack_Slice", 0.4)
+            town.field.aoe(p, 2.6, 1.5, Vector3.INF, 0.0, Color(0.7, 0.55, 1.0))
+        2:
+            p.body.action("Throw", 0.4)
+            for a in [-0.15, 0.0, 0.15]:
+                town.field.shoot(p, {"range": 16.0, "speed": 26.0, "kind": "bolt", "yaw": a, "pierce": true, "stun": 0.8, "col": Color(0.85, 0.85, 0.95), "size": 0.16}, 2.2)
+
+func _rogue2(p, _st: int) -> void:
+    p.body.action("Throw", 0.4)
+    p.iframe = max(p.iframe, 0.8)
+    for wave in 2:
+        for i in 12:
+            town.field.shoot(p, {"range": 13.0 + wave * 3.0, "speed": 20.0 + wave * 6.0, "kind": "bolt", "yaw": (i + wave * 0.5) * TAU / 12.0, "col": Color(0.8, 0.75, 1.0), "size": 0.16}, 1.2)
 
 # ---------- 8 อาชีพเพิ่ม (fix25) ----------
 func _nearest(p, r: float):

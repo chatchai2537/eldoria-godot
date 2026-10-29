@@ -54,7 +54,6 @@ const CAM_FAR := 34.0
 var cam_yaw_vis := 0.0      # มุมที่กล้องแสดงจริง (ไล่ตาม cam_yaw ให้นุ่ม)
 var cam_spin := 0.0         # ความเร็วหมุนค้าง (เรเดียน/วิ) หลังปล่อยนิ้ว
 var cam_dragging := false
-var xray_mat: StandardMaterial3D
 var fade_blds: Array = []   # อาคารที่จางลงเมื่อบังกล้อง: {meshes, aabb, f}
 var rot_drag := false
 var hud: Label
@@ -1615,20 +1614,25 @@ func _build_player() -> void:
     add_child(click_marker)
     _update_cam(1.0)
 
-## เงาตัวละครทะลุตึก: เห็นเป็นเงาสีฟ้าจาง ๆ เมื่อมีอาคารบัง (วาดเฉพาะส่วนที่ถูกบัง)
+## เงาตัวละครทะลุตึก: เห็นเป็นเงาสีฟ้าจาง ๆ เมื่อมีอาคารบัง
+## ใช้ stencil XRAY ของวัสดุ (Godot 4.5+) — วาดเฉพาะส่วนที่ถูกของอื่นบัง ไม่ทับแขนขาของตัวเอง
+## (แบบ material_overlay + depth inverted เดิมทำให้แขนที่บังลำตัวตัวเองกลายเป็นสีฟ้า)
+const XRAY_COL := Color(0.45, 0.82, 1.0, 0.45)
 func apply_xray(n: Node) -> void:
-    if xray_mat == null:
-        xray_mat = StandardMaterial3D.new()
-        xray_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-        xray_mat.albedo_color = Color(0.45, 0.82, 1.0, 0.42)
-        xray_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-        xray_mat.depth_test = BaseMaterial3D.DEPTH_TEST_INVERTED
-        xray_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-        xray_mat.render_priority = 10
     for m in n.find_children("*", "MeshInstance3D", true, false):
         var mi := m as MeshInstance3D
-        if mi.material_overlay == null and mi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
-            mi.material_overlay = xray_mat
+        if mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or mi.mesh == null:
+            continue
+        for si in mi.mesh.get_surface_count():
+            var mat: Material = mi.get_surface_override_material(si)
+            if mat == null:
+                mat = mi.mesh.surface_get_material(si)
+                if mat is StandardMaterial3D:
+                    mat = mat.duplicate()
+                    mi.set_surface_override_material(si, mat)
+            if mat is StandardMaterial3D and (mat as StandardMaterial3D).stencil_mode != BaseMaterial3D.STENCIL_MODE_XRAY:
+                (mat as StandardMaterial3D).stencil_mode = BaseMaterial3D.STENCIL_MODE_XRAY
+                (mat as StandardMaterial3D).stencil_color = XRAY_COL
 
 ## ตึกที่อยู่ระหว่างกล้องกับตัวละครจะจางลง (แบบ ROM)
 ## มือถือใช้ Compatibility ซึ่งไม่รองรับ GeometryInstance3D.transparency → สลับเป็นวัสดุโปร่ง (cache ต่อวัสดุ)
@@ -2487,6 +2491,7 @@ func _test_ui(what: String) -> void:
         # ทดสอบภาพ: ride:<สัตว์ขี่>:<สัตว์เลี้ยง>
         var ra := what.split(":")
         player.cls = "sword"
+        player.refresh_model()
         player.lv = 200
         player.coins = 9999999
         steed.buy("mount", ra[1])
@@ -2537,7 +2542,8 @@ func _test_ui(what: String) -> void:
         var a := what.split(":")
         player.lv = int(a[2])
         player.cls = a[1]
-        player.weapon = {"sword": "sword1", "mage": "staff1", "archer": "bow1"}[a[1]]
+        player.weapon = str(classes.CLS[a[1]].w) + "1"
+        player.refresh_model()
         player.skills["heal"] = true
         player.recalc_stats()
         player.mp = player.max_mp

@@ -1041,9 +1041,12 @@ func _run() -> void:
     world.field.add_child(dummy)
     dummy.setup(world.field, 1, p.position + Vector3(0, 0, 1.8))
     world.field.slimes.append(dummy)
+    p.lv = 40
     for ck in cl2.CLASS_ORDER:
         p.cls = "none"
         p.coins = 0
+        if not cl2.BASES.has(ck):
+            cl2.pick(cl2.base_of(ck))   # สายย่อย: ต้องเป็นสายหลักก่อน แล้วเลื่อนขั้นฟรี
         cl2.pick(ck)
         world.close_shop()
         p.weapon = {"sword": "sword1", "staff": "staff1", "bow": "bow1"}[cl2.CLS[ck].w]
@@ -1071,6 +1074,81 @@ func _run() -> void:
         check(p.cls == ck and used == 5 and dummy.hp < 99999, "อาชีพ %s: ใช้สกิลครบ 5 ครั้ง (รวมจังหวะ) โดนเป้า" % cl2.CLS[ck].n)
         cl2.pers.clear()
         p.position = world.fw(20.5, 20.5)
+    # ---------- อาชีพ 4 สาย + เลื่อนขั้น (0.27) ----------
+    var vis_of := func(n: String) -> bool:
+        var L: Dictionary = p.body._item_nodes()
+        return L.has(n) and (L[n] as Node3D).visible
+    p.cls = "none"
+    p.coins = 1000
+    p.lv = 40
+    cl2.pick("paladin")
+    check(p.cls == "none", "4 สาย: ยังไม่มีอาชีพ เลื่อนขั้นเป็นพาลาดินตรงๆ ไม่ได้")
+    check(cl2.BASES.size() == 4 and cl2.CLASS_ORDER.size() == 12, "4 สาย: สายหลัก 4 + สายย่อย 8 = 12 สกิลชุด")
+    p.lv = 10
+    cl2.pick("rogue")
+    check(p.cls == "rogue" and p.model_kind == "rogue" and p.coins == 1000, "โจร: เลือกฟรี โมเดลเปลี่ยนเป็นโจร")
+    p.weapon = "sword1"
+    p.eq["arm"] = p.make_inst("arm1")
+    p.update_gear_visual()
+    check(vis_of.call("Knife") and vis_of.call("Knife_Offhand") and not vis_of.call("Round_Shield") and not vis_of.call("1H_Sword"), "โจร: ถือมีดคู่ ไม่มีโล่ แม้ใส่เกราะแขน")
+    check(p.attack_anim().begins_with("Dualwield"), "โจร: ท่าตีมีดคู่")
+    p.lv = 39
+    cl2.pick("ninja")
+    check(p.cls == "rogue", "เลื่อนขั้น: Lv.39 ยังเลื่อนไม่ได้")
+    p.lv = 40
+    cl2.pick("ninja")
+    check(p.cls == "ninja" and p.coins == 1000 and p.model_kind == "rogue", "เลื่อนขั้น: Lv.40 โจร → นินจา ฟรี โมเดลโจรเดิม")
+    cl2.pick("paladin")
+    check(p.cls == "ninja", "เลื่อนขั้น: ข้ามสายไปพาลาดินไม่ได้")
+    cl2.pick("monk")
+    check(p.cls == "monk" and p.coins == 500, "เลื่อนขั้น: สลับสายย่อยเสีย 500")
+    cl2.pick("archer")
+    p.weapon = "bow1"
+    check(p.cls == "archer" and p.model_kind == "hooded" and vis_of.call("1H_Crossbow"), "นักหน้าไม้: โมเดลฮู้ด ถือหน้าไม้")
+    p.coins = 500
+    cl2.pick("sniper")
+    check(p.cls == "sniper" and vis_of.call("2H_Crossbow") and not vis_of.call("1H_Crossbow"), "สไนเปอร์: หน้าไม้สองมือ")
+    check(cl2.CLS.summoner.w == "bow" and cl2.base_of("summoner") == "archer", "พรานอสูร: อยู่สายหน้าไม้ ใช้หน้าไม้")
+    p.coins = 1000
+    cl2.pick("sword")
+    p.weapon = "sword1"
+    p.update_gear_visual()
+    check(p.model_kind == "knight" and vis_of.call("1H_Sword") and vis_of.call("Round_Shield"), "อัศวิน: ดาบ + โล่")
+    cl2.pick("dragoon")
+    check(p.model_kind == "barbarian" and vis_of.call("2H_Axe"), "อัศวินมังกร: โมเดลคนเถื่อน ขวานสองมือ")
+    p.coins = 1000
+    cl2.pick("mage")
+    p.weapon = "staff1"
+    check(p.model_kind == "mage" and vis_of.call("2H_Staff") and vis_of.call("Spellbook"), "นักเวท: คทา + คัมภีร์ (ช่องแขน)")
+    p.eq.erase("arm")
+    p.cls = "summoner"
+    p.save_enabled = true
+    p.save_path = "user://test_save_cls.json"
+    p.save_game()
+    p.cls = "none"
+    p.load_game()
+    check(p.cls == "summoner" and p.model_kind == "hooded", "เซฟเก่า: อาชีพเดิมโหลดได้ โมเดลตามสาย")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save_cls.json"))
+    p.save_enabled = false
+    var xr := func(m) -> bool:
+        var mi := m as MeshInstance3D
+        var mt = mi.get_surface_override_material(0)
+        return mi.visible and mt is StandardMaterial3D and mt.stencil_mode == BaseMaterial3D.STENCIL_MODE_XRAY
+    var body_meshes: Array = p.body.inst.find_children("*", "MeshInstance3D", true, false)
+    check(body_meshes.all(func(m): return not (m as MeshInstance3D).visible or xr.call(m)), "กล้อง ROM: ทุกชิ้นของตัวละครมีเงาทะลุตึก (stencil) หลังเปลี่ยนโมเดล")
+    check(body_meshes.all(func(m): return (m as MeshInstance3D).material_overlay == null), "กล้อง ROM: ไม่ใช้ overlay ที่ทำแขนตัวเองเป็นสีฟ้า")
+    # ---------- ภาพ 0.24-0.26 ----------
+    check(world.field.slimes.size() > 0 and world.field.slimes[0].body.mesh is ArrayMesh, "สไลม์ทรงหยดน้ำ (ArrayMesh)")
+    check(world.fade_blds.size() >= 11, "อาคารใหม่ลงทะเบียนจางเมื่อบังกล้อง")
+    var cd0: float = world.cam_dist
+    world.cam_dist = world.CAM_FAR
+    world._update_cam(1.0)
+    var hi: float = world.cam.global_position.y - p.global_position.y
+    world.cam_dist = world.CAM_NEAR
+    world._update_cam(1.0)
+    var lo: float = world.cam.global_position.y - p.global_position.y
+    check(hi / world.CAM_FAR > lo / world.CAM_NEAR, "กล้อง ROM: ซูมออก = มองจากบนมากขึ้น")
+    world.cam_dist = cd0
     p.cls = "paladin"
     p.iframe = 0.0
     var ph: float = p.hp

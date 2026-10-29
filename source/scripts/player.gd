@@ -84,11 +84,7 @@ var dash_v := Vector3.ZERO
 func setup(t, pos: Vector3) -> void:
     town = t
     position = pos
-    body = Node3D.new()
-    body.set_script(load("res://scripts/model.gd"))
-    add_child(body)
-    body.build({"model": "knight", "keep": ["1H_Sword", "Round_Shield", "Knight_Cape", "Knight_Helmet"]})
-    update_gear_visual()
+    refresh_model()
     VisualStyle.add_contact(self, 1.65, 1.3)
     var ring := MeshInstance3D.new()
     var tm := TorusMesh.new()
@@ -155,21 +151,82 @@ func make_inst(id: String, q: int = 0) -> Dictionary:
 const TIER_COL := [Color("#9a9da5"), Color("#aab4c5"), Color("#d98443"), Color("#cfd7e6"), Color("#f2c230"), Color("#5ec8ff"),
     Color("#5a8a3a"), Color("#2a9a7a"), Color("#a8d8f0"), Color("#e0b030"), Color("#c81a2a"), Color("#5a3a8a")]
 
+## ---- โมเดลตามอาชีพ (0.27) ----
+## อัศวิน=Knight · นักหน้าไม้=Rogue_Hooded · นักเวท=Mage · โจร=Rogue · อัศวินมังกร=Barbarian (skills.gd MODEL)
+var model_kind := ""
+## ช่องอุปกรณ์ → ชิ้นบนโมเดล ("" = โมเดลนี้ไม่โชว์ เช่น โจรไม่มีโล่/หมวก)
+const GEAR_SLOTS := {
+    "knight": {"helm": "Knight_Helmet", "chest": "Knight_Cape", "arm": "Round_Shield"},
+    "mage": {"helm": "Mage_Hat", "chest": "Mage_Cape", "arm": "Spellbook"},
+    "rogue": {"helm": "", "chest": "Rogue_Cape", "arm": ""},
+    "hooded": {"helm": "", "chest": "Rogue_Cape", "arm": ""},
+    "barbarian": {"helm": "Barbarian_Hat", "chest": "Barbarian_Cape", "arm": "Barbarian_Round_Shield"},
+}
+## ของในมือที่ต้องยืมจากโมเดลอื่น: ชิ้น → ไฟล์โมเดลต้นทาง
+const ITEM_SRC := {"1H_Sword": "knight", "2H_Staff": "mage", "1H_Crossbow": "rogue", "2H_Crossbow": "rogue", "Knife": "rogue", "Knife_Offhand": "rogue", "2H_Axe": "barbarian"}
+const ATTACK_ANIM := {"rogue": "Dualwield_Melee_Attack_Slice", "barbarian": "2H_Melee_Attack_Chop"}
+
+func refresh_model() -> void:
+    var want := "knight"
+    if town != null and town.get("classes") != null:
+        want = town.classes.model_of(cls)
+    if want == model_kind and body != null:
+        update_gear_visual()   # สายย่อยโมเดลเดิมแต่ของในมืออาจต่าง (สไนเปอร์ = หน้าไม้สองมือ)
+        return
+    var ry := 0.0
+    var ride := false
+    var by := 0.0
+    if body != null:
+        ry = body.rotation.y
+        ride = body.riding
+        by = body.position.y
+        remove_child(body)
+        body.queue_free()
+    body = Node3D.new()
+    body.set_script(load("res://scripts/model.gd"))
+    add_child(body)
+    move_child(body, 0)
+    body.build({"model": want, "keep": []})
+    body.rotation.y = ry
+    body.riding = ride
+    body.position.y = by
+    model_kind = want
+    update_gear_visual()
+
+## อาวุธที่โชว์ในมือ ตามชนิดอาวุธ + โมเดล
+func _weapon_items(wk: String) -> Array:
+    match wk:
+        "sword":
+            if model_kind == "rogue":
+                return ["Knife", "Knife_Offhand"]
+            if model_kind == "barbarian":
+                return ["2H_Axe"]
+            return ["1H_Sword"]
+        "staff":
+            return ["2H_Staff"]
+        "bow":
+            return ["2H_Crossbow"] if cls == "sniper" else ["1H_Crossbow"]
+    return []
+
+func attack_anim() -> String:
+    return str(ATTACK_ANIM.get(model_kind, ATTACK_ANIMATION))
+
 func update_gear_visual() -> void:
     if body == null or body.inst == null:
         return
     var w: Dictionary = eq.get("weapon", {})
     var wk := str(w.get("k", ""))
-    if wk == "staff":
-        body.borrow_item("mage", "2H_Staff")
-    elif wk == "bow":
-        body.borrow_item("rogue", "1H_Crossbow")
+    var show: Array = _weapon_items(wk)
+    for it_name in show:
+        body.borrow_item(str(ITEM_SRC.get(it_name, "knight")), it_name)
     var glow := func(it: Dictionary) -> float:
         return [0.0, 0.0, 0.12, 0.25][int(it.get("q", 0))] + (0.15 if int(it.get("e", 0)) >= 7 else 0.0) + (0.2 if Items.is_boss_tier(int(it.get("t", 0))) else 0.0)
-    body.show_item("1H_Sword", wk == "sword", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "sword" else 0.0)
-    body.show_item("2H_Staff", wk == "staff", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "staff" else 0.0)
-    body.show_item("1H_Crossbow", wk == "bow", TIER_COL[int(w.get("t", 0))], glow.call(w) if wk == "bow" else 0.0)
-    for pair in [["helm", "Knight_Helmet"], ["chest", "Knight_Cape"], ["arm", "Round_Shield"]]:
+    for it_name in ITEM_SRC.keys():
+        body.show_item(it_name, show.has(it_name), TIER_COL[int(w.get("t", 0))], glow.call(w) if show.has(it_name) else 0.0)
+    var slots: Dictionary = GEAR_SLOTS.get(model_kind, GEAR_SLOTS.knight)
+    for pair in [["helm", slots.helm], ["chest", slots.chest], ["arm", slots.arm]]:
+        if str(pair[1]) == "":
+            continue
         var it: Dictionary = eq.get(pair[0], {})
         # ผ้าคลุมไม่เรืองแสง (ผืนใหญ่ บังตัวละคร) · ย้อมสีอ่อน ๆ
         var gl: float = 0.0 if pair[0] == "chest" or it.is_empty() else glow.call(it)
@@ -331,8 +388,9 @@ func load_game() -> bool:
         town.guild.load_state(pending_guild)
     if town.story != null:
         town.story.load_state(pending_story)
-    if not ["none", "sword", "mage", "archer", "ninja", "sniper", "paladin", "cleric", "necro", "monk", "dragoon", "summoner"].has(cls):
+    if not ["none", "sword", "mage", "archer", "rogue", "ninja", "sniper", "paladin", "cleric", "necro", "monk", "dragoon", "summoner"].has(cls):
         cls = "none"
+    refresh_model()
     var keep_hp := hp
     loaded_hp = hp
     var keep_mp := mp
@@ -604,7 +662,7 @@ func attack() -> void:
         body.action("Spellcast_Shoot" if str(eq.weapon.k) == "staff" else "1H_Ranged_Shoot", atk_dur)
         town.field.shoot(self, ranged_spec(), 1.0)
         return
-    body.action(ATTACK_ANIMATION, atk_dur)
+    body.action(attack_anim(), atk_dur)
     # ไม่มีสไลม์ใกล้ ๆ และหันหน้าเข้าต้นไม้ = ฟันต้นไม้ (ต้องมีขวาน)
     if s == null and town.mine.cur >= 0:
         town.mine.try_mine(self)
