@@ -93,7 +93,7 @@
   - เซ็นด้วยกุญแจของ Claude ผ่าน `source/tools/apksign_v2.py` (ไม่มี Android SDK ก็เซ็นได้)
   - **กุญแจ eldoria.p12 อยู่แค่ในเครื่องคลาวด์ของ Claude** → ต้องเก็บลงคอมเจ้าของเมื่อเชื่อมคอม
 - APK ของ Codex (`Eldoria-modern.apk`) แพ็กเกจ `.stability` ชื่อ "Eldoria ทดสอบแก้เด้ง" · กุญแจอยู่ใน ChatGPT Library (Eldoria-stability-test-signing-backup.zip) · เลิกใช้เป็นลิงก์หลักแล้ว
-- **รุ่นทดสอบ (Claude) ล่าสุด 0.31 versionCode 31**: `Eldoria-test.apk` + หน้า `apk-test.html` (ลิงก์จาก apk.html) · แพ็กเกจ `com.wiwekwin.eldoria.claudetest` ชื่อ "Eldoria ทดสอบ" · เซ็นด้วยกุญแจทดสอบของเซสชันนี้ (ไม่ใช่กุญแจแอปหลัก) · export จากสำเนา preset (preset หลักใน repo ไม่ถูกแก้) · Godot ต้องการโฟลเดอร์ SDK ที่มี platform-tools/adb และ build-tools/*/apksigner ถึงจะ export ได้ (ใช้ไฟล์หลอกได้เพราะ signed=false) แล้วเซ็นด้วย tools/apksign_v2.py
+- **รุ่นทดสอบ (Claude) ล่าสุด 0.32 versionCode 32**: `Eldoria-test.apk` + หน้า `apk-test.html` (ลิงก์จาก apk.html) · แพ็กเกจ `com.wiwekwin.eldoria.claudetest` ชื่อ "Eldoria ทดสอบ" · เซ็นด้วยกุญแจทดสอบของเซสชันนี้ (ไม่ใช่กุญแจแอปหลัก) · export จากสำเนา preset (preset หลักใน repo ไม่ถูกแก้) · Godot ต้องการโฟลเดอร์ SDK ที่มี platform-tools/adb และ build-tools/*/apksigner ถึงจะ export ได้ (ใช้ไฟล์หลอกได้เพราะ signed=false) แล้วเซ็นด้วย tools/apksign_v2.py
 - ห้าม commit กุญแจลง GitHub
 
 ## 7. รอเจ้าของตอบ
