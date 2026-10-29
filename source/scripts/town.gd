@@ -1,5 +1,6 @@
 extends Node3D
 const VisualStyle = preload("res://scripts/visual_style.gd")
+const BuildingKit = preload("res://scripts/building_kit.gd")
 signal loading_stage(message: String, progress: float)
 signal world_ready
 ## ตำนานเอลโดเรีย (Godot) · ขั้นที่ 1: เมืองเอลโดเรีย เดินได้
@@ -865,48 +866,188 @@ func _build_castle() -> void:
 func _spire(parent: Node3D, pos: Vector3, r: float, hh: float, m: Material) -> void:
     cyl(parent, 0.0, r, hh, pos + Vector3(0, hh * 0.5, 0), m, 8)
 
+## หน้าต่างกรอบลึก: กระจกเรืองแสง + กรอบ 4 ด้าน + ไม้กางเขน + ขอบล่าง (+บานเกล็ด)
+func _kit_window(k, glass: Material, frame: Material, shutter: Material, c: Vector3, s: Vector2, shutters: bool) -> void:
+    k.box(glass, Vector3(s.x, s.y, 0.06), c)
+    var t := 0.14
+    k.box(frame, Vector3(s.x + t * 2.0, t, 0.2), c + Vector3(0, s.y * 0.5 + t * 0.5, 0.05))
+    k.box(frame, Vector3(s.x + t * 2.0 + 0.16, t, 0.3), c + Vector3(0, -s.y * 0.5 - t * 0.5, 0.08))
+    for sx in [-1.0, 1.0]:
+        k.box(frame, Vector3(t, s.y, 0.2), c + Vector3(sx * (s.x + t) * 0.5, 0, 0.05))
+    k.box(frame, Vector3(0.06, s.y, 0.08), c + Vector3(0, 0, 0.05))
+    k.box(frame, Vector3(s.x, 0.06, 0.08), c + Vector3(0, s.y * 0.1, 0.05))
+    if shutters:
+        for sx in [-1.0, 1.0]:
+            k.box(shutter, Vector3(s.x * 0.5, s.y + 0.1, 0.07), c + Vector3(sx * (s.x * 0.75 + t + 0.06), 0, 0.04))
+            for i in 4:
+                k.box(frame, Vector3(s.x * 0.44, 0.04, 0.03), c + Vector3(sx * (s.x * 0.75 + t + 0.06), -s.y * 0.38 + i * s.y * 0.25, 0.09))
+
 func _building(b: Array, st: Dictionary, title: String, sid: String) -> void:
+    # 0.6 แฟนตาซีทันสมัย: ชั้นล่างหิน · ชั้นบนยื่น (jetty) โครงไม้ · หลังคาชายคาหนา + จั่วหน้า
+    # หน้าต่างมีกรอบลึก บานเกล็ด · ประตูซุ้มหิน · โคมคริสตัล · ประกอบเป็น mesh ไม่กี่ชิ้นต่อหลัง
     var beam := M(Color(0.3, 0.19, 0.11), 0.85)
     var stone := M(Color(0.5, 0.48, 0.45), 0.95)
+    var stone_lt := M(Color(0.66, 0.63, 0.58), 0.95)
     var wall := M(st.wall, 0.9)
-    var roof := M(st.roof, 0.65)
+    var roof: StandardMaterial3D = VisualStyle.roof(M(st.roof, 0.65))
     var gold := M(Color(0.9, 0.72, 0.3), 0.3)
+    var iron := M(Color(0.16, 0.16, 0.18), 0.5)
+    var shutter := M(st.roof.darkened(0.15), 0.8)
+    var door_m := M(Color(0.34, 0.2, 0.1), 0.8)
+    var glass := StandardMaterial3D.new()
+    glass.albedo_color = Color(0.16, 0.26, 0.30)
+    glass.roughness = 0.2
+    glass.emission_enabled = true
+    glass.emission = Color(1.0, 0.72, 0.38)
+    glass.emission_energy_multiplier = 0.3
+    glow_mats.append(glass)
+    var crystal := M(Color(0.45, 0.85, 1.0), 0.2, 1.6)
     var w: float = b[2] * TS
     var d: float = b[3] * TS
     var root := Node3D.new()
     root.position = tw(b[0] + b[2] * 0.5, b[1] + b[3] * 0.5)
     add_child(root)
+    var kit := BuildingKit.new()
     var big: bool = b[3] >= 6
-    var wh := 4.6 if big else 3.6
-    box(root, Vector3(w - 0.1, 0.6, d - 0.1), Vector3(0, 0.3, 0), stone)
-    box(root, Vector3(w - 0.6, wh, d - 0.9), Vector3(0, 0.6 + wh * 0.5, -0.1), wall)
-    for cx in [-1, 1]:
-        for cz in [-1, 1]:
-            box(root, Vector3(0.3, wh, 0.3), Vector3(cx * (w * 0.5 - 0.35), 0.6 + wh * 0.5, cz * (d * 0.5 - 0.5) - 0.1), beam)
-    var fz := d * 0.5 - 0.53
-    box(root, Vector3(w - 0.4, 0.26, 0.3), Vector3(0, 0.6 + wh, fz), beam)
-    box(root, Vector3(w - 0.4, 0.2, 0.3), Vector3(0, 0.6 + wh * 0.52, fz), beam)
-    for i in 4:
-        box(root, Vector3(0.16, wh, 0.12), Vector3(-w * 0.36 + i * w * 0.24, 0.6 + wh * 0.5, fz + 0.03), beam)
-    var rh := 2.4 + d * 0.14
-    gable(root, w + 0.7, d + 0.5, rh, Vector3(0, 0.6 + wh + 0.05, -0.1), roof)
+    var P := 0.7                      # ฐานหิน
+    var wh := 2.9                     # ชั้นล่าง (ของประจำร้านด้านล่างอิงค่านี้)
+    var band := 0.32
+    var uh := 2.9 if big else 2.5     # ชั้นบน
+    var jet := 0.4                    # ชั้นบนยื่นออก
+    var gw := w - 0.8
+    var gd := d - 1.2
+    var zc := -0.1
+    var fz := zc + gd * 0.5           # หน้าชั้นล่าง
+    var uw := gw + jet * 2.0
+    var ud := gd + jet
+    var uzc := zc + jet * 0.5
+    var fu := fz + jet                # หน้าชั้นบน
+    var y1 := P + wh                  # พื้นชั้นบน
+    var y2 := y1 + band               # เริ่มผนังชั้นบน
+    var top := y2 + uh                # ขอบหลังคา
+    # ฐาน + ชั้นล่างหิน + มุมหินสลับ
+    kit.box(stone, Vector3(gw + 0.5, P, gd + 0.5), Vector3(0, P * 0.5, zc))
+    kit.box(stone_lt, Vector3(gw + 0.62, 0.12, gd + 0.62), Vector3(0, P, zc))
+    kit.box(stone, Vector3(gw, wh, gd), Vector3(0, P + wh * 0.5, zc))
+    for cx in [-1.0, 1.0]:
+        for i in 4:
+            var qy := P + 0.35 + i * 0.68
+            var long := i % 2 == 0
+            kit.box(stone_lt, Vector3(0.62 if long else 0.36, 0.5, 0.36 if long else 0.62), Vector3(cx * (gw * 0.5 - (0.24 if long else 0.12)), qy, fz - (0.12 if long else 0.24)))
+    # คานคั่นชั้น + ค้ำยันใต้ส่วนยื่น
+    kit.box(beam, Vector3(uw + 0.12, band, ud + 0.12), Vector3(0, y1 + band * 0.5, uzc))
+    var nb := int(gw / 1.4)
+    for i in nb + 1:
+        var bx := -gw * 0.5 + 0.2 + i * (gw - 0.4) / nb
+        kit.box(beam, Vector3(0.2, 0.42, jet + 0.08), Vector3(bx, y1 - 0.2, fz + jet * 0.5 - 0.02))
+        kit.box(beam, Vector3(0.18, 0.18, 0.6), Vector3(bx, y1 - 0.42, fz + 0.18), Vector3(-0.75, 0, 0))
+    # ชั้นบนปูน + โครงไม้
+    kit.box(wall, Vector3(uw, uh, ud), Vector3(0, y2 + uh * 0.5, uzc))
+    var posts := [-uw * 0.5 + 0.12, uw * 0.5 - 0.12]
+    var nbay := 4 if uw > 11.0 else 3
+    for i in range(1, nbay):
+        posts.append(-uw * 0.5 + i * uw / nbay)
+    for px in posts:
+        kit.box(beam, Vector3(0.2, uh, 0.12), Vector3(px, y2 + uh * 0.5, fu + 0.05))
+    kit.box(beam, Vector3(uw, 0.18, 0.12), Vector3(0, top - 0.09, fu + 0.05))
+    kit.box(beam, Vector3(uw, 0.14, 0.12), Vector3(0, y2 + 0.07, fu + 0.05))
+    for sx in [-1.0, 1.0]:   # ค้ำเฉียงช่องริม
+        var bx0: float = sx * (uw * 0.5 - uw / nbay * 0.5)
+        var ang: float = atan2(uh - 0.3, uw / nbay - 0.3)
+        kit.box(beam, Vector3(sqrt(pow(uw / nbay - 0.3, 2) + pow(uh - 0.3, 2)), 0.14, 0.1), Vector3(bx0, y2 + uh * 0.5, fu + 0.04), Vector3(0, 0, sx * ang))
+        for zz in [uzc - ud * 0.5 + 0.12, uzc + ud * 0.5 - 0.12, uzc]:
+            kit.box(beam, Vector3(0.12, uh, 0.2), Vector3(sx * (uw * 0.5 + 0.05), y2 + uh * 0.5, zz))
+    # หลังคาหลัก: สันตามแกน X ชายคายื่น หนา
+    var rh := ud * 0.5 * 0.95
+    var ov := 0.6
+    var ang_r := atan2(rh, ud * 0.5)
+    var slen := (ud * 0.5 + ov) / cos(ang_r)
+    var ridge := Vector3(0, top + rh, uzc)
+    for s in [-1.0, 1.0]:
+        var dir := Vector3(0, -sin(ang_r), s * cos(ang_r))
+        var nrm := Vector3(0, cos(ang_r), s * sin(ang_r))
+        kit.box(roof, Vector3(uw + ov * 1.6, 0.2, slen), ridge + dir * slen * 0.5 + nrm * 0.1, Vector3(s * ang_r, 0, 0))
+        kit.box(beam, Vector3(uw + ov * 1.6, 0.26, 0.12), ridge + dir * slen + nrm * 0.06, Vector3(s * ang_r, 0, 0))
+    kit.prism(wall, ud, rh, uw, Vector3(0, top, uzc), PI / 2.0)
+    kit.box(beam, Vector3(uw + ov * 1.6 + 0.1, 0.24, 0.3), ridge + Vector3(0, 0.2, 0))
+    # จั่วหน้า (cross gable) มีหน้าต่างกลม
+    var cw: float = min(uw * 0.42, 4.6)
+    var crh := cw * 0.5 * 0.95
+    var ang_c := atan2(crh, cw * 0.5)
+    var cz0 := uzc
+    var cz1 := fu + 0.35
+    var clen := cz1 - cz0
+    var cmid := (cz0 + cz1) * 0.5
+    kit.prism(wall, cw, crh, clen, Vector3(0, top, cmid))
+    var cs := (cw * 0.5 + 0.45) / cos(ang_c)
+    var cridge := Vector3(0, top + crh, cmid + 0.2)
+    for s in [-1.0, 1.0]:
+        var cdir := Vector3(s * cos(ang_c), -sin(ang_c), 0)
+        var cn := Vector3(s * sin(ang_c), cos(ang_c), 0)
+        kit.box(roof, Vector3(cs, 0.2, clen + 0.4), cridge + cdir * cs * 0.5 + cn * 0.1, Vector3(0, 0, -s * ang_c))
+        kit.box(beam, Vector3(cs, 0.22, 0.14), cridge + cdir * cs * 0.5 + cn * 0.02 + Vector3(0, 0, clen * 0.5 + 0.18), Vector3(0, 0, -s * ang_c))
+    kit.box(beam, Vector3(0.26, 0.26, clen + 0.4), cridge + Vector3(0, 0.2, 0))
+    kit.cyl(gold, 0.0, 0.14, 0.8, Vector3(0, top + crh + 0.7, cz1 + 0.05), 6)
+    var rw_y := top + crh * 0.42
+    kit.cyl(beam, 0.62, 0.62, 0.16, Vector3(0, rw_y, cz1 - 0.3), 16, Vector3(PI / 2.0, 0, 0))
+    kit.cyl(glass, 0.48, 0.48, 0.16, Vector3(0, rw_y, cz1 - 0.26), 16, Vector3(PI / 2.0, 0, 0))
+    kit.box(beam, Vector3(0.08, 0.96, 0.06), Vector3(0, rw_y, cz1 - 0.16))
+    kit.box(beam, Vector3(0.96, 0.08, 0.06), Vector3(0, rw_y, cz1 - 0.16))
+    # ปล่องไฟ
+    var chx := uw * 0.32
+    var chz := uzc - ud * 0.18
+    var chy0 := top + rh * 0.4
+    kit.box(stone, Vector3(0.9, 2.6, 0.9), Vector3(chx, chy0 + 0.9, chz))
+    kit.box(stone_lt, Vector3(1.1, 0.18, 1.1), Vector3(chx, chy0 + 2.25, chz))
+    kit.box(iron, Vector3(0.5, 0.2, 0.5), Vector3(chx, chy0 + 2.42, chz))
+    # หน้าต่างชั้นบน (บานเกล็ด + กระบะดอกไม้) และชั้นล่าง
+    var wins: Array = []
+    for i in nbay:
+        var cx2 := -uw * 0.5 + (i + 0.5) * uw / nbay
+        if abs(cx2) < cw * 0.5 and nbay % 2 == 1:
+            continue
+        wins.append(cx2)
+    for wx in wins:
+        _kit_window(kit, glass, beam, shutter, Vector3(wx, y2 + uh * 0.52, fu + 0.06), Vector2(0.95, 1.2), true)
+        kit.box(beam, Vector3(1.3, 0.22, 0.32), Vector3(wx, y2 + uh * 0.52 - 0.82, fu + 0.22))
+        for f in 4:
+            kit.box(M([Color(0.85, 0.3, 0.35), Color(0.95, 0.8, 0.3), Color(0.7, 0.45, 0.85), Color(0.95, 0.55, 0.3)][(f + int(wx)) % 4], 0.8), Vector3(0.2, 0.2, 0.2), Vector3(wx - 0.45 + f * 0.3, y2 + uh * 0.52 - 0.62, fu + 0.24), Vector3(0, f * 0.7, 0.4))
+    for sx in [-1.0, 1.0]:
+        _kit_window(kit, glass, stone_lt, shutter, Vector3(sx * gw * 0.3, P + wh * 0.55, fz + 0.04), Vector2(1.0, 1.25), false)
+        kit.box(stone_lt, Vector3(1.5, 0.26, 0.2), Vector3(sx * gw * 0.3, P + wh * 0.55 + 0.82, fz + 0.1))
+    # ประตูซุ้มหินโค้ง + บันได + โคมคริสตัลสองข้าง
+    var dr := 0.8
+    var dh := 1.5
+    kit.box(stone_lt, Vector3(dr * 2.0 + 0.6, dh, 0.3), Vector3(0, P + dh * 0.5, fz + 0.1))
+    kit.cyl(stone_lt, dr + 0.3, dr + 0.3, 0.3, Vector3(0, P + dh, fz + 0.1), 14, Vector3(-PI / 2.0, 0, 0), PI)
+    kit.box(door_m, Vector3(dr * 2.0, dh, 0.12), Vector3(0, P + dh * 0.5, fz + 0.28))
+    kit.cyl(door_m, dr, dr, 0.12, Vector3(0, P + dh, fz + 0.28), 14, Vector3(-PI / 2.0, 0, 0), PI)
+    for i in 3:
+        kit.box(beam, Vector3(0.06, dh + dr * 0.6, 0.04), Vector3(-0.5 + i * 0.5, P + (dh + dr * 0.6) * 0.5, fz + 0.36))
+    kit.box(iron, Vector3(1.5, 0.08, 0.05), Vector3(0, P + 0.5, fz + 0.37))
+    kit.box(iron, Vector3(1.5, 0.08, 0.05), Vector3(0, P + 1.5, fz + 0.37))
+    kit.box(gold, Vector3(0.12, 0.12, 0.08), Vector3(0.55, P + 1.0, fz + 0.38))
+    kit.box(stone, Vector3(2.6, 0.24, 0.6), Vector3(0, 0.12, fz + 0.75))
+    kit.box(stone, Vector3(2.2, 0.24, 0.4), Vector3(0, 0.36, fz + 0.5))
+    for sx in [-1.0, 1.0]:
+        var lx: float = sx * (dr + 0.75)
+        kit.box(iron, Vector3(0.08, 0.08, 0.4), Vector3(lx, P + 2.1, fz + 0.32))
+        kit.box(iron, Vector3(0.3, 0.06, 0.3), Vector3(lx, P + 2.0, fz + 0.5))
+        kit.box(crystal, Vector3(0.2, 0.42, 0.2), Vector3(lx, P + 2.28, fz + 0.5), Vector3(0, PI / 4.0, 0))
+        kit.cyl(iron, 0.0, 0.18, 0.2, Vector3(lx, P + 2.6, fz + 0.5), 4)
     if st.kind == "gothic":
-        for sx in [-1, 1]:
-            box(root, Vector3(1.4, wh + 2.0, 1.4), Vector3(sx * (w * 0.5 - 0.7), 0.6 + (wh + 2.0) * 0.5, fz - 0.4), wall)
-            _spire(root, Vector3(sx * (w * 0.5 - 0.7), 0.6 + wh + 2.0, fz - 0.4), 1.0, 3.4, roof)
-        _spire(root, Vector3(0, 0.6 + wh + rh - 0.2, -0.1), 0.7, 3.0, roof)
-    if st.kind == "inn" or st.kind == "house" or big:
-        box(root, Vector3(w - 1.2, 0.2, 1.0), Vector3(0, 0.6 + wh * 0.55, fz + 0.5), beam)
-    box(root, Vector3(1.0, 2.6, 0.9), Vector3(w * 0.3, 0.6 + wh + rh * 0.65, -d * 0.15), stone)
-    # ประตูโค้ง + หน้าต่าง
-    box(root, Vector3(1.5, 2.3, 0.14), Vector3(0, 0.6 + 1.15, fz + 0.05), M(Color(0.34, 0.2, 0.1), 0.8))
-    var ar := cyl(root, 0.75, 0.75, 0.15, Vector3(0, 0.6 + 2.3, fz + 0.05), M(Color(0.34, 0.2, 0.1), 0.8), 16)
-    ar.rotation.x = PI / 2.0
-    box(root, Vector3(2.4, 0.3, 1.0), Vector3(0, 0.15, fz + 0.75), stone)
-    for sx in [-1, 1]:
-        window(root, Vector3(sx * w * 0.3, 0.6 + wh * 0.68, fz + 0.05), Vector2(0.9, 1.0))
-        if big or st.kind == "inn":
-            window(root, Vector3(sx * w * 0.3, 0.6 + wh * 0.3, fz + 0.05), Vector2(0.9, 0.9))
+        for sx in [-1.0, 1.0]:
+            var tx: float = sx * (uw * 0.5 - 0.3)
+            var tz := fu - 0.6
+            var th := top + 1.8
+            kit.box(wall, Vector3(1.7, th, 1.7), Vector3(tx, th * 0.5, tz))
+            kit.box(stone_lt, Vector3(1.9, 0.3, 1.9), Vector3(tx, th, tz))
+            kit.box(stone, Vector3(1.8, P, 1.8), Vector3(tx, P * 0.5, tz))
+            kit.box(glass, Vector3(0.36, 1.1, 0.06), Vector3(tx, th - 1.4, tz + 0.86))
+            kit.cyl(roof, 0.0, 1.2, 3.8, Vector3(tx, th + 0.15 + 1.9, tz), 8)
+            kit.cyl(gold, 0.0, 0.09, 0.7, Vector3(tx, th + 4.3, tz), 6)
+        kit.cyl(roof, 0.0, 0.7, 3.0, Vector3(0, top + rh + 1.4, uzc), 8)
+    kit.commit(root)
     # ของประจำร้าน
     match st.kind:
         "forge":
@@ -974,7 +1115,7 @@ func _building(b: Array, st: Dictionary, title: String, sid: String) -> void:
     if sid != "ware":
         box(root, Vector3(0.12, 0.12, 1.0), Vector3(-w * 0.5 + 0.5, 0.6 + wh * 0.82, fz + 0.5), beam)
         box(root, Vector3(1.2, 0.75, 0.08), Vector3(-w * 0.5 + 0.5, 0.6 + wh * 0.82 - 0.45, fz + 0.95), M(st.roof.lightened(0.2), 0.7))
-    label3d(title, root.position + Vector3(0, 0.6 + wh + rh + (4.4 if st.kind == "gothic" else 1.4), 0), 42)
+    label3d(title, root.position + Vector3(0, top + rh + (4.4 if st.kind == "gothic" else 1.4), 0), 42)
 
 func _build_shops() -> void:
     for sid in STYLE.keys():
