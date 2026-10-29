@@ -98,6 +98,7 @@ func try_start(p) -> bool:
     p.set_path(PackedVector3Array())
     p.body.action("1H_Melee_Attack_Slice_Diagonal", 0.4)
     _visual(true)
+    if town.get("sfx") != null: town.sfx.at("splash", w, -4.0)
     town.field.say_msg("เหวี่ยงเบ็ด… รอปลากินเหยื่อ (ขยับตัว = เลิกตก)")
     return true
 

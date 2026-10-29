@@ -24,6 +24,7 @@ var ride: Panel   # ปุ่มขี่/ลงสัตว์ขี่ (เห
 var rot_hint: Label
 var compass: Panel      # เข็มทิศ: ชี้ทิศเหนือตามมุมกล้อง · แตะ = หันกล้องกลับทิศเหนือ
 var needle: Node2D
+var snd: Panel   # ปุ่มเปิด/ปิดเสียง (0.32) ใต้เข็มทิศ
 var skill_btns := {}   # ปุ่มสกิล 4 ช่อง วงรอบปุ่มตี (ผังเดียวกับเกม 2D fix30/fix41) · ช่อง 3 = เยียวยา
 const SLOT_COLOR := [Color(0.15, 0.3, 0.45, 0.92), Color(0.5, 0.18, 0.08, 0.92), Color(0.35, 0.2, 0.45, 0.92), Color(0.1, 0.4, 0.2, 0.92)]
 var _sk_tick := 0.0
@@ -90,9 +91,20 @@ func setup(t) -> void:
     nl.add_theme_color_override("font_color", Color(1, 1, 1))
     nl.position = Vector2(-4, -31)
     needle.add_child(nl)
+    snd = _button("เสียง", 46, Color(0.05, 0.09, 0.14, 0.82), 13)
+    root.add_child(snd)
+    _snd_look()
     refresh_skills()
     _layout()
     get_viewport().size_changed.connect(_layout)
+
+func _snd_look() -> void:
+    if snd == null or town.sfx == null:
+        return
+    var l := snd.get_child(0) as Label
+    l.text = "ปิดเสียง" if town.sfx.muted else "เสียง"
+    l.add_theme_font_size_override("font_size", 11 if town.sfx.muted else 13)
+    snd.modulate = Color(1, 1, 1, 0.55 if town.sfx.muted else 1.0)
 
 func _circle(sz: float, bg: Color, border: Color, bw: int) -> Panel:
     var p := Panel.new()
@@ -181,6 +193,7 @@ func _process(delta: float) -> void:
         compass.visible = town.room == ""
         var ml: float = town.minimap.offset_left if town.minimap != null else -150.0
         compass.position = Vector2(root.get_viewport_rect().size.x + ml - 56, 60)
+        snd.position = compass.position + Vector2(0, 54)
     _sk_tick += delta
     if _sk_tick >= 0.2:
         _sk_tick = 0.0
@@ -231,6 +244,12 @@ func _input(e: InputEvent) -> void:
             if ride.visible and _in(ride, pos, 4.0):
                 _press(ride)
                 town.field.say_msg(town.steed.toggle())
+                get_viewport().set_input_as_handled()
+                return
+            if snd != null and _in(snd, pos, 4.0) and town.sfx != null:
+                _press(snd)
+                town.sfx.toggle_mute()
+                _snd_look()
                 get_viewport().set_input_as_handled()
                 return
             if compass.visible and _in(compass, pos, 6.0):

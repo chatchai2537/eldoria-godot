@@ -467,6 +467,7 @@ func enter(zi: int) -> void:
         _build(zi)
     data[zi].root.visible = true
     cur = zi
+    if town.sfx != null: town.sfx.play("warp")
     var d: Dictionary = data[zi]
     var p = town.player
     p.set_path(PackedVector3Array())
@@ -739,6 +740,7 @@ func try_mine(p) -> bool:
         for k in n:
             _drop_item(str(K.drop), w)
         town.field.say_msg("ขุด%sแตก! ได้%s +%d" % [K.n, Items.item_name(str(K.drop)), n])
+        if town.sfx != null: town.sfx.at("rock_break", w + Vector3(0, 0.6, 0), 2.0)
         town.guild.event("mine")
         p.gain_xp(int(K.xp) * (1 + cur))
     else:

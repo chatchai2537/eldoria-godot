@@ -256,6 +256,8 @@ func _process(delta: float) -> void:
     var to := Vector3(p.position.x - position.x, 0, p.position.z - position.z)
     var dist := to.length()
     if cyc < prev:
+        if dist < 14.0 and field.town.get("sfx") != null:
+            field.town.sfx.at("slime_hop", position, -10.0, 0.12, 90)
         if dist < 170.0 * K and not p.dead:
             dx = to.x / max(dist, 0.01)
             dz = to.z / max(dist, 0.01)

@@ -488,6 +488,7 @@ func use_item(id: String) -> String:
         if town.mine.cur >= 0:
             town.mine.leave(false)
         position = town.tw(town.SPAWN.x, town.SPAWN.y)
+        if town.get("sfx") != null: town.sfx.play("warp")
         return "วาปกลับเมืองเอลโดเรียแล้ว"
     var only_hp: bool = (u.has("hp") or u.has("hpp")) and not (u.has("mp") or u.has("mpp") or u.has("buff"))
     var only_mp: bool = (u.has("mp") or u.has("mpp")) and not (u.has("hp") or u.has("hpp") or u.has("buff"))
@@ -503,6 +504,7 @@ func use_item(id: String) -> String:
             buffs.append({"stat": str(k), "amt": int(u.buff[k]), "t": float(u.get("sec", 60))})
         recalc_stats()
     var verb := "กิน " if Items.ITEM.get(id, {}).get("note", "").find("อิ่ม") >= 0 else "ใช้ "
+    if town.get("sfx") != null: town.sfx.play("heal" if only_hp or only_mp else "pickup", -4.0)
     return verb + Items.item_name(id) + " แล้ว"
 
 # ---- สกิล (ร้านสกิล) ----
@@ -527,12 +529,15 @@ func use_skill(id: String) -> String:
     match id:
         "whirl":
             body.action("2H_Melee_Attack_Spin", 0.6)
+            if town.get("sfx") != null: town.sfx.at("swing_heavy", position)
             town.field.aoe(self, float(sk.radius), float(sk.mult))
         "fireball":
             body.action("Spellcast_Shoot", 0.5)
+            if town.get("sfx") != null: town.sfx.at("fireball", position)
             town.field.shoot(self, {"range": sk.range, "speed": sk.speed, "kind": "fire"}, float(sk.mult))
         "heal":
             body.action("Spellcast_Raise", 0.6)
+            if town.get("sfx") != null: town.sfx.play("heal")
             hp = min(float(max_hp), hp + max_hp * float(sk.heal_pct) / 100.0)
             town.field.float_text("+%d%%" % int(sk.heal_pct), position + Vector3(0, 2.6, 0), Color(0.5, 1.0, 0.6), 1.1)
     return sk.name
@@ -568,6 +573,7 @@ func gain_xp(n: int) -> void:
         mp = max_mp
         town.field.say_msg("เลเวลอัป! Lv.%d ได้แต้มสเตตัส +3" % lv, 3.5)
         town.field.float_text("LEVEL UP!", position + Vector3(0, 3.2, 0), Color(1.0, 0.85, 0.3), 1.5)
+        if town.get("sfx") != null: town.sfx.play("level_up")
         if town.classes != null:
             town.classes.on_level(self, l0)
 
@@ -584,6 +590,7 @@ func hurt_by(sl) -> void:
     since_hit = 0.0
     town.field.float_text("-%d" % dmg, position + Vector3(0, 2.4, 0), Color(1.0, 0.35, 0.3), 1.1)
     town.field.say_msg("โดนสไลม์ตี เลือด -%d" % dmg)
+    if town.get("sfx") != null: town.sfx.play("hurt", -2.0)
     if hp <= 0.0:
         _die()
     elif at < 0.0:
@@ -601,6 +608,7 @@ func hurt_mob(dmg: int, msg: String) -> void:
     since_hit = 0.0
     town.field.float_text("-%d" % d, position + Vector3(0, 2.4, 0), Color(1.0, 0.35, 0.3), 1.1)
     town.field.say_msg(msg + " เลือด -%d" % d)
+    if town.get("sfx") != null: town.sfx.play("hurt", -2.0)
     if hp <= 0.0:
         _die()
     elif at < 0.0:
@@ -614,6 +622,7 @@ func _die() -> void:
         return
     dead = true
     dead_t = 3.0
+    if town.get("sfx") != null: town.sfx.play("die")
     path = PackedVector3Array()
     target_mob = null
     at = -1.0
@@ -698,8 +707,10 @@ func attack() -> void:
     if is_ranged():
         body.action("Spellcast_Shoot" if str(eq.weapon.k) == "staff" else "1H_Ranged_Shoot", atk_dur)
         town.field.shoot(self, ranged_spec(), 1.0)
+        if town.get("sfx") != null: town.sfx.at("magic" if str(eq.weapon.k) == "staff" else "bow", position + Vector3(0, 1.2, 0), -3.0)
         return
     body.action(attack_anim(), atk_dur)
+    if town.get("sfx") != null: town.sfx.at("swing_heavy" if model_kind == "barbarian" else "swing", position + Vector3(0, 1.2, 0), -2.0)
 
 ## ---- เครื่องมือในมือตอนตัดไม้/ขุดแร่ (0.28) ----
 ## ขวาน = ยืม 1H_Axe จากโมเดลคนเถื่อน · พลั่วขุด = ปั้นด้วยโค้ด (โมเดลไม่มี) · สีตามระดับเครื่องมือ
@@ -837,6 +848,7 @@ func _gather_fx(kind: String) -> void:
     update_gear_visual()
     body.action("1H_Melee_Attack_Chop", atk_dur)
     var fwd := Vector3(sin(heading), 0, cos(heading))
+    if town.get("sfx") != null: town.sfx.at("chop" if kind == "axe" else "mine", position + fwd * 1.3 + Vector3(0, 1.0, 0))
     var col := Color(0.55, 0.36, 0.18) if kind == "axe" else Color(0.62, 0.62, 0.66)
     _chips(position + fwd * 1.3 + Vector3(0, 0.9, 0), col, fwd)
 
@@ -875,6 +887,7 @@ func dash(dir: Vector3) -> void:
     body.rotation.y = heading
     dash_t = ROLL.time
     dash_cd = ROLL.cd
+    if town.get("sfx") != null: town.sfx.play("roll", -3.0)
     at = -1.0
     queued = false
     path = PackedVector3Array()

@@ -68,6 +68,7 @@ func enter(id: String) -> void:
         _build(id)
     cur = id
     town.room = id
+    if town.get("sfx") != null: town.sfx.play("door")
     built[id].visible = true
     var p = town.player
     p.set_path(PackedVector3Array())

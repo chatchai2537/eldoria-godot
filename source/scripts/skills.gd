@@ -491,6 +491,9 @@ func use_class(i: int) -> String:
         cd[i] = float(S.cd)
     _face_target(p)
     call("_" + p.cls + str(i), p, st)
+    if town.get("sfx") != null:
+        var bs: String = base_of(p.cls)
+        town.sfx.at({"mage": "magic", "archer": "bow"}.get(bs, "swing_heavy"), p.position + Vector3(0, 1.2, 0))
     town.field.float_text(str(S.n) + ((" " + ["Ⅰ", "Ⅱ", "Ⅲ"][st]) if S.has("steps") else ""), p.position + Vector3(0, 3.0, 0), CLS[p.cls].col, 1.1)
     return str(S.n)
 
@@ -835,6 +838,7 @@ func _summon(p, kind: String, n: int, mx: int, mult: float, sec: float) -> void:
 # ---------- เอฟเฟกต์ ----------
 func _meteor(at: Vector3, r: float, mult: float) -> void:
     var p = town.player
+    if town.get("sfx") != null: town.sfx.at("boom", at, 0.0, 0.1, 90)
     town.field.aoe(p, r, mult, at, 0.0, Color(1.0, 0.4, 0.1))
     var m := MeshInstance3D.new()
     var sm := SphereMesh.new()

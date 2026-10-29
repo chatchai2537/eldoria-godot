@@ -84,6 +84,7 @@ var test_lv := 0  # ทดสอบหาต้นเหตุจอดำ: ?t=1
 var mobile: CanvasLayer
 var mine: Node3D
 var craft: Node
+var sfx: Node   # ระบบเสียง (0.32)
 var classes: Node
 var story: Node
 var guild: Node
@@ -231,6 +232,10 @@ func _ready() -> void:
     player.recalc_stats()
     if player.loaded_hp > 0.0:
         player.hp = min(player.loaded_hp, float(player.max_hp))
+    sfx = Node.new()
+    sfx.set_script(load("res://scripts/sfx.gd"))
+    add_child(sfx)
+    sfx.setup(self)
     craft = Node.new()
     craft.set_script(load("res://scripts/craft.gd"))
     add_child(craft)
@@ -1853,6 +1858,7 @@ func _btn(t: String, enabled: bool, cb: Callable) -> Button:
     b.custom_minimum_size = Vector2(96, 34)
     b.focus_mode = Control.FOCUS_NONE
     b.pressed.connect(cb)
+    b.pressed.connect(func(): if sfx != null: sfx.play("ui_click", -4.0))
     return b
 
 ## ไอคอนไอเท็ม (ถ่ายจากโมเดล 3D ด้วย tools/make_icons.gd → assets/icons/<id>.png) · ไม่มีไฟล์ = null
@@ -1965,6 +1971,8 @@ func shop_sell(item_id: String, price: int, n: int) -> String:
 func _shop_msg(t: String, thank: String = "") -> void:
     if t != "":
         field.say_msg(t)
+        if sfx != null and thank != "":
+            sfx.play("buy")
         if thank != "" and room != "":
             rooms.bubble(thank)
     open_shop(cur_shop)
@@ -2005,6 +2013,7 @@ func shop_qty_add(d: int) -> void:
     open_shop(cur_shop)
 
 func shop_sell_ok() -> void:
+    if sfx != null: sfx.play("coin")
     var sh: Dictionary = shops_by_id.get(cur_shop, {})
     var m := shop_sell(shop_sel, _sell_price(sh, shop_sel), shop_qty)
     if player.inv_count(shop_sel) <= 0:
@@ -2297,7 +2306,9 @@ func open_bank() -> void:
 func toggle_bag() -> void:
     if ui_bag.visible:
         ui_bag.visible = false
+        if sfx != null: sfx.play("ui_close")
         return
+    if sfx != null: sfx.play("ui_open")
     bag_sel = {}
     ui_shop.visible = false
     ui_char.visible = false
@@ -2358,6 +2369,7 @@ func _islot(icon: String, cnt: String, tag: String, edge: Color, cb: Callable, f
     if faded:
         b.modulate = Color(1, 1, 1, 0.38)
     b.pressed.connect(cb)
+    b.pressed.connect(func(): if sfx != null: sfx.play("ui_click", -6.0))
     return b
 
 func _gear_edge(g: Dictionary) -> Color:
@@ -2574,7 +2586,9 @@ func _panel(cl: CanvasLayer, sb: StyleBox) -> Array:
 func toggle_char() -> void:
     if ui_char.visible:
         ui_char.visible = false
+        if sfx != null: sfx.play("ui_close")
         return
+    if sfx != null: sfx.play("ui_open")
     ui_shop.visible = false
     ui_bag.visible = false
     refresh_char()
@@ -2877,6 +2891,9 @@ func _unhandled_input(e: InputEvent) -> void:
                 var ms: String = classes.use_slot(si)
                 if ms != "" and ms != classes.slot_name(player, si): field.say_msg(ms)
             KEY_F: time_scale = 20.0 if time_scale < 20.0 else 1.0
+            KEY_M:
+                if sfx != null:
+                    field.say_msg("ปิดเสียงแล้ว" if sfx.toggle_mute() else "เปิดเสียงแล้ว")
             KEY_G: _set_quality(1 if quality == 2 else 2)
             KEY_J, KEY_SPACE: player.attack()
             KEY_SHIFT: player.dash(_key_dir())

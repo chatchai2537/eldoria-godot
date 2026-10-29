@@ -360,6 +360,7 @@ func try_chop(p) -> bool:
         add_child(st)
         tr["stump"] = st
         say_msg("ต้นไม้กำลังล้ม!")
+        if town.sfx != null: town.sfx.at("tree_fall", tr.pos + Vector3(0, 1.5, 0), 2.0)
     else:
         say_msg("ฟันต้นไม้ เหลืออีก %d ที" % int(ceil(float(tr.hp) / dm)))
     return true
@@ -660,6 +661,9 @@ func hit_slime(s, p, mult: float, stun: float = 0.0) -> void:
     if cl != null and cl.lifesteal(p) > 0.0:
         p.hp = min(float(p.max_hp), p.hp + dm * cl.lifesteal(p))
     s.take_hit(dm, p.position)
+    if town.sfx != null:
+        var hard: bool = str(s.get("f")) in ["golem", "skeleton", "beetle"]
+        town.sfx.at("hit_metal" if hard else "hit_flesh", s.position + Vector3(0, 0.8, 0), 0.0 if cr else -3.0, 0.1, 30)
     float_text(("คริ! " if cr else "") + str(dm), s.position + Vector3(0, s.radius * 2.0 + 0.4, 0), Color(1.0, 0.85, 0.3) if cr else Color(1, 1, 1), 1.4 if cr else 1.0)
     if s.dead:
         if s.has_method("killed_by"):
@@ -753,6 +757,7 @@ func _update_projectiles(delta: float) -> void:
 
 func _killed(s) -> void:
     say_msg("สไลม์แตก!")
+    if town.sfx != null: town.sfx.at("slime_die", s.position)
     if town.story != null:
         town.story.on_slime()
         town.guild.event("kill", "slime")
@@ -988,8 +993,10 @@ func _process(delta: float) -> void:
                 if to.length() < 0.5:
                     if d.k == "coin":
                         p.coins += 1
+                        if town.sfx != null: town.sfx.play("coin", -8.0, 0.08, 70)
                     else:
                         p.inv_add(str(d.k), 1)
+                        if town.sfx != null: town.sfx.play("pickup", -5.0, 0.1, 60)
                     n.queue_free()
                     drops.remove_at(i)
                     continue

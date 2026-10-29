@@ -452,6 +452,9 @@ func _run() -> void:
     p.heading = 0.0
     p.mp = 50.0
     var tgt: Node = f.slimes[1]
+    for other in f.slimes:   # กันสไลม์ตัวอื่นเดินมาขวางทางลูกไฟ (ผลสุ่มเปลี่ยนเมื่อเพิ่มเสียงที่สุ่มแบบ)
+        if other != tgt:
+            other.position = stand + Vector3(40, 0, 40)
     tgt.position = stand + Vector3(0, 0, 6.0)
     tgt.dead = false
     tgt.hp = 99
@@ -1277,6 +1280,46 @@ func _run() -> void:
     check(It.item_name("sword2") == "ดาบทองแดง", "อัศวิน: อาวุธชื่อดาบ")
     p.cls = "none"
     p.recalc_stats()
+    # ---------- ระบบเสียง (0.32) ----------
+    var sx = world.sfx
+    check(sx != null and sx.streams("chop").size() == 3 and sx.streams("step_grass").size() == 4 and sx.streams("level_up").size() == 1, "เสียง: โหลดเสียงหลายแบบ (ตัดไม้ 3 · เท้าหญ้า 4 · เลเวลอัป)")
+    var miss_s := []
+    for sn in ["swing", "swing_heavy", "hit_flesh", "hit_metal", "slime_hop", "slime_die", "hurt", "roll", "bow", "magic", "chop", "mine", "die", "fireball", "boom", "heal", "tree_fall", "rock_break", "pickup", "coin", "splash", "ui_click", "ui_open", "ui_close", "buy", "level_up", "warp", "door", "amb_field", "amb_town", "amb_night", "amb_mine", "step_stone", "step_dirt"]:
+        if sx.streams(sn).is_empty():
+            miss_s.append(sn)
+    check(miss_s.is_empty(), "เสียง: ไฟล์ครบทุกเหตุการณ์ (ขาด %s)" % str(miss_s))
+    var tod0: float = world.time_of_day
+    world.time_of_day = 0.45
+    p.position = world.tw(10, 20)
+    check(sx.ambient_name() == "amb_town" and sx.step_surface() == "step_stone", "เสียง: ในเมืองกลางวัน = บรรยากาศเมือง เท้าบนหิน")
+    p.position = world.fw(20.5, 20.5)
+    check(sx.ambient_name() == "amb_field" and sx.step_surface() == "step_grass", "เสียง: ทุ่งหญ้า = ลม+นก เท้าบนหญ้า")
+    world.time_of_day = 0.95
+    check(sx.ambient_name() == "amb_night", "เสียง: กลางคืน = จิ้งหรีด")
+    world.time_of_day = tod0
+    sx._last.clear()
+    sx._last_pos = p.position
+    sx._step_acc = 0.0
+    p.position += Vector3(1.4, 0, 0)
+    sx._steps(0.5)
+    check(sx._last.has("step_grass"), "เสียง: เดินครบก้าวมีเสียงเท้า")
+    sx._last.clear()
+    p.at = -1.0
+    p.dead = false
+    p.stun = 0.0
+    p.dash_t = 0.0
+    p.weapon = "sword1"
+    var pos_keep: Vector3 = p.position
+    p.position = world.tw(10, 20)
+    world._update_cam(1.0)
+    p.attack()
+    p.position = pos_keep
+    check(sx._last.has("swing"), "เสียง: ฟันดาบมีเสียงหวือ")
+    var m0: bool = sx.muted
+    sx.toggle_mute()
+    check(AudioServer.is_bus_mute(0) == (not m0), "เสียง: ปุ่มปิด/เปิดเสียง")
+    sx.toggle_mute()
+    p.at = -1.0
     # ---------- ภาพ 0.24-0.26 ----------
     check(world.field.slimes.size() > 0 and world.field.slimes[0].body.mesh is ArrayMesh, "สไลม์ทรงหยดน้ำ (ArrayMesh)")
     check(world.fade_blds.size() >= 11, "อาคารใหม่ลงทะเบียนจางเมื่อบังกล้อง")
