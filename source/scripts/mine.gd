@@ -548,6 +548,7 @@ func mob_killed(m) -> void:
         town.field.say_msg("ปราบ " + m.nm + " สำเร็จ! ได้หินเสริมพลัง · บอสจะกลับมาอีกใน 3 นาที", 4.0)
         boss = null
         boss_t = 180.0
+        town.story.on_boss(str(ZONES[cur].id))
     elif j != "" and randf() < 0.15:
         _drop_item(j, m.position)
     var xp: int = max(5, int(round(p.need(m.lv) / 20.0))) * (3 if m.elite else 1) * (15 if m.boss else 1)

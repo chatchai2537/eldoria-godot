@@ -201,7 +201,9 @@ func interact() -> void:
         var i: int = line_i.get(id, 0)
         line_i[id] = i + 1
         bubble(str(lines[i % lines.size()]), 3.2)
-    if id == "bank":
+    if id == "hall":
+        town.story.king_talk()
+    elif id == "bank":
         town.open_bank()
     elif (sh.get("buy", []) as Array).size() > 0 or (sh.get("sell", []) as Array).size() > 0:
         town.open_shop(id)

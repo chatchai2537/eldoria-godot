@@ -48,7 +48,9 @@ var weapon_tier: int:
         if eq.has("weapon"):
             eq.weapon.t = clampi(v, 0, 5)
 var skills := {}       # สกิลที่เรียนแล้ว id -> true
-var cls := "none"      # อาชีพ: none / sword / mage / archer (skills.gd)
+var cls := "none"
+var pending_story = null   # เนื้อเรื่องที่โหลดก่อนระบบ story ถูกสร้าง
+var loaded_hp := -1.0      # อาชีพ: none / sword / mage / archer (skills.gd)
 var skill_cd := {}     # คูลดาวน์ที่เหลือ
 var buffs: Array = []  # [{stat, amt, t}] จากอาหาร
 var bank := {}         # ของที่ฝากธนาคาร id -> จำนวน
@@ -191,7 +193,7 @@ const SAVE_KEYS := ["lv", "xp", "sp", "hp", "mp", "coins", "gel", "stone", "wood
 func save_game() -> bool:
     if not save_enabled:
         return false
-    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true)}
+    var d := {"v": 2, "stats": stats.duplicate(), "inv": inv.duplicate(), "skills": skills.keys(), "bank": bank.duplicate(), "gear": gear.duplicate(true), "eq": eq.duplicate(true), "story": town.story.S.duplicate(true) if town.story != null else {}}
     for k in SAVE_KEYS:
         d[k] = get(k)
     var tmp := save_path + ".tmp"
@@ -254,9 +256,13 @@ func load_game() -> bool:
             for i in int(inv[k]):
                 gear.append(make_inst(str(k)))
             inv.erase(k)
+    pending_story = d.get("story")
+    if town.story != null:
+        town.story.load_state(pending_story)
     if not ["none", "sword", "mage", "archer"].has(cls):
         cls = "none"
     var keep_hp := hp
+    loaded_hp = hp
     var keep_mp := mp
     recalc_stats()
     hp = clamp(keep_hp, 1.0, float(max_hp))

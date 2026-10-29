@@ -744,8 +744,10 @@ func _run() -> void:
     p.mp = p.max_mp
     p.stun = 0.0
     p.dash_t = 0.0
+    p.xp = 0
     var mp0: float = p.mp
-    check(cl.use_class(0) == "กระทืบปฐพี" and p.mp == mp0 - 15 and cl.cd[0] > 0.0, "นักดาบ: กระทืบปฐพี ใช้มานา 15 + คูลดาวน์")
+    var ucr: String = cl.use_class(0)
+    check(ucr == "กระทืบปฐพี" and p.mp == mp0 - 15 and cl.cd[0] > 0.0, "นักดาบ: กระทืบปฐพี ใช้มานา 15 + คูลดาวน์")
     check(sl2.hp < 999 and sl2.stun_t > 1.0, "นักดาบ: กระทืบปฐพีโดนรอบตัว + มึนงง")
     var sx0: Vector3 = sl2.position
     sl2._process(0.5)
@@ -794,6 +796,77 @@ func _run() -> void:
     check(world.ui_shop.visible and world.cur_shop == "class", "คุยกับปรมาจารย์อาชีพแล้วเปิดเมนูเลือกอาชีพ")
     world.close_shop()
     world.ui_dialog.visible = false
+    p.cls = "none"
+    p.lv = 1
+    p.recalc_stats()
+
+    # ---------- เนื้อเรื่อง บทนำ-บท 3 ----------
+    var sto: Node = world.story
+    sto.reset()
+    p.dead = false
+    p.cls = "none"
+    p.lv = 1
+    p.recalc_stats()
+    p.position = world.tw(10, 20)
+    check(sto.guide_target().distance_to(world.tw(22.0, 9.3)) < 0.1, "เนื้อเรื่อง: ลูกศรชี้ไปปราสาทตอนเริ่ม")
+    p.inv_add("sword0", -p.inv_count("sword0"))
+    p.weapon = ""
+    var cs0: int = p.coins
+    world.in_door = ""
+    world.rooms.enter("hall")
+    var kg: Node3D = world.rooms.keepers["hall"]
+    p.position = Vector3(kg.position.x, 0, kg.position.z + 2.2)
+    p.stun = 0.0
+    p.dash_t = 0.0
+    p.attack()
+    check(world.cur_shop == "king" and world.ui_shop.visible, "เนื้อเรื่อง: คุยกับพระราชาในท้องพระโรง")
+    check(int(sto.S.ch) == 1 and p.coins == cs0 + 50 and p.weapon == "sword0" and p.inv_count("pick0") >= 1, "บทนำ: ได้รางวัล ดาบ/ขวาน/ที่ขุด + 50 เหรียญ แล้วไปบทที่ 1")
+    world.close_shop()
+    world.rooms.leave()
+    for i in 7:
+        sto.on_slime()
+    sto._process(0.6)
+    check(sto.S.st == "active" and sto.need()[0] == 7, "บทที่ 1: นับสไลม์ 7/8 ยังไม่สำเร็จ")
+    var sl3 := Node3D.new()
+    sl3.set_script(load("res://scripts/slime.gd"))
+    world.field.add_child(sl3)
+    sl3.setup(world.field, 1, world.fw(20.5, 20.5))
+    world.field.slimes.append(sl3)
+    sl3.hp = 1
+    world.field.hit_slime(sl3, p, 5.0)
+    sto._process(0.6)
+    check(sto.S.st == "report" and sto.tracker.text.find("รายงาน") >= 0, "บทที่ 1: ฆ่าสไลม์ครบ 8 → กลับไปรายงาน")
+    p.position = world.tw(10, 20)
+    check(sto.guide_target().distance_to(world.tw(22.0, 9.3)) < 0.1, "เนื้อเรื่อง: สำเร็จแล้วลูกศรชี้กลับปราสาท")
+    sto.king_talk()
+    check(int(sto.S.ch) == 2 and sto.S.st == "active", "รายงานแล้วได้บทที่ 2")
+    world.close_shop()
+    p.lv = 5
+    check(not sto.done(), "บทที่ 2: Lv.5 แต่ยังไม่มีอาวุธเหล็ก ยังไม่สำเร็จ")
+    p.weapon = "sword1"
+    check(sto.done(), "บทที่ 2: Lv.5 + ดาบเหล็ก = สำเร็จ")
+    sto._process(0.6)
+    sto.king_talk()
+    world.close_shop()
+    p.lv = 10
+    world.classes.pick("archer")
+    world.close_shop()
+    check(sto.done(), "บทที่ 3: เลือกอาชีพแล้วสำเร็จ")
+    sto._process(0.6)
+    sto.king_talk()
+    world.close_shop()
+    check(int(sto.S.ch) == 4, "ไปถึงบทที่ 4")
+    p.save_enabled = true
+    p.save_path = "user://test_save5.json"
+    p.save_game()
+    sto.reset()
+    p.load_game()
+    check(int(sto.S.ch) == 4 and int(sto.S.slime) >= 8, "เซฟ/โหลด: เนื้อเรื่อง")
+    DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_save5.json"))
+    p.save_enabled = false
+    sto.open_journal()
+    check(world.cur_shop == "journal", "เปิดบันทึกเนื้อเรื่องได้")
+    world.close_shop()
     p.cls = "none"
     p.lv = 1
     p.recalc_stats()

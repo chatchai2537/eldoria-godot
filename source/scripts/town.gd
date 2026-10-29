@@ -77,6 +77,7 @@ var mobile: CanvasLayer
 var mine: Node3D
 var craft: Node
 var classes: Node
+var story: Node
 var world_loaded := false
 var recovery_mode := false
 var _sky_tick := 0.0
@@ -176,10 +177,21 @@ func _ready() -> void:
     rooms.set_script(load("res://scripts/rooms.gd"))
     add_child(rooms)
     rooms.setup(self)
+    story = Node.new()
+    story.set_script(load("res://scripts/story.gd"))
+    add_child(story)
+    story.setup(self)
+    story.build_ui(ui_shop.get_parent())
     classes = Node.new()
     classes.set_script(load("res://scripts/skills.gd"))
     add_child(classes)
     classes.setup(self)
+    # ผู้เล่นโหลดเซฟก่อนสร้างระบบเนื้อเรื่อง/อาชีพ → ใส่ค่าที่โหลดไว้ตอนนี้
+    story.load_state(player.pending_story)
+    story.update_tracker()
+    player.recalc_stats()
+    if player.loaded_hp > 0.0:
+        player.hp = min(player.loaded_hp, float(player.max_hp))
     craft = Node.new()
     craft.set_script(load("res://scripts/craft.gd"))
     add_child(craft)

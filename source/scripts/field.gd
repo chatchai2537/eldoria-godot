@@ -758,6 +758,8 @@ func _update_projectiles(delta: float) -> void:
 
 func _killed(s) -> void:
     say_msg("สไลม์แตก!")
+    if town.story != null:
+        town.story.on_slime()
     var n := 1 + (1 if randf() < 0.4 else 0)
     var c: int = 1 + randi() % 3 + (s.lv >> 1)
     for i in n:
