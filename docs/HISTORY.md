@@ -287,3 +287,8 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 - เห็นอุปกรณ์บนตัว: ใช้ชิ้นส่วนใน KayKit (Knight: 1H_Sword Knight_Helmet Knight_Cape Round_Shield · Mage: 2H_Staff · Rogue: 1H_Crossbow) · เริ่มเกมไม่มีอะไรในมือ (เหมือน 2D)
 - เรืองแสงคุณภาพแรงเกินจนตัวกลายเป็นก้อนสีเหลือง → ลดเหลือ 0.12/0.25 · ผ้าคลุมไม่เรืองแสง ย้อมอ่อน
 - ขายอุปกรณ์: gearPrice ของ 2D (GP × GK) × 0.6 ตาม fix31
+
+## 0.17-classes (Claude 2026-10-29)
+- 8 อาชีพจาก js/056-fix25.js (NC25 NSK25 NPAS25 calcBonus critCh CRITD spdMul aspdMul) · ท่าสกิลทำแบบง่ายด้วย aoe/shoot/blink · มอนไม่กระเด็น (กฎเจ้าของ)
+- ally.gd: เดินตาม/ตีศัตรูใกล้สุด · อายุ 30 วิ (2D ไม่ได้ระบุชัด → ค่าเสนอ) · ราชสีห์ 25 วิ
+- ยังไม่มี: ล่องหน · ชะลอศัตรู · ไหม้ต่อเนื่อง (ใช้ดาเมจแทน)

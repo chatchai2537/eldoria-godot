@@ -997,6 +997,88 @@ func _run() -> void:
     p.eq = {}
     p.update_gear_visual()
 
+    # ---------- 11 อาชีพ: ใช้สกิลครบทุกท่า ----------
+    var cl2: Node = world.classes
+    p.dead = false
+    p.lv = 35
+    p.position = world.fw(20.5, 20.5)
+    var dummy := Node3D.new()
+    dummy.set_script(load("res://scripts/slime.gd"))
+    world.field.add_child(dummy)
+    dummy.setup(world.field, 1, p.position + Vector3(0, 0, 1.8))
+    world.field.slimes.append(dummy)
+    for ck in cl2.CLASS_ORDER:
+        p.cls = "none"
+        p.coins = 0
+        cl2.pick(ck)
+        world.close_shop()
+        p.weapon = {"sword": "sword1", "staff": "staff1", "bow": "bow1"}[cl2.CLS[ck].w]
+        p.recalc_stats()
+        dummy.hp = 99999
+        dummy.max_hp = 99999
+        dummy.dead = false
+        dummy.position = p.position + Vector3(0, 0, 1.8)
+        p.heading = 0.0
+        var used := 0
+        for i in 3:
+            cl2.cd = [0.0, 0.0, 0.0]
+            cl2.step = 0
+            for k in (3 if i == 1 else 1):
+                p.mp = 9999
+                p.max_mp = 9999
+                p.stun = 0.0
+                p.dash_t = 0.0
+                p.dead = false
+                if cl2.use_class(i) == str(cl2.SK[ck][i].n):
+                    used += 1
+        for k in 30:
+            cl2._process(0.1)
+            world.field._process(0.05)
+        check(p.cls == ck and used == 5 and dummy.hp < 99999, "อาชีพ %s: ใช้สกิลครบ 5 ครั้ง (รวมจังหวะ) โดนเป้า" % cl2.CLS[ck].n)
+        cl2.pers.clear()
+        p.position = world.fw(20.5, 20.5)
+    p.cls = "paladin"
+    p.iframe = 0.0
+    var ph: float = p.hp
+    p.hurt_mob(100, "ทดสอบ")
+    var lost1: float = ph - p.hp
+    p.cls = "sword"
+    p.iframe = 0.0
+    ph = p.hp
+    p.hurt_mob(100, "ทดสอบ")
+    check(lost1 < ph - p.hp, "พาลาดิน: ได้รับดาเมจน้อยกว่า (ลด 15%)")
+    p.hp = p.max_hp
+    p.cls = "necro"
+    p.weapon = "staff1"
+    cl2.cd = [0.0, 0.0, 0.0]
+    for a2 in cl2.allies:
+        if is_instance_valid(a2):
+            a2.queue_free()
+    cl2.allies.clear()
+    p.mp = 9999
+    cl2.use_class(0)
+    check(cl2.allies.size() == 2, "เนโครแมนเซอร์: ปลุกโครงกระดูก 2 ตัว")
+    var a0 = cl2.allies[0]
+    a0.position = dummy.position + Vector3(1.0, 0, 0)
+    dummy.hp = 99999
+    a0._process(0.1)
+    a0._process(0.1)
+    check(dummy.hp < 99999, "โครงกระดูกที่เรียกมาตีศัตรู")
+    for a2 in cl2.allies:
+        if is_instance_valid(a2):
+            a2.queue_free()
+    cl2.allies.clear()
+    cl2.bless_t = 0.0
+    cl2.aegis_t = 0.0
+    cl2.zen_t = 0.0
+    dummy.queue_free()
+    world.field.slimes.erase(dummy)
+    p.cls = "none"
+    p.lv = 1
+    p.recalc_stats()
+    p.hp = p.max_hp
+    p.mp = p.max_mp
+
     # ---------- มือถือ ----------
     if world.mobile != null:
         var m: Node = world.mobile

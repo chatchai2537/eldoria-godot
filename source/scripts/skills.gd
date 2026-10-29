@@ -11,7 +11,17 @@ const CLS := {
     "sword": {"n": "นักดาบ", "col": Color(1.0, 0.54, 0.42), "w": "sword", "d": "ต่อสู้ระยะประชิด ถึก เลือดเยอะ · ดาเมจจาก STR", "pas": "VIT +2+Lv/3 · STR +Lv/5"},
     "mage": {"n": "นักเวท", "col": Color(0.7, 0.55, 1.0), "w": "staff", "d": "ยิงเวทระยะไกล สกิลวงกว้างรุนแรง · ดาเมจจาก INT · มานาฟื้นเร็ว", "pas": "INT +4+Lv/2 · มานาฟื้นเร็ว ×2.5"},
     "archer": {"n": "นักธนู", "col": Color(0.49, 1.0, 0.54), "w": "bow", "d": "ยิงธนูไกลและเร็ว คริติคอลสูง · ดาเมจจาก AGI", "pas": "AGI +3+Lv/3 · คริ +10%"},
+    # 8 อาชีพเพิ่ม (js/056-fix25.js NC25)
+    "ninja": {"n": "นินจา", "col": Color("#8a9aff"), "w": "sword", "d": "เร็ว ลอบสังหาร คริติคอลสูง วาร์ปไปหลังศัตรู · ดาเมจจาก AGI+STR", "pas": "AGI +3+Lv/3 · คริ +12% · เดินเร็ว +15%"},
+    "sniper": {"n": "สไนเปอร์", "col": Color("#ffd23a"), "w": "bow", "d": "ยิงไกลที่สุดในเกม นัดเดียวแรงมาก คริแรง · ดาเมจจาก AGI", "pas": "AGI +4+Lv/3 · คริ +8% · ดาเมจคริ +60%"},
+    "paladin": {"n": "พาลาดิน", "col": Color("#ffe9a0"), "w": "sword", "d": "อัศวินศักดิ์สิทธิ์ ถึกที่สุด ฮีลตัวเองได้ · ดาเมจจาก STR", "pas": "VIT +4+Lv/3 · ลดดาเมจที่ได้รับ 15% · ฟื้นเลือด 0.5%/วิ"},
+    "cleric": {"n": "นักบวช", "col": Color("#bff0ff"), "w": "staff", "d": "แสงศักดิ์สิทธิ์ ฮีลแรง บัฟพลัง ยิงแสงพิพากษา · ดาเมจจาก INT", "pas": "INT +3+Lv/3 · VIT +Lv/5 · มานาฟื้นเร็ว ×2"},
+    "necro": {"n": "เนโครแมนเซอร์", "col": Color("#7affb0"), "w": "staff", "d": "ปลุกโครงกระดูกเป็นกองทัพ สาปศัตรู ดูดเลือด · ดาเมจจาก INT", "pas": "INT +4+Lv/3 · ดูดเลือด 4% ของดาเมจ"},
+    "monk": {"n": "มังค์", "col": Color("#ffb46a"), "w": "sword", "d": "หมัดมวยวัดตีเร็วต่อเนื่อง คอมโบรัว · ดาเมจจาก STR+AGI", "pas": "STR +2+Lv/4 · AGI +2+Lv/4 · ตีเร็วขึ้น 25%"},
+    "dragoon": {"n": "อัศวินมังกร", "col": Color("#ff6a5a"), "w": "sword", "d": "ทวนยาวระยะไกล กระโดดแทงจากฟ้า ลมหายใจมังกร · ดาเมจจาก STR", "pas": "STR +3+Lv/3 · VIT +Lv/6 · ระยะฟันยาวขึ้น"},
+    "summoner": {"n": "ผู้อัญเชิญสัตว์", "col": Color("#9adf6a"), "w": "staff", "d": "เรียกหมาป่า หมี อินทรี มาสู้แทน · ดาเมจจาก INT", "pas": "INT +3+Lv/3 · สัตว์อัญเชิญแรงขึ้น 30%"},
 }
+const CLASS_ORDER := ["sword", "mage", "archer", "ninja", "sniper", "paladin", "cleric", "necro", "monk", "dragoon", "summoner"]
 const WNAME := {"sword": "ดาบ", "staff": "คทา", "bow": "ธนู"}
 const SK := {
     "sword": [
@@ -26,12 +36,52 @@ const SK := {
         {"n": "ยิงกระจาย", "lv": 5, "mp": 12, "cd": 5.0, "d": "ยิงธนู 5 ดอกเป็นรูปพัด ดอกละ ×0.9"},
         {"n": "ธนูวิญญาณ", "lv": 15, "mp": [8, 10, 18], "cd": 9.0, "steps": 3, "d": "① ธนูทะลวง ×1.5 → ② ตีลังกาถอยยิง ×1.2 → ③ ธนูระเบิด ×2.6 + มึนงง"},
         {"n": "ฝนธนู", "lv": 30, "mp": 45, "cd": 24.0, "d": "ห่าธนูตกด้านหน้า 3 วิ ดาเมจต่อเนื่อง"}],
+    "ninja": [
+        {"n": "ดาวกระจายพายุ", "lv": 5, "mp": 14, "cd": 6.0, "d": "ปาดาวกระจาย 8 ทิศรอบตัว ดอกละ ×0.9"},
+        {"n": "เงาพริบตา", "lv": 15, "mp": [10, 12, 18], "cd": 9.0, "steps": 3, "d": "① วาร์ปไปหลังศัตรูแล้วแทง ×1.8 → ② ฟันรอบตัว ×1.4 → ③ ระเบิดควัน ×2.0 มึน + อมตะ 1.5 วิ"},
+        {"n": "พันเงาสังหาร", "lv": 30, "mp": 45, "cd": 24.0, "d": "กลายเป็นเงา 2.5 วิ วาร์ปฟันศัตรูรอบตัวต่อเนื่อง ครั้งละ ×1.3 (อมตะ)"}],
+    "sniper": [
+        {"n": "กระสุนเจาะเกราะ", "lv": 5, "mp": 12, "cd": 5.0, "d": "ยิงนัดเดียวไกลมาก ทะลุทุกตัว ×3.0"},
+        {"n": "ยิงสามจังหวะ", "lv": 15, "mp": [8, 10, 18], "cd": 9.0, "steps": 3, "d": "① เล็งหัว ×2.4 คริแน่นอน → ② ตีลังกาถอยยิงคู่ ×1.4 → ③ กระสุนระเบิด ×2.8"},
+        {"n": "ห่ากระสุนพิฆาต", "lv": 30, "mp": 45, "cd": 24.0, "d": "ยิงกระหน่ำพื้นที่ด้านหน้า 3 วิ"}],
+    "paladin": [
+        {"n": "ค้อนศักดิ์สิทธิ์", "lv": 5, "mp": 16, "cd": 7.0, "d": "ฟาดค้อนแสงรอบตัว ×1.7 มึนงง + ฮีลตัวเอง 10%"},
+        {"n": "ดาบแห่งแสง", "lv": 15, "mp": [10, 12, 20], "cd": 9.0, "steps": 3, "d": "① พุ่งชาร์จ ×1.5 → ② โล่กระแทก ×1.6 มึน → ③ เสาแสงถล่ม ×2.8"},
+        {"n": "ปราการเทพ", "lv": 30, "mp": 40, "cd": 28.0, "d": "โล่แสง 6 วิ: ลดดาเมจ 60% · แสงเผาศัตรูรอบตัว"}],
+    "cleric": [
+        {"n": "แสงรักษา", "lv": 5, "mp": 20, "cd": 9.0, "d": "ฮีลตัวเอง 30% + ระเบิดแสง ×1.2 รอบตัว"},
+        {"n": "พิพากษาสวรรค์", "lv": 15, "mp": [10, 14, 22], "cd": 10.0, "steps": 3, "d": "① ลูกแสง 3 ลูก ×1.4 → ② วงแหวนแสง ×1.5 → ③ ลำแสงสวรรค์ ×3.2"},
+        {"n": "อวยพรเทวา", "lv": 30, "mp": 50, "cd": 30.0, "d": "8 วิ: โจมตี +35% · ฮีล 4%/วิ · มานาฟื้นเร็ว"}],
+    "necro": [
+        {"n": "ปลุกโครงกระดูก", "lv": 5, "mp": 18, "cd": 8.0, "d": "เรียกนักรบโครงกระดูก 2 ตัวมาสู้ (สูงสุด 6)"},
+        {"n": "คำสาปวิญญาณ", "lv": 15, "mp": [10, 14, 20], "cd": 10.0, "steps": 3, "d": "① ลูกวิญญาณดูดเลือด ×1.6 → ② ทุ่งคำสาป 4 วิ → ③ หอกกระดูกทะลุ ×3.0"},
+        {"n": "กองทัพมรณะ", "lv": 30, "mp": 55, "cd": 30.0, "d": "ระเบิดพลังมรณะ ×2.2 + เรียกโครงกระดูก 5 ตัว"}],
+    "monk": [
+        {"n": "หมัดพันครั้ง", "lv": 5, "mp": 12, "cd": 5.0, "d": "ต่อยรัวด้านหน้า 8 ครั้ง ครั้งละ ×0.55"},
+        {"n": "ฝ่ามือมังกร", "lv": 15, "mp": [8, 10, 18], "cd": 8.0, "steps": 3, "d": "① ฝ่ามือคลื่นพลัง ×1.6 → ② เตะเสย ×1.8 → ③ หมัดมังกร ×3.0"},
+        {"n": "จิตอรหันต์", "lv": 30, "mp": 40, "cd": 26.0, "d": "4 วิ: อมตะ · ออร่าทองตีรอบตัวรัว ๆ"}],
+    "dragoon": [
+        {"n": "แทงทะลวง", "lv": 5, "mp": 12, "cd": 5.0, "d": "แทงทวนพุ่งไปข้างหน้าทะลุทุกตัว ×1.9"},
+        {"n": "กระโดดมังกร", "lv": 15, "mp": [10, 12, 20], "cd": 9.0, "steps": 3, "d": "① กระโดดลงจากฟ้า ×1.8 → ② กวาดทวนรอบตัว ×1.5 → ③ ลมหายใจมังกร ×2.6"},
+        {"n": "มังกรเทพลงมา", "lv": 30, "mp": 50, "cd": 28.0, "d": "มังกรเพลิงพุ่งลงจากฟ้า ระเบิด ×4.2 วงกว้าง"}],
+    "summoner": [
+        {"n": "เรียกหมาป่า", "lv": 5, "mp": 16, "cd": 8.0, "d": "เรียกหมาป่า 2 ตัวมาสู้ (สูงสุด 4)"},
+        {"n": "สัญชาตญาณป่า", "lv": 15, "mp": [10, 12, 20], "cd": 10.0, "steps": 3, "d": "① เหยี่ยวจู่โจม ×1.4 → ② หมีฟาดพื้น ×1.8 → ③ คำรามป่า ศัตรูมึน 2 วิ"},
+        {"n": "ราชสีห์วิญญาณ", "lv": 30, "mp": 50, "cd": 30.0, "d": "อัญเชิญราชสีห์วิญญาณทอง 25 วิ + คลื่นคำราม ×2.0"}],
 }
 const PASSIVE := {
     "none": [{"lv": 5, "n": "ผู้ฝึกหัดอดทน", "d": "END +2", "st": {"end": 2}}],
     "sword": [{"lv": 10, "n": "จิตวิญญาณนักรบ", "d": "STR +3", "st": {"str": 3}}, {"lv": 20, "n": "ผิวเหล็ก", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "สายเลือดนักรบ", "d": "ฟื้นเลือด 1%/วิ", "regen": 0.01}, {"lv": 50, "n": "โทสะ", "d": "STR +12", "st": {"str": 12}}],
     "mage": [{"lv": 10, "n": "สมาธิ", "d": "INT +4", "st": {"int": 4}}, {"lv": 20, "n": "กระแสมานา", "d": "มานาฟื้นเร็วขึ้น 50%", "mpr": 0.5}, {"lv": 35, "n": "จิตแกร่ง", "d": "INT +10 · VIT +4", "st": {"int": 10, "vit": 4}}, {"lv": 50, "n": "อาร์คเมจ", "d": "INT +15", "st": {"int": 15}}],
     "archer": [{"lv": 10, "n": "ตาเหยี่ยว", "d": "คริติคอล +5%", "crit": 0.05}, {"lv": 20, "n": "ฝีเท้าเบา", "d": "AGI +5 · END +4", "st": {"agi": 5, "end": 4}}, {"lv": 35, "n": "นักล่า", "d": "AGI +10", "st": {"agi": 10}}, {"lv": 50, "n": "มือปืนเทวดา", "d": "คริติคอล +8% · AGI +8", "crit": 0.08, "st": {"agi": 8}}],
+    "ninja": [{"lv": 10, "n": "ฝีเท้าเงา", "d": "AGI +5", "st": {"agi": 5}}, {"lv": 20, "n": "สัญชาตญาณนักฆ่า", "d": "คริติคอล +5%", "crit": 0.05}, {"lv": 35, "n": "เงาไร้ตัวตน", "d": "AGI +10 · STR +5", "st": {"agi": 10, "str": 5}}, {"lv": 50, "n": "จุดตาย", "d": "คริติคอล +8%", "crit": 0.08}, {"lv": 80, "n": "ราชันเงา", "d": "AGI +18 · STR +10", "st": {"agi": 18, "str": 10}}, {"lv": 120, "n": "นินจาตำนาน", "d": "คริ +10% · AGI +25", "crit": 0.1, "st": {"agi": 25}}],
+    "sniper": [{"lv": 10, "n": "สายตาอินทรี", "d": "คริติคอล +5%", "crit": 0.05}, {"lv": 20, "n": "มือนิ่ง", "d": "AGI +6", "st": {"agi": 6}}, {"lv": 35, "n": "นักแม่นปืน", "d": "AGI +12", "st": {"agi": 12}}, {"lv": 50, "n": "เล็งจุดอ่อน", "d": "คริติคอล +8%", "crit": 0.08}, {"lv": 80, "n": "ราชาซุ่มยิง", "d": "AGI +22", "st": {"agi": 22}}, {"lv": 120, "n": "กระสุนเทพ", "d": "คริ +10% · AGI +25", "crit": 0.1, "st": {"agi": 25}}],
+    "paladin": [{"lv": 10, "n": "ศรัทธามั่น", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 20, "n": "พรแห่งแสง", "d": "ฟื้นเลือด 1%/วิ", "regen": 0.01}, {"lv": 35, "n": "เกราะศรัทธา", "d": "VIT +12 · STR +6", "st": {"vit": 12, "str": 6}}, {"lv": 50, "n": "อัศวินแสง", "d": "STR +12", "st": {"str": 12}}, {"lv": 80, "n": "ผู้พิทักษ์", "d": "VIT +25", "st": {"vit": 25}}, {"lv": 120, "n": "อัครเทวทูต", "d": "VIT +30 · STR +20 · ฟื้นเลือด 1%/วิ", "st": {"vit": 30, "str": 20}, "regen": 0.01}],
+    "cleric": [{"lv": 10, "n": "จิตสงบ", "d": "INT +5", "st": {"int": 5}}, {"lv": 20, "n": "พรกระแสมานา", "d": "มานาฟื้นเร็ว +60%", "mpr": 0.6}, {"lv": 35, "n": "ผู้รักษา", "d": "INT +10 · VIT +6 · ฟื้นเลือด 0.5%/วิ", "st": {"int": 10, "vit": 6}, "regen": 0.005}, {"lv": 50, "n": "แสงพิพากษา", "d": "INT +14", "st": {"int": 14}}, {"lv": 80, "n": "นักบุญ", "d": "INT +22 · VIT +10", "st": {"int": 22, "vit": 10}}, {"lv": 120, "n": "ผู้แทนสวรรค์", "d": "INT +30 · VIT +16", "st": {"int": 30, "vit": 16}}],
+    "necro": [{"lv": 10, "n": "กลิ่นอายความตาย", "d": "INT +5", "st": {"int": 5}}, {"lv": 20, "n": "กระดูกแกร่ง", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "ดูดวิญญาณ", "d": "INT +12", "st": {"int": 12}}, {"lv": 50, "n": "จ้าวกระดูก", "d": "INT +14 · VIT +6", "st": {"int": 14, "vit": 6}}, {"lv": 80, "n": "ราชันมรณะ", "d": "INT +24", "st": {"int": 24}}, {"lv": 120, "n": "อมตะ", "d": "INT +30 · VIT +16", "st": {"int": 30, "vit": 16}}],
+    "monk": [{"lv": 10, "n": "หมัดเหล็ก", "d": "STR +4 · AGI +2", "st": {"str": 4, "agi": 2}}, {"lv": 20, "n": "ลมปราณ", "d": "ฟื้นเลือด 0.8%/วิ", "regen": 0.008}, {"lv": 35, "n": "มวยวัด", "d": "STR +8 · AGI +8", "st": {"str": 8, "agi": 8}}, {"lv": 50, "n": "จิตไร้ขอบเขต", "d": "คริติคอล +6%", "crit": 0.06}, {"lv": 80, "n": "ปรมาจารย์", "d": "STR +16 · AGI +14", "st": {"str": 16, "agi": 14}}, {"lv": 120, "n": "อรหันต์", "d": "STR +24 · AGI +20 · VIT +10", "st": {"str": 24, "agi": 20, "vit": 10}}],
+    "dragoon": [{"lv": 10, "n": "เลือดมังกร", "d": "STR +5", "st": {"str": 5}}, {"lv": 20, "n": "เกล็ดมังกร", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "ทวนเพลิง", "d": "STR +12", "st": {"str": 12}}, {"lv": 50, "n": "วิญญาณมังกร", "d": "STR +12 · VIT +8", "st": {"str": 12, "vit": 8}}, {"lv": 80, "n": "จ้าวนภา", "d": "STR +24", "st": {"str": 24}}, {"lv": 120, "n": "ราชันมังกร", "d": "STR +30 · VIT +18", "st": {"str": 30, "vit": 18}}],
+    "summoner": [{"lv": 10, "n": "สหายป่า", "d": "INT +5", "st": {"int": 5}}, {"lv": 20, "n": "ภาษาสัตว์", "d": "VIT +6", "st": {"vit": 6}}, {"lv": 35, "n": "จ้าวฝูง", "d": "INT +10 · AGI +6", "st": {"int": 10, "agi": 6}}, {"lv": 50, "n": "วิญญาณป่า", "d": "INT +14", "st": {"int": 14}}, {"lv": 80, "n": "ผู้นำเผ่า", "d": "INT +22 · VIT +10", "st": {"int": 22, "vit": 10}}, {"lv": 120, "n": "จ้าวสรรพสัตว์", "d": "INT +30 · VIT +16", "st": {"int": 30, "vit": 16}}],
 }
 
 var town
@@ -39,6 +89,10 @@ var cd := [0.0, 0.0, 0.0]
 var step := 0
 var win := 0.0
 var pers: Array = []   # ผลต่อเนื่อง: {k, t, l, tick, acc, at}
+var bless_t := 0.0     # อวยพรเทวา
+var aegis_t := 0.0     # ปราการเทพ
+var zen_t := 0.0       # จิตอรหันต์
+var allies: Array = [] # สัตว์/โครงกระดูกที่เรียกมา
 
 func setup(t) -> void:
     town = t
@@ -67,25 +121,79 @@ func stat_bonus(p, k: String) -> int:
         "archer":
             if k == "agi":
                 b += 3 + L / 3
+        "ninja":
+            if k == "agi":
+                b += 3 + L / 3
+        "sniper":
+            if k == "agi":
+                b += 4 + L / 3
+        "paladin":
+            if k == "vit":
+                b += 4 + L / 3
+        "cleric":
+            if k == "int":
+                b += 3 + L / 3
+            elif k == "vit":
+                b += L / 5
+        "necro":
+            if k == "int":
+                b += 4 + L / 3
+        "monk":
+            if k == "str" or k == "agi":
+                b += 2 + L / 4
+        "dragoon":
+            if k == "str":
+                b += 3 + L / 3
+            elif k == "vit":
+                b += L / 6
+        "summoner":
+            if k == "int":
+                b += 3 + L / 3
     for ps in passives_on(p):
         if ps.has("st"):
             b += int(ps.st.get(k, 0))
     return b
 
 func crit_bonus(p) -> float:
-    var c := 0.1 if p.cls == "archer" else 0.0
+    var c: float = {"archer": 0.1, "ninja": 0.12, "sniper": 0.08}.get(p.cls, 0.0)
     for ps in passives_on(p):
         c += float(ps.get("crit", 0.0))
     return c
 
 func mp_regen_mult(p) -> float:
-    var m := 2.5 if p.cls == "mage" else 1.0
+    var m: float = {"mage": 2.5, "cleric": 2.0}.get(p.cls, 1.0)
+    if bless_t > 0.0:
+        m += 1.0
     for ps in passives_on(p):
         m += float(ps.get("mpr", 0.0))
     return m
 
+## ตัวคูณพิเศษของอาชีพ (fix25): ดาเมจคริ · โจมตี (อวยพรเทวา) · ดาเมจที่ได้รับ (พาลาดิน/ปราการเทพ) · ความเร็ว · ความเร็วตี · ดูดเลือด
+func crit_dmg_bonus(p) -> float:
+    return 0.6 if p.cls == "sniper" else 0.0
+
+func atk_mult(_p) -> float:
+    return 1.35 if bless_t > 0.0 else 1.0
+
+func dmg_taken_mult(p) -> float:
+    var m := 0.85 if p.cls == "paladin" else 1.0
+    if aegis_t > 0.0:
+        m *= 0.4
+    return m
+
+func speed_mult(p) -> float:
+    return (1.15 if p.cls == "ninja" else 1.0) * (1.3 if zen_t > 0.0 else 1.0)
+
+func atk_speed_mult(p) -> float:
+    return 0.8 if p.cls == "monk" else 1.0
+
+func lifesteal(p) -> float:
+    return 0.04 if p.cls == "necro" else 0.0
+
 func hp_regen_pct(p) -> float:
-    var r := 0.0
+    var r := 0.005 if p.cls == "paladin" else 0.0
+    if bless_t > 0.0:
+        r += 0.04
     for ps in passives_on(p):
         r += float(ps.get("regen", 0.0))
     return r
@@ -146,7 +254,7 @@ func open_menu() -> void:
     xb.custom_minimum_size = Vector2(44, 34)
     top.add_child(xb)
     town.ui_shop_body.add_child(top)
-    for k in ["sword", "mage", "archer"]:
+    for k in CLASS_ORDER:
         var kk: String = k
         var C: Dictionary = CLS[k]
         var sk := []
@@ -156,7 +264,7 @@ func open_menu() -> void:
         for ps in PASSIVE[k]:
             pas.append("%s Lv.%d" % [ps.n, ps.lv])
         var b := Button.new()
-        b.text = "%s%s\n%s\nติดตัว: %s · อาวุธ: %s\nสกิล: %s\nพาสซีฟ: %s" % [C.n, "  ✓ ปัจจุบัน" if p.cls == k else "", C.d, C.pas, WNAME[C.w], " · ".join(sk), " · ".join(pas)]
+        b.text = "%s%s\n%s\nติดตัว: %s · อาวุธ: %s\nสกิล: %s" % [C.n, "  ✓ ปัจจุบัน" if p.cls == k else "", C.d, C.pas, WNAME[C.w], " · ".join(sk)]
         b.alignment = HORIZONTAL_ALIGNMENT_LEFT
         b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         b.add_theme_font_override("font", town.font_b)
@@ -342,6 +450,211 @@ func _archer1(p, st: int) -> void:
 func _archer2(p, _st: int) -> void:
     pers.append({"k": "rain", "t": 0.0, "l": 3.0, "tick": 0.25, "acc": 0.0, "at": p.position + _fwd(p) * 5.0})
 
+# ---------- 8 อาชีพเพิ่ม (fix25) ----------
+func _nearest(p, r: float):
+    return town.field.nearest_slime(p.position, r)
+
+func _blink(p, to: Vector3) -> void:
+    if not town.blocked(to.x, to.z):
+        p.position = to
+
+func _ninja0(p, _st: int) -> void:
+    p.body.action("1H_Melee_Attack_Stab", 0.35)
+    for i in 8:
+        town.field.shoot(p, {"range": 12.0, "speed": 22.0, "kind": "bolt", "yaw": i * TAU / 8.0, "col": Color(0.75, 0.8, 1.0), "size": 0.18}, 0.9)
+
+func _ninja1(p, st: int) -> void:
+    match st:
+        0:
+            var s = _nearest(p, 10.0)
+            if s != null:
+                var back: Vector3 = (s.position - p.position).normalized()
+                _blink(p, s.position + back * 1.2)
+                p.heading = atan2(-back.x, -back.z)
+                p.body.rotation.y = p.heading
+                town.field.hit_slime(s, p, 1.8)
+            p.body.action("1H_Melee_Attack_Stab", 0.35)
+        1:
+            p.body.action("2H_Melee_Attack_Spin", 0.45)
+            town.field.aoe(p, 2.6, 1.4, Vector3.INF, 0.0, Color(0.6, 0.65, 1.0))
+        2:
+            town.field.aoe(p, 3.0, 2.0, Vector3.INF, 1.0, Color(0.5, 0.5, 0.6))
+            p.iframe = max(p.iframe, 1.5)
+
+func _ninja2(p, _st: int) -> void:
+    pers.append({"k": "shadow", "t": 0.0, "l": 2.5, "tick": 0.25, "acc": 0.0})
+
+func _sniper0(p, _st: int) -> void:
+    p.body.action("1H_Ranged_Shoot", 0.4)
+    town.field.shoot(p, {"range": 35.0, "speed": 40.0, "kind": "arrow", "pierce": true}, 3.0)
+
+func _sniper1(p, st: int) -> void:
+    p.body.action("1H_Ranged_Shoot", 0.4)
+    match st:
+        0:
+            town.field.shoot(p, {"range": 30.0, "speed": 36.0, "kind": "arrow"}, 2.4 * 1.8)  # คริแน่นอน
+        1:
+            var back: Vector3 = -_fwd(p)
+            for k in 5:
+                _blink(p, p.position + back * 0.5)
+            p.iframe = max(p.iframe, 0.4)
+            for a in [-0.08, 0.08]:
+                town.field.shoot(p, {"range": 28.0, "speed": 34.0, "kind": "arrow", "yaw": a}, 1.4)
+        2:
+            town.field.shoot(p, {"range": 28.0, "speed": 30.0, "kind": "bolt", "boom": 3.2, "col": Color(1.0, 0.8, 0.3), "size": 0.3}, 2.8)
+
+func _sniper2(p, _st: int) -> void:
+    pers.append({"k": "barrage", "t": 0.0, "l": 3.0, "tick": 0.2, "acc": 0.0, "at": p.position + _fwd(p) * 7.0})
+
+func _paladin0(p, _st: int) -> void:
+    p.body.action("2H_Melee_Attack_Spin", 0.5)
+    town.field.aoe(p, 3.0, 1.7, Vector3.INF, 1.0, Color(1.0, 0.92, 0.55))
+    p.hp = min(float(p.max_hp), p.hp + p.max_hp * 0.1)
+
+func _paladin1(p, st: int) -> void:
+    var f := _fwd(p)
+    match st:
+        0:
+            for k in 6:
+                _blink(p, p.position + f * 0.5)
+            town.field.aoe(p, 2.0, 1.5, p.position + f, 0.0, Color(1.0, 0.92, 0.55))
+        1:
+            town.field.aoe(p, 2.2, 1.6, p.position + f * 1.2, 1.2, Color(1.0, 0.92, 0.55))
+        2:
+            var s = _nearest(p, 12.0)
+            var at: Vector3 = s.position if s != null else p.position + f * 5.0
+            town.field.aoe(p, 2.6, 2.8, at, 0.0, Color(1.0, 0.95, 0.7))
+            _bolt(at + Vector3(0, 6.0, 0), at)
+    p.body.action("1H_Melee_Attack_Slice_Horizontal", 0.4)
+
+func _paladin2(p, _st: int) -> void:
+    aegis_t = 6.0
+    pers.append({"k": "aegis", "t": 0.0, "l": 6.0, "tick": 0.5, "acc": 0.0})
+
+func _cleric0(p, _st: int) -> void:
+    p.body.action("Spellcast_Raise", 0.6)
+    p.hp = min(float(p.max_hp), p.hp + p.max_hp * 0.3)
+    town.field.aoe(p, 2.8, 1.2, Vector3.INF, 0.0, Color(0.7, 1.0, 0.8))
+    town.field.float_text("+30%", p.position + Vector3(0, 2.6, 0), Color(0.5, 1.0, 0.6), 1.1)
+
+func _cleric1(p, st: int) -> void:
+    p.body.action("Spellcast_Shoot", 0.4)
+    match st:
+        0:
+            for a in [-0.2, 0.0, 0.2]:
+                town.field.shoot(p, {"range": 16.0, "speed": 18.0, "kind": "bolt", "yaw": a, "col": Color(1.0, 1.0, 0.75)}, 1.4)
+        1:
+            town.field.aoe(p, 3.2, 1.5, Vector3.INF, 0.0, Color(1.0, 1.0, 0.75))
+        2:
+            town.field.shoot(p, {"range": 22.0, "speed": 30.0, "kind": "bolt", "pierce": true, "col": Color(1.0, 0.95, 0.6), "size": 0.45}, 3.2)
+
+func _cleric2(p, _st: int) -> void:
+    p.body.action("Spellcast_Raise", 0.8)
+    bless_t = 8.0
+
+func _necro0(p, _st: int) -> void:
+    p.body.action("Spellcast_Summon", 0.6)
+    _summon(p, "skeleton", 2, 6, 0.6, 30.0)
+
+func _necro1(p, st: int) -> void:
+    p.body.action("Spellcast_Shoot", 0.4)
+    match st:
+        0:
+            town.field.shoot(p, {"range": 16.0, "speed": 18.0, "kind": "bolt", "col": Color(0.5, 1.0, 0.7)}, 1.6)
+            p.hp = min(float(p.max_hp), p.hp + p.max_hp * 0.03)
+        1:
+            pers.append({"k": "curse", "t": 0.0, "l": 4.0, "tick": 0.5, "acc": 0.0, "at": p.position + _fwd(p) * 4.0})
+        2:
+            town.field.shoot(p, {"range": 20.0, "speed": 26.0, "kind": "arrow", "pierce": true}, 3.0)
+
+func _necro2(p, _st: int) -> void:
+    p.body.action("Spellcast_Summon", 0.8)
+    town.field.aoe(p, 4.0, 2.2, Vector3.INF, 0.0, Color(0.4, 1.0, 0.6))
+    _summon(p, "skeleton", 5, 11, 0.6, 30.0)
+
+func _monk0(p, _st: int) -> void:
+    pers.append({"k": "flurry", "t": 0.0, "l": 0.8, "tick": 0.1, "acc": 0.0})
+
+func _monk1(p, st: int) -> void:
+    match st:
+        0:
+            p.body.action("1H_Melee_Attack_Stab", 0.35)
+            town.field.shoot(p, {"range": 10.0, "speed": 20.0, "kind": "bolt", "col": Color(1.0, 0.75, 0.4), "size": 0.35}, 1.6)
+        1:
+            p.body.action("1H_Melee_Attack_Slice_Horizontal", 0.4)
+            town.field.aoe(p, 2.2, 1.8, p.position + _fwd(p), 0.8, Color(1.0, 0.75, 0.4))
+        2:
+            p.body.action("1H_Melee_Attack_Stab", 0.4)
+            town.field.shoot(p, {"range": 14.0, "speed": 22.0, "kind": "bolt", "pierce": true, "col": Color(1.0, 0.6, 0.2), "size": 0.6}, 3.0)
+
+func _monk2(p, _st: int) -> void:
+    zen_t = 4.0
+    p.iframe = max(p.iframe, 4.0)
+    pers.append({"k": "zen", "t": 0.0, "l": 4.0, "tick": 0.25, "acc": 0.0})
+
+func _dragoon0(p, _st: int) -> void:
+    p.body.action("1H_Melee_Attack_Stab", 0.35)
+    town.field.shoot(p, {"range": 9.0, "speed": 30.0, "kind": "arrow", "pierce": true}, 1.9)
+
+func _dragoon1(p, st: int) -> void:
+    match st:
+        0:
+            var s = _nearest(p, 8.0)
+            var at: Vector3 = s.position if s != null else p.position + _fwd(p) * 4.0
+            _blink(p, at + (p.position - at).normalized() * 1.0)
+            town.field.aoe(p, 2.5, 1.8, at, 0.0, Color(1.0, 0.5, 0.4))
+            p.iframe = max(p.iframe, 0.4)
+        1:
+            p.body.action("2H_Melee_Attack_Spin", 0.45)
+            town.field.aoe(p, 2.8, 1.5, Vector3.INF, 0.0, Color(1.0, 0.5, 0.4))
+        2:
+            for a in [-0.25, 0.0, 0.25]:
+                town.field.shoot(p, {"range": 8.0, "speed": 14.0, "kind": "fire", "yaw": a, "col": Color(1.0, 0.4, 0.1), "size": 0.35}, 0.9)
+
+func _dragoon2(p, _st: int) -> void:
+    var s = _nearest(p, 14.0)
+    var at: Vector3 = s.position if s != null else p.position + _fwd(p) * 6.0
+    _meteor(at, 4.0, 4.2)
+
+func _summoner0(p, _st: int) -> void:
+    p.body.action("Spellcast_Summon", 0.6)
+    _summon(p, "wolf", 2, 4, 0.7 * 1.3, 30.0)
+
+func _summoner1(p, st: int) -> void:
+    p.body.action("Spellcast_Shoot", 0.4)
+    match st:
+        0:
+            town.field.shoot(p, {"range": 18.0, "speed": 28.0, "kind": "arrow", "col": Color(0.8, 0.7, 0.5)}, 1.4 * 1.3)
+        1:
+            var s = _nearest(p, 10.0)
+            var at: Vector3 = s.position if s != null else p.position + _fwd(p) * 3.0
+            town.field.aoe(p, 2.4, 1.8 * 1.3, at, 0.0, Color(0.6, 0.4, 0.25))
+        2:
+            town.field.aoe(p, 4.0, 0.5, Vector3.INF, 2.0, Color(0.7, 0.9, 0.4))
+            for a in allies:
+                if is_instance_valid(a):
+                    a.life = max(a.life, 20.0)
+
+func _summoner2(p, _st: int) -> void:
+    p.body.action("Spellcast_Summon", 0.8)
+    town.field.aoe(p, 3.5, 2.0, Vector3.INF, 0.0, Color(1.0, 0.85, 0.3))
+    _summon(p, "lion", 1, 1, 1.5 * 1.3, 25.0)
+
+## เรียกสัตว์/โครงกระดูก n ตัว (รวมไม่เกิน mx ตัวต่อชนิด)
+func _summon(p, kind: String, n: int, mx: int, mult: float, sec: float) -> void:
+    allies = allies.filter(func(a): return is_instance_valid(a))
+    var have := 0
+    for a in allies:
+        if a.kind == kind:
+            have += 1
+    for i in min(n, mx - have):
+        var a := Node3D.new()
+        a.set_script(load("res://scripts/ally.gd"))
+        town.field.add_child(a)
+        var ang := randf() * TAU
+        a.setup(town, kind, mult, sec, p.position + Vector3(cos(ang), 0, sin(ang)) * 1.5)
+        allies.append(a)
+
 # ---------- เอฟเฟกต์ ----------
 func _meteor(at: Vector3, r: float, mult: float) -> void:
     var p = town.player
@@ -367,12 +680,16 @@ func _bolt(a: Vector3, b: Vector3) -> void:
     m.material_override = town.M(Color(0.75, 0.85, 1.0), 0.2, 4.0)
     town.field.add_child(m)
     m.position = (a + b) * 0.5 + Vector3(0, 1.1, 0)
-    m.look_at(b + Vector3(0, 1.1, 0), Vector3.UP)
+    var dn := d.normalized()
+    m.look_at(b + Vector3(0, 1.1, 0), Vector3.FORWARD if abs(dn.y) > 0.95 else Vector3.UP)
     town.field.projectiles.append({"n": m, "fx": true, "t": 0.0})
 
 func _process(delta: float) -> void:
     for i in 3:
         cd[i] = max(0.0, cd[i] - delta)
+    bless_t = max(0.0, bless_t - delta)
+    aegis_t = max(0.0, aegis_t - delta)
+    zen_t = max(0.0, zen_t - delta)
     if win > 0.0:
         win -= delta
         if win <= 0.0 and step > 0:
@@ -383,9 +700,9 @@ func _process(delta: float) -> void:
     var p = town.player
     if p == null:
         return
-    if p.cls != "none" and not p.dead:
+    if p.cls != "none" and not p.dead and aegis_t <= 0.0:
         var r := hp_regen_pct(p)
-        if r > 0.0 and p.since_hit > 2.0:
+        if r > 0.0:
             p.hp = min(float(p.max_hp), p.hp + p.max_hp * r * delta)
     for i in range(pers.size() - 1, -1, -1):
         var e: Dictionary = pers[i]
@@ -408,5 +725,21 @@ func _process(delta: float) -> void:
                     var at: Vector3 = e.at + Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5))
                     town.field.aoe(p, 3.5, 0.5, e.at, 0.0, Color(0.6, 1.0, 0.6))
                     _bolt(at + Vector3(0, 4.0, 0), at)
+                "shadow":
+                    p.iframe = max(p.iframe, 0.3)
+                    var s = _nearest(p, 8.0)
+                    if s != null:
+                        _blink(p, s.position + Vector3(randf_range(-1.0, 1.0), 0, randf_range(-1.0, 1.0)))
+                        town.field.hit_slime(s, p, 1.3)
+                "barrage":
+                    town.field.aoe(p, 2.8, 0.6, e.at + Vector3(randf_range(-2.0, 2.0), 0, randf_range(-2.0, 2.0)), 0.0, Color(1.0, 0.85, 0.4))
+                "aegis":
+                    town.field.aoe(p, 2.5, 0.5, Vector3.INF, 0.0, Color(1.0, 0.95, 0.6))
+                "curse":
+                    town.field.aoe(p, 3.0, 0.5, e.at, 0.0, Color(0.4, 1.0, 0.5))
+                "flurry":
+                    town.field.aoe(p, 1.9, 0.55, p.position + _fwd(p) * 1.2, 0.0, Color(1.0, 0.75, 0.4))
+                "zen":
+                    town.field.aoe(p, 2.5, 0.6, Vector3.INF, 0.0, Color(1.0, 0.85, 0.3))
         if e.t >= e.l:
             pers.remove_at(i)

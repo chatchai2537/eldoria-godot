@@ -292,7 +292,7 @@ func load_game() -> bool:
         town.guild.load_state(pending_guild)
     if town.story != null:
         town.story.load_state(pending_story)
-    if not ["none", "sword", "mage", "archer"].has(cls):
+    if not ["none", "sword", "mage", "archer", "ninja", "sniper", "paladin", "cleric", "necro", "monk", "dragoon", "summoner"].has(cls):
         cls = "none"
     var keep_hp := hp
     loaded_hp = hp
@@ -456,6 +456,8 @@ func hurt_by(sl) -> void:
         return
     # เจ้าของสั่ง: โดนสไลม์ตีไม่กระเด็น ไม่ชะงัก (เตรียมทำระบบหลบ) — โดนแค่เลือดลด
     var dmg: int = max(1, BAL.slime_dmg + (sl.lv - 1) * 2 - def())
+    if town.classes != null:
+        dmg = max(1, int(round(dmg * town.classes.dmg_taken_mult(self))))
     hp = max(0.0, hp - dmg)
     iframe = BAL.iframe
     since_hit = 0.0
@@ -471,6 +473,8 @@ func hurt_mob(dmg: int, msg: String) -> void:
     if dead or iframe > 0.0:
         return
     var d: int = max(1, int(round(dmg - def() * 0.8)))
+    if town.classes != null:
+        d = max(1, int(round(d * town.classes.dmg_taken_mult(self))))
     hp = max(0.0, hp - d)
     iframe = BAL.iframe
     since_hit = 0.0
@@ -540,7 +544,7 @@ func attack() -> void:
     if at >= 0.0:
         queued = true
         return
-    atk_dur = ATTACK_DURATION
+    atk_dur = ATTACK_DURATION * (town.classes.atk_speed_mult(self) if town.classes != null else 1.0)
     at = 0.0
     queued = false
     path = PackedVector3Array()
@@ -602,7 +606,8 @@ func drive(dir: Vector3, delta: float) -> void:
     path = PackedVector3Array()
     target_mob = null
     var amt: float = clamp(dir.length(), 0.0, 1.0)
-    _try_move(dir.normalized() * speed * amt * delta)
+    var sm: float = town.classes.speed_mult(self) if town.classes != null else 1.0
+    _try_move(dir.normalized() * speed * sm * amt * delta)
     _face(dir, delta)
     moving_speed = speed * amt
 
@@ -696,7 +701,7 @@ func _process(delta: float) -> void:
         if d.length() < 0.25:
             path.remove_at(0)
         else:
-            var step: float = min(d.length(), speed * delta)
+            var step: float = min(d.length(), speed * (town.classes.speed_mult(self) if town.classes != null else 1.0) * delta)
             var dir := d.normalized()
             if not _try_move(dir * step):
                 path = PackedVector3Array()

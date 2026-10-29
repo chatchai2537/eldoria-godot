@@ -666,7 +666,11 @@ func hit_slime(s, p, mult: float, stun: float = 0.0) -> void:
     if stun > 0.0 and "stun_t" in s:
         s.stun_t = max(float(s.stun_t), stun * (0.35 if s.get("boss") == true else 1.0))
     var cr: bool = randf() < p.crit_rate()
-    var dm: int = max(1, int(round(p.atk() * mult * randf_range(0.9, 1.1) * (1.8 if cr else 1.0))))
+    var cl = town.classes
+    var cmult: float = 1.8 + (cl.crit_dmg_bonus(p) if cl != null else 0.0)
+    var dm: int = max(1, int(round(p.atk() * mult * (cl.atk_mult(p) if cl != null else 1.0) * randf_range(0.9, 1.1) * (cmult if cr else 1.0))))
+    if cl != null and cl.lifesteal(p) > 0.0:
+        p.hp = min(float(p.max_hp), p.hp + dm * cl.lifesteal(p))
     s.take_hit(dm, p.position)
     float_text(("คริ! " if cr else "") + str(dm), s.position + Vector3(0, s.radius * 2.0 + 0.4, 0), Color(1.0, 0.85, 0.3) if cr else Color(1, 1, 1), 1.4 if cr else 1.0)
     if s.dead:
