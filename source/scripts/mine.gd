@@ -551,6 +551,8 @@ func _spawn(far: bool) -> void:
     var b: int = Zd.lv[1]
     var u := pow(randf(), 1.4)
     var L := int(round(a + (b - a) * u))
+    # fix119 4: มอนที่เกิดใหม่สูงกว่าผู้เล่นได้ไม่เกิน +2 (ไม่ต่ำกว่าเลเวลขั้นต่ำของแมพ)
+    L = min(L, max(a, int(town.player.lv) + 2))
     _mk(str(mb[0]), str(mb[1]), mb[2], L, s, {"elite": randf() < 0.08, "span": float(L - a) / float(b - a)})
 
 func _spawn_boss() -> void:
@@ -558,6 +560,12 @@ func _spawn_boss() -> void:
     var d: Dictionary = data[cur]
     var B: Dictionary = Zd.boss
     boss = _mk(str(B.f), str(B.n), B.c, int(B.lv), tile_w(cur, d.arena.x, d.arena.y), {"boss": true})
+    # fix77: บอสเลเวล 60+ เลือด ×(1+(Lv−60)/25) สูงสุด ×4 · โจมตี ×(1+(Lv−60)/80) สูงสุด ×1.9
+    if boss.lv >= 60:
+        var k: float = min(4.0, 1.0 + (boss.lv - 60) / 25.0)
+        boss.hp = int(round(boss.max_hp * k))
+        boss.max_hp = boss.hp
+        boss.atk_v = int(round(boss.atk_v * min(1.9, 1.0 + (boss.lv - 60) / 80.0)))
 
 ## บอสเรียกลูกน้อง 2 ตัว (เลือดต่ำกว่า 50% และ 25%)
 func summon(b) -> void:

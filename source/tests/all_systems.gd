@@ -484,7 +484,12 @@ func _run() -> void:
     check(mn.cur == 0 and not world.blocked(p.position.x, p.position.z), "เข้าเหมืองเหล็ก: ยืนบนพื้นได้")
     check(mn.mobs.size() >= 8, "เหมือง: มีมอนเกิด")
     var stb := Mob.stats(5, "beetle", false, false)
-    check(stb.x == 124 and stb.y == 31, "มอนเหมือง: เลือด/ตีตามสูตรเกม 2D (ด้วง Lv5 = 124/31)")
+    check(stb.x == 83 and stb.y == 21, "มอนเหมือง: เลือด/ตีตามสูตรเกม 2D + fix119 (ด้วง Lv5 = 83/21)")
+    var lvcap := true
+    for mmb in mn.mobs:
+        if not mmb.boss and mmb.lv > max(5, p.lv + 2):
+            lvcap = false
+    check(lvcap, "มอนเหมือง: เลเวลไม่เกินผู้เล่น +2 (fix119)")
     mn._process(0.2)
     check(mn.boss != null and mn.boss.boss, "เหมือง: บอสเกิดที่ลานบอส")
     # ขุดแร่

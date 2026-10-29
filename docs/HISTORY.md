@@ -300,3 +300,7 @@ godot --headless --path source --export-release "Web" ../build/web/index.html
 ## 0.19-fishing (Claude 2026-10-29)
 - ตกปลาตาม 031-core.js (FISHES waterAhead fishStart pickFish fishPress fishCatch fishTick) · ไม่มีความหิว → ผลของปลาเป็นเลือด/มานา/บัฟ
 - all_systems.gd ยาวมาก (_run ฟังก์ชันเดียว) ชื่อตัวแปรชนกันง่าย → ใส่คำนำหน้าตามหัวข้อ (f…, c…)
+
+## 0.20-balance (Claude 2026-10-29)
+- fix119 ข้อ 4/4b (เจ้าของสั่งให้เล่นจริงแล้วพบว่า Lv.5 เข้าเหมืองเหล็กตายใน 1 นาที) · fix77 ข้อ 1/2 · ยังไม่ทำ fix77 ข้อ 3 (EXP ปลายเกม ×0.75/×0.6) และ fix31 EXP ×0.8 ทั้งเกม — รอเจ้าของ
+- บทเรียน: อย่า `pkill -f` / `grep ... | kill` ด้วยข้อความที่อยู่ในคำสั่งตัวเอง (ฆ่าเชลล์ตัวเอง exit 144) → ใช้ `pgrep -f '^/tmp/claude-0.*Godot_v4'`

@@ -665,6 +665,10 @@ func melee(p, spin: bool, id: int) -> void:
 func hit_slime(s, p, mult: float, stun: float = 0.0) -> void:
     if stun > 0.0 and "stun_t" in s:
         s.stun_t = max(float(s.stun_t), stun * (0.35 if s.get("boss") == true else 1.0))
+    # fix77: ตีมอนเลเวลสูงกว่าเราเกิน 3 → ดาเมจลด 3.5%/เลเวล (ต่ำสุด 35%)
+    var gap: int = int(s.lv) - int(p.lv) - 3
+    if gap > 0:
+        mult *= max(0.35, 1.0 - 0.035 * gap)
     var cr: bool = randf() < p.crit_rate()
     var cl = town.classes
     var cmult: float = 1.8 + (cl.crit_dmg_bonus(p) if cl != null else 0.0)

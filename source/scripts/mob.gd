@@ -32,6 +32,11 @@ static func stats(L: int, f: String, elite: bool, boss: bool) -> Vector2i:
     at = round(round(at) * (1.0 + L / 180.0))
     hp = round(round(hp * 1.7) * 1.25)
     at = round(round(at * 1.35) * 1.2)
+    # fix119 4b: มอนเลเวลต่ำ (ต่ำกว่า 25) เลือด/พลังลดลง L1 ×0.6 → L25 ×1.0
+    if L < 25:
+        var k: float = 0.6 + 0.4 * float(max(0, L - 1)) / 24.0
+        hp = max(1.0, round(hp * k))
+        at = max(1.0, round(at * k))
     return Vector2i(int(hp), int(at))
 
 var mine
@@ -363,7 +368,7 @@ func _process(delta: float) -> void:
                 if F.type == "shoot":
                     var offs := [-0.18, 0.0, 0.18] if elite else [0.0]
                     for o in offs:
-                        mine.shoot(self, n.rotated(Vector3.UP, o), 170.0 * K, atk_v, 2.2)
+                        mine.shoot(self, n.rotated(Vector3.UP, o), 170.0 * K, _gap(atk_v), 2.2)
                     st = "chase"
                 elif F.type == "lunge":
                     st = "lunge"
@@ -386,7 +391,7 @@ func _process(delta: float) -> void:
             moving = true
             if not hit_done and dist < 22.0 * K * sc + 0.5:
                 hit_done = true
-                p.hurt_mob(int(atk_v * 1.2), nm + "พุ่งกัด")
+                p.hurt_mob(_gap(atk_v * 1.2), nm + "พุ่งกัด")
             if stt <= 0.0:
                 st = "chase"
         "slamWU":
@@ -398,7 +403,7 @@ func _process(delta: float) -> void:
             if stt <= 0.0:
                 ring.visible = false
                 if Vector2(p.position.x - tg.x, p.position.z - tg.z).length() < rs:
-                    p.hurt_mob(int(atk_v * 2.1), nm + "ทุบพื้น")
+                    p.hurt_mob(_gap(atk_v * 2.1), nm + "ทุบพื้น")
                 mine.town.field.float_text("ตูม!", tg + Vector3(0, 1.5, 0), Color(1.0, 0.6, 0.3), 1.3)
                 st = "strike"
                 stt = 0.45
@@ -415,7 +420,7 @@ func _process(delta: float) -> void:
             moving = true
             if not hit_done and dist < 30.0 * K * sc * 0.6 + 0.6:
                 hit_done = true
-                p.hurt_mob(int(atk_v * 1.7), nm + "พุ่งชน")
+                p.hurt_mob(_gap(atk_v * 1.7), nm + "พุ่งชน")
             if stt <= 0.0:
                 st = "strike"
                 stt = 0.4
@@ -426,14 +431,21 @@ func _process(delta: float) -> void:
                 var o := randf()
                 for i in cnt:
                     var a := (i + o) / cnt * TAU
-                    mine.shoot(self, Vector3(cos(a), 0, sin(a)), 150.0 * K, int(atk_v * 0.9), 2.6)
+                    mine.shoot(self, Vector3(cos(a), 0, sin(a)), 150.0 * K, _gap(atk_v * 0.9), 2.6)
                 st = "strike"
                 stt = 0.4
     # ชนตัว (ค้างคาว/ด้วง)
     if not boss and F.type == "melee" and st == "chase" and dist < 14.0 * K + radius and cd <= 0.0:
-        p.hurt_mob(int(atk_v * 0.6), nm + "ชน")
+        p.hurt_mob(_gap(atk_v * 0.6), nm + "ชน")
         cd = float(F.cd)
     _animate(delta, moving)
+
+## fix77: มอนเลเวลสูงกว่าผู้เล่นเกิน 3 ตีแรงขึ้น 3%/เลเวล (สูงสุด ×2)
+func _gap(d: float) -> int:
+    var g: int = lv - int(mine.town.player.lv) - 3
+    if g > 0:
+        d *= min(2.0, 1.0 + 0.03 * g)
+    return int(d)
 
 func _boss_skill(dist: float, n: Vector3, enr: bool) -> void:
     var frac := float(hp) / max_hp
